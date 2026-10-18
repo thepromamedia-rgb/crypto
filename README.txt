@@ -1,21 +1,20 @@
-CRYPTO BRIDGE — TESTED STATIC FRONT-END DEMO
+CRYPTO BRIDGE DEMO — RENDER DEPLOYMENT
 
-DEPLOY TO RENDER
-1. Extract this ZIP.
-2. Upload index.html, style.css, app.js and README.txt directly to the ROOT of a GitHub repository (not inside another folder).
-3. In Render choose New + > Static Site and connect that GitHub repository.
-4. Build Command: leave blank.
-5. Publish Directory: .
-6. Deploy latest commit.
+This is a front-end prototype using sample market data. It does not provide real accounts, wallets, trading, deposits, withdrawals, or financial services.
 
-RUN LOCALLY
-Open index.html in a modern browser. No build step or package installation is needed.
+DEPLOY TO THE EXISTING RENDER WEB SERVICE:
+- Keep the service type as Web Service.
+- Root Directory: leave blank (or set to the directory containing package.json).
+- Build Command: yarn install (there are no external dependencies; npm install also works).
+- Start Command: yarn start
+- Environment: Render supplies PORT automatically; do not hardcode it.
+- Push/upload ALL root files including package.json and server.js to GitHub, then deploy latest commit.
 
-INCLUDED INTERACTIVE SCREENS
-Home, Quotes (search), Team (copy sample referral code), Bonus/tasks, Assets (sample balance/history), Recharge preview, Withdrawal preview, Signal, Service FAQ, Invite, Guide. All values are samples. No real accounts, backend, payment, wallet, trading, or financial transactions are connected.
+The included server.js is a dependency-free Node HTTP server. It serves index.html, style.css, app.js, and exposes /healthz for a basic health check.
 
-TESTS
-Static HTML/CSS/JS structure and runtime interaction tests are run before packaging. Browser tests are documented in TEST-REPORT.txt.
+LOCAL TEST:
+  npm test
+  npm start
+Then open http://localhost:3000
 
-IMPORTANT
-This is a front-end-only prototype, not a production financial service. Do not use it to collect passwords, payment details, wallet keys or real funds. Production use requires secure server-side authentication, authorization, data validation, audit logs, verified wallet/payment integrations and legal/compliance review under your own brand.
+For Render, set Health Check Path to /healthz if that setting is available.

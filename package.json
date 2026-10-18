@@ -1,0 +1,13 @@
+{
+  "name": "crypto-bridge-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static interactive Crypto Bridge prototype for Render deployment",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
