@@ -1,100 +1,181 @@
 'use strict';
 
-const assets = [
-  {symbol:'BTC', name:'Bitcoin', mark:'₿', price:'67,421.80', change:2.34},
-  {symbol:'ETH', name:'Ethereum', mark:'Ξ', price:'3,521.40', change:1.82},
-  {symbol:'ETC', name:'Ethereum Classic', mark:'E', price:'26.18', change:-0.46},
-  {symbol:'TRX', name:'TRON', mark:'T', price:'0.1182', change:0.91},
-  {symbol:'DOGE', name:'Dogecoin', mark:'Ð', price:'0.1648', change:3.22},
-  {symbol:'BCH', name:'Bitcoin Cash', mark:'B', price:'412.65', change:-0.73},
-  {symbol:'COMP', name:'Compound', mark:'C', price:'58.20', change:0.67},
-  {symbol:'DASH', name:'Dash', mark:'D', price:'31.44', change:1.16},
-  {symbol:'ADA', name:'Cardano', mark:'A', price:'0.4521', change:2.08},
-  {symbol:'LINK', name:'Chainlink', mark:'L', price:'17.82', change:1.43},
-  {symbol:'LTC', name:'Litecoin', mark:'Ł', price:'84.10', change:-0.28},
-  {symbol:'BNB', name:'BNB', mark:'B', price:'592.30', change:0.87},
-  {symbol:'XRP', name:'XRP', mark:'X', price:'0.5320', change:1.71},
-  {symbol:'SOL', name:'Solana', mark:'S', price:'153.70', change:4.06}
-];
-const $ = (selector, root=document) => root.querySelector(selector);
-const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
-const state = {page:'Home', query:'', language:'EN'};
-const colors = ['#fff0d8','#edf0ff','#e4f8ee','#e9f7ff','#fff0f4'];
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login' };
+const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+const usd = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 4 : 2, minimumFractionDigits: n < 1 ? 4 : 2 });
+const dt = ts => new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const PROTECTED = new Set(['Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite']);
 
-function coinIcon(asset, index) {
-  const tone = asset.symbol === 'ETH' || asset.symbol === 'ADA' ? 'eth' : (asset.symbol === 'ETC' || asset.symbol === 'TRX' ? 'etc' : '');
-  return `<span class="coin ${tone}" style="--coin-bg:${colors[index % colors.length]}" aria-hidden="true">${asset.mark}</span>`;
+async function api(path, body) {
+  const r = await fetch('/api/' + path, body === undefined ? { credentials: 'same-origin' } : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || 'Request failed'); e.status = r.status; throw e; }
+  return j;
 }
-function sparkline(index) {
-  const points = Array.from({length:8}, (_,x) => `${x*14},${18 + Math.sin((x+index)*1.2)*8 + (x%3)*2}`).join(' ');
-  return `<svg class="sparkline" viewBox="0 0 100 38" preserveAspectRatio="none" aria-label="Illustrative trend line"><polyline points="${points}" fill="none" stroke="${index%4===2?'#e16b78':'#2bb78a'}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// ---------- prices ----------
+function coinIcon(a, i) {
+  const tone = a.symbol === 'ETH' || a.symbol === 'ADA' ? 'eth' : (a.symbol === 'ETC' || a.symbol === 'TRX' ? 'etc' : '');
+  return `<span class="coin ${tone}" style="--coin-bg:${colors[i % colors.length]}" aria-hidden="true">${esc(a.mark)}</span>`;
 }
-function changeLabel(value) { return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`; }
-function assetRow(asset, index) {
-  return `<div class="asset-row"><div class="asset-name">${coinIcon(asset,index)}<div><strong>${asset.symbol}</strong><small>${asset.name}</small></div></div><div class="asset-price">$${asset.price}</div><div class="asset-change ${asset.change < 0 ? 'negative' : 'positive'}">${changeLabel(asset.change)}</div></div>`;
+function sparkline(a) {
+  const s = a.spark || []; if (s.length < 2) return '';
+  const min = Math.min(...s), max = Math.max(...s), span = max - min || 1;
+  const pts = s.map((v, i) => `${(i / (s.length - 1) * 100).toFixed(1)},${(34 - (v - min) / span * 30).toFixed(1)}`).join(' ');
+  return `<svg class="sparkline" viewBox="0 0 100 38" preserveAspectRatio="none" aria-label="7-day price trend"><polyline points="${pts}" fill="none" stroke="${a.change < 0 ? '#e16b78' : '#2bb78a'}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
+const changeLabel = v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
+function assetRow(a, i) {
+  return `<div class="asset-row"><div class="asset-name">${coinIcon(a, i)}<div><strong>${esc(a.symbol)}</strong><small>${esc(a.name)}</small></div></div><div class="asset-price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</div>`;
+}
+function renderAssetRows(q = '') {
+  q = q.trim().toLowerCase();
+  if (!state.prices.length) return `<div class="empty-state">${state.priceErr ? 'Live prices are temporarily unavailable. Retrying…' : 'Loading live prices…'}</div>`;
+  const f = state.prices.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q));
+  return f.length ? f.map(assetRow).join('') : '<div class="empty-state">No assets match that search.</div>';
+}
+const staleNote = () => state.prices.length ? `<p class="stale">${state.stale ? '⚠ Showing last known prices — live feed delayed. ' : ''}Updated ${new Date(state.updated).toLocaleTimeString('en-IN')} · refreshes every 20s</p>` : '';
+async function pullPrices() {
+  try { const j = await api('prices'); state.prices = j.prices; state.updated = j.updated; state.stale = j.stale; state.priceErr = ''; }
+  catch (e) { state.priceErr = e.message; }
+  if (['Home', 'Quotes', 'Signal'].includes(state.page) && document.activeElement !== $('#assetSearch')) refreshPriceViews();
+}
+function refreshPriceViews() {
+  const L = $('#assetList') || $('#quoteList') || $('#moverList'); if (!L) return;
+  if (state.page === 'Quotes') L.innerHTML = renderAssetRows(state.query);
+  else if (state.page === 'Home') { L.innerHTML = renderAssetRows(); const m = $('#marketCards'); if (m) m.innerHTML = marketCards(); }
+  else if (state.page === 'Signal') renderPage('Signal', true);
+  const s = $('#staleNote'); if (s) s.innerHTML = staleNote();
+}
+const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class="market-card"><div class="asset-top">${coinIcon(a, i)}<div><strong>${esc(a.name)}</strong><small>${esc(a.symbol)} / USD</small></div></div><div class="price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</article>`).join('');
+
+// ---------- session ----------
+async function loadMe() {
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; }
+  catch { state.me = null; try { state.cfg = await api('config'); } catch {} }
+  $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login';
+}
+const noticeBar = () => state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : '';
+const needLogin = page => { state.after = page; renderPage('Auth'); };
+
+// ---------- pages ----------
 function renderHome() {
-  $('#appMain').innerHTML = `
-    <div class="notice-banner"><span>ⓘ</span><p><strong>Prototype only.</strong> Market values are samples. No real accounts, wallets, deposits, withdrawals or trading are connected.</p></div>
-    <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>Explore digital markets</h1><p>Track sample prices and explore the dashboard experience.</p><button class="welcome-cta" data-page="Quotes">Explore markets <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
-    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Signal</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
-    <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>BNV Guide</h2><p>Learn how this demo dashboard is organized.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">REWARDS</span><h2>Reward center</h2><p>Preview example tasks and reward cards.</p><button class="light-btn" data-page="Bonus">Explore rewards ↗</button></div><div class="promo-icon">🎁</div></article></section>
+  const hello = state.me ? `Welcome, ${esc(state.me.name.split(' ')[0])}` : 'Explore digital markets';
+  $('#appMain').innerHTML = `${noticeBar()}
+    <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>${hello}</h1><p>Live digital asset prices, updated every 20 seconds.</p><button class="welcome-cta" data-page="${state.me ? 'Assets' : 'Auth'}">${state.me ? 'Open wallet' : 'Login / Register'} <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
+    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
+    <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
     <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
-    <section class="market-cards" id="marketCards" aria-label="Featured sample markets">${assets.slice(0,3).map((a,i)=>`<article class="market-card"><div class="asset-top">${coinIcon(a,i)}<div><strong>${a.name}</strong><small>${a.symbol} / USDT</small></div></div><div class="price">$${a.price}</div><span class="${a.change<0?'negative':'positive'}">${changeLabel(a.change)} today</span>${sparkline(i)}</article>`).join('')}</section>
-    <section class="section-head list-head"><div><span class="eyebrow">SAMPLE VALUES · NOT LIVE</span><h2>Trending assets</h2></div><span class="demo-pill">DEMO DATA</span></section><section class="asset-list" id="assetList" aria-label="Sample asset prices">${assets.map(assetRow).join('')}</section>`;
+    <section class="market-cards" id="marketCards">${marketCards()}</section>
+    <section class="section-head list-head"><div><span class="eyebrow">LIVE · COINGECKO</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
+    <section class="asset-list" id="assetList">${renderAssetRows()}</section>`;
 }
-function renderPage(page) {
-  state.page = page;
-  $$('.bottom-nav button').forEach(button => button.classList.toggle('active', button.dataset.page === page));
-  const main = $('#appMain');
-  if (page === 'Home') { renderHome(); window.scrollTo({top:0,behavior:'smooth'}); return; }
-  if (page === 'Quotes') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET EXPLORER</span><h1>Quotes</h1><p>Illustrative crypto prices for interface preview only.</p></section><div class="search-wrap"><span>⌕</span><input id="assetSearch" type="search" placeholder="Search by name or symbol…" aria-label="Search assets" value="${escapeHTML(state.query)}"><button id="clearSearch" type="button">Clear</button></div><section class="asset-list" id="quoteList">${renderAssetRows(state.query)}</section><p class="fine-print">Prices and percentage changes are fictional sample values, not live market data.</p>`;
-    $('#assetSearch').addEventListener('input', e => { state.query=e.target.value; $('#quoteList').innerHTML=renderAssetRows(state.query); });
-    $('#clearSearch').addEventListener('click', () => { state.query=''; $('#assetSearch').value=''; $('#quoteList').innerHTML=renderAssetRows(''); $('#assetSearch').focus(); });
-  } else if (page === 'Assets') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">WALLET PREVIEW</span><h1>Assets</h1><p>Sample account overview. This demo cannot hold or transfer money.</p></section><article class="balance-card"><span>Illustrative total balance</span><strong>$12,480.00</strong><small>Demo balance · not withdrawable</small><div class="balance-actions"><button data-page="Recharge">Recharge preview</button><button data-page="Withdrawal">Withdrawal preview</button></div></article><section class="section-head"><div><span class="eyebrow">EXAMPLE RECORDS</span><h2>Recent activity</h2></div><span class="demo-pill">SAMPLE</span></section><div class="activity-list"><div><span class="activity-icon">↗</span><span><b>Demo credit</b><small>Sample record · 12 Oct 2026</small></span><strong class="positive">+$250.00</strong></div><div><span class="activity-icon">✦</span><span><b>Demo reward</b><small>Sample record · 10 Oct 2026</small></span><strong class="positive">+$12.00</strong></div><div><span class="activity-icon">↙</span><span><b>Demo withdrawal</b><small>Illustrative only · 08 Oct 2026</small></span><strong>−$50.00</strong></div></div>`;
-  } else if (page === 'Team') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">COMMUNITY</span><h1>Team</h1><p>Preview a referral dashboard layout.</p></section><article class="balance-card team-card"><span>Sample team members</span><strong>08</strong><small>Illustrative count only</small><div class="stat-grid"><div><small>Level 1</small><b>05 members</b></div><div><small>Level 2</small><b>03 members</b></div></div></article><article class="content-card"><h2>Your demo referral code</h2><div class="copy-row"><code>CB-DEMO-2026</code><button class="primary-btn compact" id="copyCode" type="button">Copy code</button></div><p class="fine-print">This is a sample code. It does not track real referrals or earn commissions.</p></article>`;
-    $('#copyCode').addEventListener('click', async () => { try { await navigator.clipboard.writeText('CB-DEMO-2026'); showToast('Demo code copied.'); } catch { showToast('Demo referral code: CB-DEMO-2026'); } });
-  } else if (page === 'Bonus') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">REWARD CENTER</span><h1>Bonus & tasks</h1><p>Example reward cards to preview the interface. No reward can be claimed.</p></section><div class="task-list"><article class="task-card"><span class="task-icon">🎁</span><div><h2>Daily check-in</h2><p>Preview a daily reward task.</p><small>Sample reward: 5 points</small></div><button data-demo="Daily check-in">Preview</button></article><article class="task-card"><span class="task-icon">👥</span><div><h2>Invite a friend</h2><p>Example referral task card.</p><small>Sample reward: 20 points</small></div><button data-page="Invite">View invite</button></article><article class="task-card"><span class="task-icon">📘</span><div><h2>Read the guide</h2><p>Learn about this prototype.</p><small>Sample reward: 2 points</small></div><button data-page="Guide">Open guide</button></article></div>`;
-  } else if (page === 'Recharge' || page === 'Withdrawal') {
-    const isRecharge = page === 'Recharge';
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">DEMO WALLET</span><h1>${isRecharge?'Recharge preview':'Withdrawal preview'}</h1><p>This is a non-functional UI preview. Do not enter payment details, wallet addresses, passwords or other sensitive information.</p></section><article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>No payment integration</h2><p>Real ${isRecharge?'deposits':'withdrawals'} are disabled. No funds move and no transaction will be created.</p></div></article><form id="demoActionForm" class="demo-form"><label for="demoAmount">Illustrative amount (USD)</label><input id="demoAmount" name="amount" type="number" min="1" max="10000" step="1" placeholder="e.g. 100" required><p class="fine-print">For interface testing only. This amount is not sent or saved.</p><button class="primary-btn" type="submit">Preview ${isRecharge?'recharge':'withdrawal'}</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
-    $('#demoActionForm').addEventListener('submit', e => { e.preventDefault(); const amount=Number($('#demoAmount').value); if (!Number.isFinite(amount)||amount<1||amount>10000) { showToast('Enter a sample amount from $1 to $10,000.'); return; } showModal('Demo preview only', `You entered a sample amount of $${amount.toLocaleString('en-US')}. No ${isRecharge?'deposit':'withdrawal'} was made. Payment functionality is not connected.`); });
-  } else if (page === 'Signal') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET INSIGHTS</span><h1>Signals</h1><p>Illustrative trend cards only. These are not financial advice or trading signals.</p></section><div class="signal-grid"><article class="signal-card"><span class="signal-status up">SAMPLE TREND</span><h2>BTC / USDT</h2><strong>$67,421.80</strong><p class="positive">+2.34% sample change</p><div class="signal-bar"><i style="width:68%"></i></div></article><article class="signal-card"><span class="signal-status down">SAMPLE TREND</span><h2>ETC / USDT</h2><strong>$26.18</strong><p class="negative">−0.46% sample change</p><div class="signal-bar"><i style="width:34%"></i></div></article></div><p class="fine-print">Values are fictional and must not be used to make financial decisions.</p>`;
-  } else if (page === 'Service') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">HELP CENTER</span><h1>Service</h1><p>Find answers about this prototype.</p></section><div class="faq-list"><details open><summary>Is this a live exchange?</summary><p>No. This is a static front-end demo with sample values only.</p></details><details><summary>Can I deposit or withdraw money?</summary><p>No. No payment provider, wallet or backend is connected.</p></details><details><summary>Are prices real-time?</summary><p>No. Prices are hard-coded examples for layout testing.</p></details><details><summary>How do I deploy it?</summary><p>Upload the files to a GitHub repository and connect that repository to a Render Static Site. Use a blank build command and publish directory “.”.</p></details></div>`;
-  } else if (page === 'Invite') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">SHARE THE DEMO</span><h1>Invite friends</h1><p>Preview how an invite page may look.</p></section><article class="invite-card"><div class="invite-art">♧</div><h2>Share the experience</h2><p>Invite code for layout testing:</p><div class="copy-row"><code>CB-DEMO-2026</code><button class="primary-btn compact" id="copyInvite" type="button">Copy code</button></div><p class="fine-print">This code is not connected to any referral program.</p></article>`;
-    $('#copyInvite').addEventListener('click', async () => { try { await navigator.clipboard.writeText('CB-DEMO-2026'); showToast('Demo code copied.'); } catch { showToast('Demo referral code: CB-DEMO-2026'); } });
-  } else if (page === 'Guide') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">QUICK START</span><h1>Demo guide</h1><p>Explore the screens without using real financial information.</p></section><div class="faq-list"><details open><summary>1. Explore market quotes</summary><p>Open Quotes and search by symbol or asset name. All prices are sample values.</p></details><details><summary>2. Review the wallet layout</summary><p>Assets shows an illustrative balance and fake activity records to demonstrate the design.</p></details><details><summary>3. Preview action screens</summary><p>Recharge and Withdrawal only demonstrate the interface. They do not accept transactions.</p></details><details><summary>4. Production requirements</summary><p>A real financial service needs a secure backend, authentication, audit logs, verified payment/wallet integrations and legal/compliance review.</p></details></div>`;
-  }
-  $$('.bottom-nav button').forEach(button => button.classList.toggle('active', button.dataset.page === page));
-  window.scrollTo({top:0,behavior:'smooth'});
-}
-function renderAssetRows(query='') {
-  const q=query.trim().toLowerCase();
-  const filtered=assets.filter(a=>a.symbol.toLowerCase().includes(q)||a.name.toLowerCase().includes(q));
-  return filtered.length ? filtered.map(assetRow).join('') : '<div class="empty-state">No sample assets match that search.</div>';
-}
-function escapeHTML(value) { return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function showModal(title, text) { $('#modalTitle').textContent=title; $('#modalBody').innerHTML=''; const p=document.createElement('p'); p.textContent=text; $('#modalBody').appendChild(p); $('#modal').hidden=false; $('#okModal').focus(); }
-function hideModal() { $('#modal').hidden=true; }
-function showToast(message) { const toast=$('#toast'); toast.textContent=message; toast.hidden=false; window.clearTimeout(showToast.timer); showToast.timer=window.setTimeout(()=>{toast.hidden=true;},2600); }
 
-document.addEventListener('click', event => {
-  const pageButton=event.target.closest('[data-page]');
-  if (pageButton) { event.preventDefault(); renderPage(pageButton.dataset.page); return; }
-  const demoButton=event.target.closest('[data-demo]');
-  if (demoButton) { showModal('Demo task', `${demoButton.dataset.demo} is a sample task only. No points or rewards are issued.`); }
-});
+function authPage() {
+  const reg = state.authMode === 'register', ref = new URLSearchParams(location.search).get('ref') || '';
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
+  <form id="authForm" class="demo-form" autocomplete="on">
+    ${reg ? '<label for="aName">Full name</label><input id="aName" autocomplete="name" required maxlength="60">' : ''}
+    <label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" required>
+    ${reg ? '<label for="aPhone">Mobile (optional)</label><input id="aPhone" type="tel" autocomplete="tel" maxlength="20">' : ''}
+    <label for="aPass">Password ${reg ? '(min 8 characters)' : ''}</label><input id="aPass" type="password" autocomplete="${reg ? 'new-password' : 'current-password'}" required minlength="${reg ? 8 : 1}">
+    ${reg ? `<label for="aRef">Invite code (optional)</label><input id="aRef" value="${esc(ref)}" maxlength="20">` : ''}
+    <p class="msg-err" id="authErr" role="alert"></p>
+    <button class="primary-btn" type="submit">${reg ? 'Register' : 'Login'}</button>
+    <button class="link-btn" type="button" id="swapAuth">${reg ? 'Already have an account? Login' : 'New here? Create an account'}</button>
+  </form>`;
+  $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
+  $('#authForm').onsubmit = async e => {
+    e.preventDefault(); const btn = e.submitter; btn.disabled = true; $('#authErr').textContent = '';
+    try {
+      await api(reg ? 'register' : 'login', reg ? { name: $('#aName').value, email: $('#aEmail').value, phone: $('#aPhone').value, password: $('#aPass').value, ref: $('#aRef').value } : { email: $('#aEmail').value, password: $('#aPass').value });
+      await loadMe(); const go = state.after || 'Assets'; state.after = null; showToast(reg ? 'Account created.' : 'Welcome back.'); renderPage(go);
+    } catch (err) { $('#authErr').textContent = err.message; btn.disabled = false; }
+  };
+}
+
+function txList() {
+  const rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' }))].sort((a, b) => b.ts - a.ts).slice(0, 30);
+  if (!rows.length) return '<div class="empty-state">No transactions yet.</div>';
+  return `<div class="activity-list">${rows.map(r => `<div><span class="activity-icon">${r.kind === 'Deposit' ? '↗' : '↙'}</span><span><b>${r.kind} <span class="pill ${esc(r.status)}">${esc(r.status)}</span></b><small>${dt(r.ts)}${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}</small></span><strong class="${r.kind === 'Deposit' ? 'positive' : ''}">${r.kind === 'Deposit' ? '+' : '−'}${inr(r.amount)}</strong></div>`).join('')}</div>`;
+}
+
+function renderPage(page, quiet) {
+  if (PROTECTED.has(page) && !state.me) return needLogin(page);
+  state.page = page;
+  $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  const main = $('#appMain'), c = state.cfg;
+  if (page === 'Home') renderHome();
+  else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
+  else if (page === 'Profile') {
+    const u = state.me; if (!u) return needLogin('Profile');
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p></section>
+    ${u.role === 'admin' ? '<article class="content-card"><h2>Admin</h2><p class="fine-print">You are signed in as an administrator.</p><a class="primary-btn" style="display:block;text-align:center;text-decoration:none" href="/admin">Open Admin Panel</a></article>' : ''}
+    <form id="pwForm" class="demo-form"><h2 style="margin-top:0;font-size:16px">Change password</h2><label for="pwC">Current password</label><input id="pwC" type="password" autocomplete="current-password" required><label for="pwN">New password (min 8)</label><input id="pwN" type="password" autocomplete="new-password" minlength="8" required><p class="msg-err" id="pwErr"></p><button class="primary-btn" type="submit">Update password</button></form>
+    <div class="demo-form" style="margin-top:14px"><button class="secondary-btn" id="logout" type="button">Logout</button></div>`;
+    $('#pwForm').onsubmit = async e => { e.preventDefault(); try { await api('password', { current: $('#pwC').value, password: $('#pwN').value }); e.target.reset(); showToast('Password updated.'); } catch (x) { $('#pwErr').textContent = x.message; } };
+    $('#logout').onclick = async () => { await api('logout', {}); state.me = null; state.deposits = state.withdrawals = []; await loadMe(); showToast('Logged out.'); renderPage('Home'); };
+  } else if (page === 'Quotes') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET EXPLORER</span><h1>Quotes</h1><p>Live crypto prices in USD with 24h change and 7-day trend.</p></section><div class="search-wrap"><span>⌕</span><input id="assetSearch" type="search" placeholder="Search by name or symbol…" value="${esc(state.query)}" aria-label="Search assets"><button id="clearSearch" type="button" aria-label="Clear search">×</button></div><div id="staleNote">${staleNote()}</div><section class="asset-list" id="quoteList">${renderAssetRows(state.query)}</section>`;
+    $('#assetSearch').addEventListener('input', e => { state.query = e.target.value; $('#quoteList').innerHTML = renderAssetRows(state.query); });
+    $('#clearSearch').addEventListener('click', () => { state.query = ''; $('#assetSearch').value = ''; $('#quoteList').innerHTML = renderAssetRows(''); $('#assetSearch').focus(); });
+  } else if (page === 'Assets') {
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Assets</h1><p>Your wallet balance in Indian rupees.</p></section><article class="balance-card"><span>Available balance</span><strong>${inr(state.me.balance)}</strong><small>Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)}</small><div class="balance-actions"><button data-page="Recharge">Recharge</button><button data-page="Withdrawal">Withdrawal</button></div></article><section class="section-head"><div><span class="eyebrow">YOUR RECORDS</span><h2>Recent activity</h2></div></section>${txList()}`;
+  } else if (page === 'Team' || page === 'Invite') {
+    const code = state.me.refCode, link = location.origin + '/?ref=' + code;
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong></article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
+    $('#copyCode').onclick = async () => { try { await navigator.clipboard.writeText(link); showToast('Invite link copied.'); } catch { showToast('Your invite code: ' + code); } };
+  } else if (page === 'Bonus') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">OFFERS</span><h1>Bonus</h1><p>Announcements from Crypto Bridge.</p></section>${c.bonus ? `<article class="content-card"><p style="white-space:pre-wrap">${esc(c.bonus)}</p></article>` : '<div class="empty-state">No active offers right now.</div>'}`;
+  } else if (page === 'Recharge') {
+    const pay = c.upi || c.qr;
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Recharge</h1><p>Minimum deposit ${inr(c.minDeposit)}. Pay by UPI, then submit your UTR. Balance is credited after admin verification.</p></section>
+    ${pay ? `<article class="content-card"><h2>Pay to</h2>${c.qr ? `<img class="qr-img" alt="Payment QR" src="${esc(c.qr)}">` : ''}${c.upi ? `<div class="copy-row"><code>${esc(c.upi)}</code><button class="primary-btn compact" id="copyUpi" type="button">Copy</button></div>` : ''}${c.payee ? `<p class="fine-print">Payee: ${esc(c.payee)}</p>` : ''}</article>` : '<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Deposits not open</h2><p>Payment details have not been set up yet. Please contact support.</p></div></article>'}
+    <form id="depForm" class="demo-form"><label for="dAmt">Amount paid (₹)</label><input id="dAmt" type="number" inputmode="numeric" min="${c.minDeposit}" step="1" required placeholder="${c.minDeposit}"><label for="dUtr">UTR / transaction reference</label><input id="dUtr" required maxlength="30" autocomplete="off" placeholder="12-digit UTR"><p class="msg-err" id="depErr" role="alert"></p><button class="primary-btn" type="submit" ${pay ? '' : 'disabled'}>Submit for verification</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    const cu = $('#copyUpi'); if (cu) cu.onclick = async () => { try { await navigator.clipboard.writeText(c.upi); showToast('UPI ID copied.'); } catch { showToast(c.upi); } };
+    $('#depForm').onsubmit = async e => {
+      e.preventDefault(); $('#depErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+      try { await api('deposit', { amount: Number($('#dAmt').value), utr: $('#dUtr').value }); await loadMe(); showModal('Submitted', 'Your deposit is pending verification. It will be credited once an admin confirms the payment.'); renderPage('Assets'); }
+      catch (x) { $('#depErr').textContent = x.message; btn.disabled = false; }
+    };
+  } else if (page === 'Withdrawal') {
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Withdrawal</h1><p>Minimum withdrawal ${inr(c.minWithdraw)}. Available: <b>${inr(state.me.balance)}</b>. The amount is held when you request and paid to your UPI after admin approval.</p></section>
+    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><label for="wUpi">Your UPI ID</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    $('#wdForm').onsubmit = async e => {
+      e.preventDefault(); $('#wdErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+      try { await api('withdraw', { amount: Number($('#wAmt').value), upi: $('#wUpi').value }); await loadMe(); showModal('Requested', 'Your withdrawal request is pending. You can follow its status in Assets.'); renderPage('Assets'); }
+      catch (x) { $('#wdErr').textContent = x.message; btn.disabled = false; }
+    };
+  } else if (page === 'Signal') {
+    const sorted = [...state.prices].sort((a, b) => b.change - a.change);
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET MOVERS</span><h1>Movers</h1><p>Biggest 24h moves among tracked assets, from live data. Not financial advice.</p></section><div id="staleNote">${staleNote()}</div><section class="asset-list" id="moverList">${sorted.length ? sorted.map(assetRow).join('') : renderAssetRows()}</section>`;
+  } else if (page === 'Service') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">HELP CENTER</span><h1>Service</h1><p>Answers and support.</p></section>${c.support ? `<a class="primary-btn" style="display:block;text-align:center;text-decoration:none;margin-bottom:14px" target="_blank" rel="noopener" href="${esc(c.support)}">Contact support ↗</a>` : ''}<div class="faq-list"><details open><summary>How do I deposit?</summary><p>Open Recharge, pay the shown UPI/QR (minimum ${inr(c.minDeposit)}), then submit amount and UTR. Your balance updates after admin verification.</p></details><details><summary>How do I withdraw?</summary><p>Open Withdrawal, enter an amount (minimum ${inr(c.minWithdraw)}, up to your balance) and your UPI ID. If rejected, the amount returns to your balance.</p></details><details><summary>Are prices live?</summary><p>Yes, prices come from CoinGecko and refresh about every 20 seconds. They can be slightly delayed.</p></details></div>`;
+  } else if (page === 'Guide') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">QUICK START</span><h1>Guide</h1><p>Get going in three steps.</p></section><div class="faq-list"><details open><summary>1. Register or login</summary><p>Create an account with your email and a password of at least 8 characters.</p></details><details open><summary>2. Recharge</summary><p>Minimum ${inr(c.minDeposit)}. Pay via UPI, submit the UTR, wait for verification.</p></details><details open><summary>3. Withdraw</summary><p>Minimum ${inr(c.minWithdraw)}. Requests are reviewed and paid to your UPI ID.</p></details></div>`;
+  }
+  if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showModal(title, text) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = ''; const p = document.createElement('p'); p.textContent = text; $('#modalBody').appendChild(p); $('#modal').hidden = false; $('#okModal').focus(); }
+function hideModal() { $('#modal').hidden = true; }
+function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
+
+document.addEventListener('click', e => { const b = e.target.closest('[data-page]'); if (b) { e.preventDefault(); renderPage(b.dataset.page); } });
 $('#closeModal').addEventListener('click', hideModal);
 $('#okModal').addEventListener('click', hideModal);
-$('#modal').addEventListener('click', event => { if(event.target === $('#modal')) hideModal(); });
-document.addEventListener('keydown', event => { if(event.key==='Escape' && !$('#modal').hidden) hideModal(); });
-$('#language').addEventListener('click', () => { showModal('Language', 'This demo currently supports English only. The language selector is a visual prototype.'); });
-renderHome();
+$('#modal').addEventListener('click', e => { if (e.target === $('#modal')) hideModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) hideModal(); });
+$('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 'Auth'));
+
+(async function init() {
+  const ref = new URLSearchParams(location.search).get('ref');
+  await loadMe();
+  renderPage(ref && !state.me ? 'Auth' : 'Home');
+  if (ref && !state.me) { state.authMode = 'register'; authPage(); }
+  pullPrices(); setInterval(pullPrices, 20000);
+})();

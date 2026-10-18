@@ -4,38 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#142a54">
-  <meta name="description" content="Crypto Bridge demo dashboard with sample market data and interactive prototype screens.">
-  <title>Crypto Bridge — Interactive Demo</title>
+  <meta name="description" content="Crypto Bridge — live digital asset prices, wallet deposits and withdrawals.">
+  <title>Crypto Bridge</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="topbar">
     <button class="brand brand-button" data-page="Home" aria-label="Crypto Bridge home"><span class="brandmark">B</span><span><b>Crypto Bridge</b><small>Digital asset dashboard</small></span></button>
-    <div class="topbar-right"><span class="demo-tag"><i></i> DEMO MODE</span><button class="language" id="language" type="button">EN ▾</button></div>
+    <div class="topbar-right"><span class="demo-tag live"><i></i> LIVE PRICES</span><button class="language" id="account" type="button">Login</button></div>
   </header>
-  <main id="appMain" tabindex="-1">
-    <div class="notice-banner"><span>ⓘ</span><p><strong>Prototype only.</strong> Market values are samples. No real accounts, wallets, deposits, withdrawals or trading are connected.</p></div>
-    <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>Explore digital markets</h1><p>Track sample prices and explore the dashboard experience.</p><button class="welcome-cta" data-page="Quotes">Explore markets <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
-    <section class="actions" aria-label="Quick actions">
-      <button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button>
-      <button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button>
-      <button data-page="Signal"><span class="action-icon mint">⌁</span><span>Signal</span></button>
-      <button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button>
-      <button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button>
-    </section>
-    <section class="promo-grid">
-      <article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>BNV Guide</h2><p>Learn how this demo dashboard is organized.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article>
-      <article class="promo orange"><div><span class="eyebrow">REWARDS</span><h2>Reward center</h2><p>Preview example tasks and reward cards.</p><button class="light-btn" data-page="Bonus">Explore rewards ↗</button></div><div class="promo-icon">🎁</div></article>
-    </section>
-    <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
-    <section class="market-cards" id="marketCards" aria-label="Featured sample markets"></section>
-    <section class="section-head list-head"><div><span class="eyebrow">SAMPLE VALUES · NOT LIVE</span><h2>Trending assets</h2></div><span class="demo-pill">DEMO DATA</span></section>
-    <section class="asset-list" id="assetList" aria-label="Sample asset prices"></section>
-  </main>
+  <main id="appMain" tabindex="-1"></main>
   <nav class="bottom-nav" aria-label="Main navigation"><button class="active" data-page="Home"><span>⌂</span>Home</button><button data-page="Quotes"><span>⌁</span>Quotes</button><button data-page="Team"><span>♙</span>Team</button><button data-page="Bonus"><span>✦</span>Bonus</button><button data-page="Assets"><span>▣</span>Assets</button></nav>
-  <div class="modal-backdrop" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal"><button class="close" id="closeModal" aria-label="Close dialog">×</button><div class="modal-symbol" id="modalSymbol">i</div><h2 id="modalTitle">Demo notice</h2><div id="modalBody"><p id="modalText">This is a front-end demo. No real funds, wallets, deposits, or withdrawals are connected.</p></div><button class="primary-btn" id="okModal" type="button">Got it</button></div></div>
+  <div class="modal-backdrop" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal"><button class="close" id="closeModal" aria-label="Close dialog">×</button><div class="modal-symbol" id="modalSymbol">i</div><h2 id="modalTitle">Notice</h2><div id="modalBody"></div><button class="primary-btn" id="okModal" type="button">OK</button></div></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <footer>Crypto Bridge prototype · Sample data only · Not a financial service</footer>
+  <footer>Crypto Bridge · Prices from CoinGecko, may be delayed · Not financial advice</footer>
   <script src="app.js" defer></script>
 </body>
 </html>

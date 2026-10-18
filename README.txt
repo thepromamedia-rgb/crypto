@@ -1,20 +1,36 @@
-CRYPTO BRIDGE DEMO — RENDER DEPLOYMENT
+CRYPTO BRIDGE — v2 (Render Web Service)
 
-This is a front-end prototype using sample market data. It does not provide real accounts, wallets, trading, deposits, withdrawals, or financial services.
+Same site/design as before, now with: live prices (CoinGecko), Register/Login, wallet
+(min deposit Rs 1,000, min withdrawal Rs 300), Admin Panel at /admin, and /healthz.
+No npm dependencies.
 
-DEPLOY TO THE EXISTING RENDER WEB SERVICE:
-- Keep the service type as Web Service.
-- Root Directory: leave blank (or set to the directory containing package.json).
-- Build Command: yarn install (there are no external dependencies; npm install also works).
-- Start Command: yarn start
-- Environment: Render supplies PORT automatically; do not hardcode it.
-- Push/upload ALL root files including package.json and server.js to GitHub, then deploy latest commit.
+RENDER SETTINGS (existing Web Service — do NOT create a new one)
+  Build Command : yarn install      (or npm install)
+  Start Command : yarn start
+  Health Check Path : /healthz
+  Upload ALL files (server.js, index.html, admin.html, app.js, admin.js, style.css, package.json).
 
-The included server.js is a dependency-free Node HTTP server. It serves index.html, style.css, app.js, and exposes /healthz for a basic health check.
+ENVIRONMENT VARIABLES (Render > Environment)
+  ADMIN_EMAIL / ADMIN_PASSWORD  your admin login (password min 8 chars). If you skip ADMIN_PASSWORD
+                                a random one is printed ONCE in Render > Logs.
+  UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+                                REQUIRED to keep data across deploys. Render's disk is wiped on every
+                                deploy otherwise. You can reuse the same Upstash DB as Refer Karo; data
+                                is stored under its own key "cryptobridge_data" (override: CB_DB_KEY),
+                                so Refer Karo data is untouched.
+  COINGECKO_API_KEY (optional)  free demo key if you hit rate limits.
 
-LOCAL TEST:
-  npm test
-  npm start
-Then open http://localhost:3000
+HOW MONEY FLOWS (manual UPI verification, same idea as Refer Karo's QR/UTR mode)
+  Deposit    : user pays to your UPI/QR (Admin > Settings) and submits amount + UTR. Min Rs 1,000.
+               Admin approves -> balance credited exactly once.
+  Withdrawal : min Rs 300, up to balance. Amount is held immediately; admin pays the user's UPI and
+               marks Paid, or Rejects (amount refunded exactly once).
 
-For Render, set Health Check Path to /healthz if that setting is available.
+ADMIN PANEL (/admin): Overview, Deposits, Withdrawals, Users (block, set password, logged balance
+adjust), Settings (UPI, QR, support link, notice, bonus text), Audit log, JSON backup download.
+
+DATA SAFETY: existing data is loaded and merged on start, never reset. Writes are serialized; the
+server refuses to start if Upstash is configured but unreachable (so it can't overwrite your data).
+Backups exclude password hashes.
+
+TESTS: npm test  (19 checks: rules, one-time credit/refund, auth, file exposure, persistence)
