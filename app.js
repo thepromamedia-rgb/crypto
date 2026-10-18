@@ -2,7 +2,7 @@
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [] };
+const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '' };
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -36,11 +36,16 @@ const changeLabel = v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
 function assetRow(a, i) {
   return `<div class="asset-row" data-coin="${esc(a.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name">${coinIcon(a, i)}<div><strong>${esc(a.symbol)}</strong><small>${esc(a.name)}</small></div></div><div class="asset-price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</div>`;
 }
+const bonusCfg = () => (state.cfg && state.cfg.bonusCoin) || { enabled: false };
+function bonusRow(q = '') {
+  const b = bonusCfg(); if (!b.enabled || (q && !(b.symbol + ' ' + b.name).toLowerCase().includes(q))) return '';
+  return `<div class="asset-row bonus-row" data-coin="${esc(b.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin bonus-coin" aria-hidden="true">★</span><div><strong>${esc(b.symbol)}</strong><small>${esc(b.name)}</small></div></div><div class="asset-price">+${b.returnPct}% return</div><div class="asset-change positive">${b.lockHours ? b.lockHours + 'h' : 'Instant'}</div></div>`;
+}
 function renderAssetRows(q = '') {
-  q = q.trim().toLowerCase();
-  if (!state.prices.length) return `<div class="empty-state">${state.priceErr ? 'Live prices could not load. Retrying… <br><small>' + esc(state.priceErr) + '</small>' : 'Loading live prices…'}</div>`;
+  q = q.trim().toLowerCase(); const br = bonusRow(q);
+  if (!state.prices.length) return br + `<div class="empty-state">${state.priceErr ? 'Live prices could not load. Retrying… <br><small>' + esc(state.priceErr) + '</small>' : 'Loading live prices…'}</div>`;
   const f = state.prices.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q));
-  return f.length ? f.map(assetRow).join('') : '<div class="empty-state">No assets match that search.</div>';
+  return br + (f.length ? f.map(assetRow).join('') : (br ? '' : '<div class="empty-state">No assets match that search.</div>'));
 }
 const staleNote = () => state.prices.length ? `<p class="stale">${state.stale ? '⚠ Showing last known prices — live feed delayed. ' : ''}Updated ${new Date(state.updated).toLocaleTimeString('en-IN')} · ${state.source || 'live'} · refreshes every 20s</p>` : '';
 const COINS = [['BTC','Bitcoin','bitcoin','₿'],['ETH','Ethereum','ethereum','Ξ'],['ETC','Ethereum Classic','ethereum-classic','E'],['TRX','TRON','tron','T'],['DOGE','Dogecoin','dogecoin','Ð'],['BCH','Bitcoin Cash','bitcoin-cash','B'],['COMP','Compound','compound-governance-token','C'],['DASH','Dash','dash','D'],['ADA','Cardano','cardano','A'],['LINK','Chainlink','chainlink','L'],['LTC','Litecoin','litecoin','Ł'],['BNB','BNB','binancecoin','B'],['XRP','XRP','ripple','X'],['SOL','Solana','solana','S']];
@@ -80,7 +85,7 @@ const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class
 
 // ---------- session ----------
 async function loadMe() {
-  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; }
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; }
   catch { state.me = null; try { state.cfg = await api('config'); } catch {} }
   $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login';
 }
@@ -124,10 +129,14 @@ function authPage() {
 }
 
 function txList() {
-  const rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
+  const bc = bonusCfg(), rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
   if (!rows.length) return '<div class="empty-state">No transactions yet.</div>';
-  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−' }, plus = { Deposit: 1, Sell: 1 };
-  return `<div class="activity-list">${rows.map(r => `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${r.kind}${r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}</small></span><strong class="${plus[r.kind] ? 'positive' : ''}">${plus[r.kind] ? '+' : '−'}${inr(r.amount)}</strong></div>`).join('')}</div>`;
+  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★' }, plus = { Deposit: 1, Sell: 1 };
+  return `<div class="activity-list">${rows.map(r => {
+    const rw = r.kind === 'Reward', val = rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
+    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
+    return `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${rw ? esc(r.symbol) : r.kind}${!rw && r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${rw ? ' · ' : ''}${sub}</small></span><strong class="${cls}">${val}</strong></div>`;
+  }).join('')}</div>`;
 }
 
 function holdingsList() {
@@ -135,12 +144,71 @@ function holdingsList() {
   return `<div class="asset-list">${h.map(([sym, q]) => { const a = state.prices.find(x => x.symbol === sym); const val = a && state.fx ? inr(q * a.price * state.fx) : ''; return `<div class="asset-row" data-coin="${esc(sym)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin" aria-hidden="true">${esc(a ? a.mark : sym[0])}</span><div><strong>${esc(sym)}</strong><small>${qtyFmt(q)}</small></div></div><div class="asset-price">${val}</div></div>`; }).join('')}</div>`;
 }
 
+function bonusBody() {
+  const b = bonusCfg(), u = state.me; if (!b.enabled) return '<div class="empty-state">This coin is not open right now.</div>';
+  const mine = state.positions.filter(p => p.status === 'Active');
+  return `<article class="balance-card"><span>${esc(b.name)} · ${esc(b.symbol)}</span><strong>+${b.returnPct}% return</strong><small>${b.lockHours ? 'Paid after ' + b.lockHours + ' hours' : 'Paid instantly'} · Trade ${inr(b.minAmount)} – ${inr(b.maxAmount)}</small>${u ? `<div class="stat-grid"><div><small>Wallet</small><b>${inr(u.balance)}</b></div><div><small>Active trades</small><b>${mine.length} · ${inr(mine.reduce((s, p) => s + p.amount, 0))}</b></div></div>` : ''}</article>
+  ${u ? `<form id="bonusForm" class="demo-form"><label for="bAmt">Amount to trade (₹)</label><input id="bAmt" type="number" inputmode="numeric" step="1" min="${b.minAmount}" max="${b.maxAmount}" required placeholder="min ${b.minAmount}"><div class="quick">${[25, 50, 100].map(p => `<button type="button" data-bpct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div><p class="fine-print" id="bEst"></p><p class="fine-print">Wallet: <b>${inr(u.balance)}</b> · Your amount plus the ${b.returnPct}% return is credited to your wallet ${b.lockHours ? 'after ' + b.lockHours + ' hours' : 'immediately'}.</p><p class="msg-err" id="bErr" role="alert"></p><button class="primary-btn" type="submit">Trade ${esc(b.symbol)}</button></form>`
+  : `<div class="demo-form"><p class="fine-print">Login to trade ${esc(b.symbol)}.</p><button class="primary-btn" data-page="Auth">Login / Register</button></div>`}`;
+}
+function bindBonus() {
+  const f = $('#bonusForm'); if (!f) return; const b = bonusCfg();
+  const est = () => { const v = Number($('#bAmt').value); $('#bEst').textContent = v > 0 ? `You will receive ${inr(v + v * b.returnPct / 100)} (profit ${inr(v * b.returnPct / 100)})` : ''; };
+  $$('[data-bpct]').forEach(x => x.onclick = () => { $('#bAmt').value = Math.min(b.maxAmount, Math.floor(state.me.balance * Number(x.dataset.bpct) / 100)); est(); });
+  $('#bAmt').oninput = est;
+  f.onsubmit = async e => {
+    e.preventDefault(); $('#bErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+    try { const j = await api('bonus/trade', { amount: Number($('#bAmt').value) }); await loadMe(); const p = j.position; showModal('Trade placed', `${inr(p.amount)} traded. ${inr(p.amount + p.amount * p.returnPct / 100)} will be credited ${p.lockHours ? 'after ' + p.lockHours + ' hours' : 'now'}.`); renderPage('Coin', true); }
+    catch (x) { $('#bErr').textContent = x.message; btn.disabled = false; }
+  };
+}
+
+// ---------- candlestick / line chart (own SVG, no libraries) ----------
+async function fetchKlines(sym, iv) {
+  try { return (await api(`klines?symbol=${sym}&interval=${iv}`)).candles; }
+  catch (e) { const rows = await getJSON(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=${iv}&limit=96`); return rows.map(r => [r[0], +r[1], +r[2], +r[3], +r[4]]); }
+}
+async function loadChart(initial) {
+  const sym = state.coin, iv = state.interval, key = sym + ':' + iv, c = state.kl[key];
+  if (initial) drawChart();
+  if (c && Date.now() - c.ts < 30e3) return;
+  try { state.kl[key] = { ts: Date.now(), candles: await fetchKlines(sym, iv) }; state.klErr = ''; } catch { if (!c) state.klErr = 'Chart data is not available right now.'; }
+  if (state.page === 'Coin' && state.coin === sym && state.interval === iv) drawChart();
+}
+const pFmt = v => v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v.toFixed(4);
+function drawChart() {
+  const box = $('#chartBox'); if (!box) return; const c = state.kl[state.coin + ':' + state.interval];
+  if (!c || c.candles.length < 2) { box.innerHTML = `<div class="empty-state">${state.klErr || 'Loading chart…'}</div>`; $('#chartInfo').innerHTML = ''; return; }
+  const d = c.candles, n = d.length, W = Math.max(260, box.clientWidth || 340), H = 280, L = 6, R = 56, T = 10, B = 22, pw = W - L - R, ph = H - T - B, candle = state.chartType === 'candle';
+  let lo = Math.min(...d.map(x => candle ? x[3] : x[4])), hi = Math.max(...d.map(x => candle ? x[2] : x[4])); const pad = (hi - lo || hi * .01) * .08; lo -= pad; hi += pad;
+  const X = i => L + (i + .5) * pw / n, Y = v => T + (hi - v) / (hi - lo) * ph, last = d[n - 1], up = last[4] >= d[0][4], col = up ? '#2bb78a' : '#e16b78';
+  const tf = t => new Date(t).toLocaleString('en-IN', state.interval === '1d' ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  let g = '';
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4, y = Y(v); g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#eef1f7"/><text x="${W - R + 5}" y="${y + 3}" font-size="10" fill="#8b94a9">${pFmt(v)}</text>`; }
+  [0, Math.floor((n - 1) / 2), n - 1].forEach((i, k) => { g += `<text x="${k === 0 ? L : k === 2 ? W - R : X(i)}" y="${H - 6}" font-size="10" fill="#8b94a9" text-anchor="${k === 0 ? 'start' : k === 2 ? 'end' : 'middle'}">${tf(d[i][0])}</text>`; });
+  let body = '';
+  if (candle) { const bw = Math.max(1.5, pw / n * .68); d.forEach((x, i) => { const cc = x[4] >= x[1] ? '#2bb78a' : '#e16b78', yt = Y(Math.max(x[1], x[4])), yb = Y(Math.min(x[1], x[4])); body += `<line x1="${X(i)}" x2="${X(i)}" y1="${Y(x[2])}" y2="${Y(x[3])}" stroke="${cc}" stroke-width="1.2"/><rect x="${X(i) - bw / 2}" y="${yt}" width="${bw}" height="${Math.max(1, yb - yt)}" fill="${cc}"/>`; }); }
+  else { const pts = d.map((x, i) => `${X(i).toFixed(1)},${Y(x[4]).toFixed(1)}`).join(' '); body = `<defs><linearGradient id="lg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".25"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs><polygon points="${X(0)},${T + ph} ${pts} ${X(n - 1)},${T + ph}" fill="url(#lg)"/><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`; }
+  const ly = Y(last[4]);
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart">${g}${body}<line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${T + ph}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${ph}" fill="transparent" style="touch-action:pan-y"/></svg>`;
+  const info = i => { const x = d[i], ch = (x[4] - x[1]) / x[1] * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span>`; };
+  info(n - 1);
+  const xh = $('#xh'), ov = $('#ov'), at = e => { const r = ov.getBoundingClientRect(), i = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left) / r.width * n))); xh.setAttribute('x1', X(i)); xh.setAttribute('x2', X(i)); xh.setAttribute('visibility', 'visible'); info(i); };
+  ov.addEventListener('pointermove', at); ov.addEventListener('pointerdown', at); ov.addEventListener('pointerleave', () => { xh.setAttribute('visibility', 'hidden'); info(n - 1); });
+}
+function bindChart() {
+  $$('[data-ct]').forEach(b => b.onclick = () => { state.chartType = b.dataset.ct; $$('[data-ct]').forEach(x => x.classList.toggle('on', x === b)); drawChart(); });
+  $$('[data-iv]').forEach(b => b.onclick = () => { state.interval = b.dataset.iv; $$('[data-iv]').forEach(x => x.classList.toggle('on', x === b)); loadChart(true); });
+  loadChart(true);
+}
+window.addEventListener('resize', () => { if (state.page === 'Coin') drawChart(); });
+
 function coinBody() {
   const a = state.prices.find(x => x.symbol === state.coin); if (!a) return '';
   const hold = (state.me && state.me.holdings && state.me.holdings[a.symbol]) || 0, unit = state.fx ? a.price * state.fx : 0, c = state.cfg;
   const buy = state.side === 'buy';
   return `<article class="balance-card"><span>${esc(a.name)} · ${esc(a.symbol)}</span><strong id="coinPrice">${unit ? inr(unit) : usd(a.price)}</strong><small id="coinSub">${usd(a.price)} · <span class="${a.change < 0 ? 'negative' : 'positive'}" style="color:inherit">${changeLabel(a.change)} (24h)</span></small>${state.me ? `<div class="stat-grid"><div><small>You hold</small><b>${qtyFmt(hold)} ${esc(a.symbol)}</b></div><div><small>Value</small><b>${unit ? inr(hold * unit) : '—'}</b></div></div>` : ''}</article>
-  <article class="content-card">${sparkline(a) ? `<div style="height:60px">${sparkline(a)}</div>` : ''}</article>
+  <article class="content-card chart-card"><div class="chart-bar"><div class="seg">${[['candle', 'Candles'], ['line', 'Line']].map(([k, l]) => `<button type="button" data-ct="${k}" class="${state.chartType === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="seg">${[['15m', '15m'], ['1h', '1H'], ['4h', '4H'], ['1d', '1D']].map(([k, l]) => `<button type="button" data-iv="${k}" class="${state.interval === k ? 'on' : ''}">${l}</button>`).join('')}</div></div><div class="chart-info" id="chartInfo"></div><div class="chart-box" id="chartBox"></div></article>
   ${state.me ? `<div class="tabs2"><button type="button" data-side="buy" class="${buy ? 'on' : ''}">Buy</button><button type="button" data-side="sell" class="${buy ? '' : 'on'}">Sell</button></div>
   <form id="tradeForm" class="demo-form"><label for="tAmt">${buy ? 'Amount to spend (₹)' : 'Quantity to sell (' + esc(a.symbol) + ')'}</label><input id="tAmt" type="number" inputmode="decimal" step="any" min="0" required placeholder="${buy ? 'min ' + c.minTrade : '0.00'}">
   <div class="quick">${buy ? [25, 50, 100].map(p => `<button type="button" data-pct="${p}">${p}%</button>`).join('') : [25, 50, 100].map(p => `<button type="button" data-pct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div>
@@ -155,7 +223,7 @@ function tradeEstimate() {
 }
 function updateCoinLive() {
   const a = state.prices.find(x => x.symbol === state.coin), p = $('#coinPrice'); if (a && !p) return renderPage('Coin', true); if (!a || !p) return;
-  p.textContent = state.fx ? inr(a.price * state.fx) : usd(a.price); $('#coinSub').innerHTML = `${usd(a.price)} · ${changeLabel(a.change)} (24h)`; tradeEstimate();
+  p.textContent = state.fx ? inr(a.price * state.fx) : usd(a.price); $('#coinSub').innerHTML = `${usd(a.price)} · ${changeLabel(a.change)} (24h)`; tradeEstimate(); loadChart();
 }
 function bindCoin() {
   const f = $('#tradeForm'); if (!f) return;
@@ -184,7 +252,8 @@ function renderPage(page, quiet) {
   const main = $('#appMain'), c = state.cfg;
   if (page === 'Home') renderHome();
   else if (page === 'Coin') {
-    main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`; bindCoin();
+    main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCfg().enabled && state.coin === bonusCfg().symbol ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
+    if (bonusCfg().enabled && state.coin === bonusCfg().symbol) bindBonus(); else { bindCoin(); if ($('#chartBox')) bindChart(); }
   }
   else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
   else if (page === 'Profile') {
@@ -204,7 +273,7 @@ function renderPage(page, quiet) {
     $('#logoutBtn').onclick = doLogout;
   } else if (page === 'Team' || page === 'Invite') {
     const code = state.me.refCode, link = location.origin + '/?ref=' + code;
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong></article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong>${bonusCfg().enabled && bonusCfg().refPct ? `<div class="stat-grid"><div><small>Your commission</small><b>${bonusCfg().refPct}% of ${bonusCfg().refBase === 'amount' ? 'their ' + esc(bonusCfg().symbol) + ' trade amount' : 'their ' + esc(bonusCfg().symbol) + ' trade return'}</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : `<div class="stat-grid"><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>`}</article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
     $('#copyCode').onclick = async () => { try { await navigator.clipboard.writeText(link); showToast('Invite link copied.'); } catch { showToast('Your invite code: ' + code); } };
   } else if (page === 'Bonus') {
     main.innerHTML = `<section class="page-intro"><span class="eyebrow">OFFERS</span><h1>Bonus</h1><p>Announcements from Crypto Bridge.</p></section>${c.bonus ? `<article class="content-card"><p style="white-space:pre-wrap">${esc(c.bonus)}</p></article>` : '<div class="empty-state">No active offers right now.</div>'}`;
@@ -238,7 +307,7 @@ function renderPage(page, quiet) {
   if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function doLogout() { try { await api('logout', {}); } catch {} state.me = null; state.deposits = state.withdrawals = state.trades = []; await loadMe(); showToast('Logged out.'); renderPage('Home'); }
+async function doLogout() { try { await api('logout', {}); } catch {} state.me = null; state.deposits = state.withdrawals = state.trades = state.positions = []; await loadMe(); showToast('Logged out.'); renderPage('Home'); }
 function showModal(title, text) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = ''; const p = document.createElement('p'); p.textContent = text; $('#modalBody').appendChild(p); $('#modal').hidden = false; $('#okModal').focus(); }
 function hideModal() { $('#modal').hidden = true; }
 function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }

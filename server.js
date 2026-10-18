@@ -35,10 +35,11 @@ async function up(cmd) {
   return j.result;
 }
 
+const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockHours: 24, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], deposits: [], withdrawals: [], trades: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '' }
+  users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', bonusCoin: BONUS_DEFAULT() }
 });
 let D = defaults();
 
@@ -51,8 +52,9 @@ async function loadDB() {
   }
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...(saved.settings || {}) } };
-    for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
+    const ss = saved.settings || {};
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
+    for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
   }
 }
 let saveChain = Promise.resolve();
@@ -107,7 +109,7 @@ function limit(key, max, windowMs) {
 }
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
-const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, balance: u.balance, refCode: u.refCode, created: u.created, holdings: u.holdings || {} });
+const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, balance: u.balance, refCode: u.refCode, created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
 const normEmail = v => str(v, 120).toLowerCase();
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
@@ -176,14 +178,54 @@ async function getFx() {
   return fxCache.v;
 }
 
+
+// ---------- candles (Binance klines, cached, stale-if-error) ----------
+const KL_LIMIT = { '15m': 96, '1h': 96, '4h': 90, '1d': 90 };
+const KL_API = E.BINANCE_KLINES_URL || 'https://data-api.binance.vision/api/v3/klines';
+const klCache = new Map();
+async function getKlines(sym, iv) {
+  const key = sym + ':' + iv, c = klCache.get(key);
+  if (c && now() - c.ts < 30e3) return c.candles;
+  try {
+    const r = await fetch(`${KL_API}?symbol=${sym}USDT&interval=${iv}&limit=${KL_LIMIT[iv]}`, { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('Binance ' + r.status);
+    const candles = (await r.json()).map(k => [k[0], +k[1], +k[2], +k[3], +k[4]]);
+    klCache.set(key, { ts: now(), candles }); return candles;
+  } catch (e) { if (c) return c.candles; fail(503, 'Chart data unavailable: ' + e.message); }
+}
+
+// ---------- bonus coin: fixed return after lock period + referral commission (all admin-controlled) ----------
+// Settlement is idempotent: only an 'Active' position can be settled, so principal+return are paid exactly once.
+function settlePosition(p) {
+  if (p.status !== 'Active') return false;
+  const u = D.users.find(x => x.id === p.uid), profit = r2(p.amount * p.returnPct / 100);
+  p.status = 'Settled'; p.profit = profit; p.done = now();
+  if (u) u.balance = r2(u.balance + p.amount + profit);
+  const ref = u && u.refBy && D.users.find(x => x.id === u.refBy);
+  if (ref && !ref.blocked && p.refPct > 0) {
+    const c = r2((p.refBase === 'amount' ? p.amount : profit) * p.refPct / 100);
+    if (c > 0) { ref.balance = r2(ref.balance + c); ref.refEarned = r2((ref.refEarned || 0) + c); p.refUid = ref.id; p.refPaid = c; }
+  }
+  audit('system', 'bonus-settle', `#${p.id} ${p.email} +₹${profit}` + (p.refPaid ? ` ref ₹${p.refPaid}` : ''));
+  return true;
+}
+function settleDue() { let n = 0; for (const p of D.positions) if (p.status === 'Active' && p.matureAt <= now() && settlePosition(p)) n++; return n; }
+async function settleAndSave() { if (settleDue()) await save(); }
+
 // ---------- API ----------
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE });
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE, bonusCoin: D.settings.bonusCoin });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
 const routes = {
   'GET /api/prices': async () => { const c = await getPrices(); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async () => PUBLIC_SETTINGS(),
+  'GET /api/klines': async (req) => {
+    limit('kl:' + req.ip, 120, 60e3);
+    const q = new URL(req.url, 'http://x').searchParams, sym = str(q.get('symbol'), 10).toUpperCase(), iv = q.get('interval') || '1h';
+    if (!COINS.some(c => c[0] === sym)) fail(400, 'Unknown coin.'); if (!KL_LIMIT[iv]) fail(400, 'Bad interval.');
+    return { symbol: sym, interval: iv, candles: await getKlines(sym, iv) };
+  },
 
   'POST /api/register': async (req, res, b) => {
     limit('reg:' + req.ip, 10, 3600e3);
@@ -208,9 +250,10 @@ const routes = {
   },
   'POST /api/logout': async (req, res) => { setCookie(res, '', 0); return { ok: true }; },
   'GET /api/me': async (req, res, b, u) => {
-    needUser(u);
+    needUser(u); await settleAndSave();
     return {
       user: pubUser(u), config: PUBLIC_SETTINGS(),
+      positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
       referrals: D.users.filter(x => x.refBy === u.id).length,
@@ -274,15 +317,29 @@ const routes = {
     await save(); return { trade: t, balance: u.balance, holdings: u.holdings };
   },
 
+  'POST /api/bonus/trade': async (req, res, b, u) => {
+    needUser(u); limit('bonus:' + u.id, 30, 600e3);
+    const c = D.settings.bonusCoin; if (!c.enabled) fail(403, c.symbol + ' is not open right now.');
+    const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid whole-rupee amount.');
+    if (amount < c.minAmount) fail(400, `Minimum is ₹${c.minAmount}.`); if (amount > c.maxAmount) fail(400, `Maximum per trade is ₹${c.maxAmount}.`);
+    if (amount > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
+    u.balance = r2(u.balance - amount);
+    // rates are snapshotted on the position, so later admin changes never alter an open trade
+    const p = { id: nid(), uid: u.id, email: u.email, symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockHours: c.lockHours, status: 'Active', ts: now(), matureAt: now() + c.lockHours * 3600e3 };
+    D.positions.push(p); audit(u.email, 'bonus-trade', `#${p.id} ₹${amount} @${c.returnPct}%`);
+    settleDue(); await save(); return { position: p, balance: u.balance };
+  },
+
   // ----- admin -----
   'GET /api/admin/overview': async (req, res, b, u) => {
-    needAdmin(u);
+    needAdmin(u); await settleAndSave();
     const users = D.users.filter(x => x.role !== 'admin'), ok = D.deposits.filter(d => d.status === 'Approved'), paid = D.withdrawals.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     return {
       users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length,
       depositsApproved: sum(ok), withdrawalsPaid: sum(paid),
       pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
+      bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)) },
       storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: MIN_DEPOSIT, withdraw: MIN_WITHDRAW }
     };
   },
@@ -290,6 +347,26 @@ const routes = {
   'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); return { items: [...D.trades].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
+  'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: D.settings.bonusCoin, items: [...D.positions].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
+  'POST /api/admin/bonuscoin': async (req, res, b, u) => {
+    needAdmin(u);
+    const sym = str(b.symbol, 8).toUpperCase(), name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockHours), mn = Number(b.minAmount), mx = Number(b.maxAmount);
+    if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.'); if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
+    if (name.length < 2) fail(400, 'Enter a coin name.');
+    if (!(ret >= 0 && ret <= 100)) fail(400, 'Return % must be 0–100.'); if (!(refp >= 0 && refp <= 100)) fail(400, 'Referral % must be 0–100.');
+    if (b.refBase !== 'profit' && b.refBase !== 'amount') fail(400, 'Bad referral base.');
+    if (!(lock >= 0 && lock <= 720)) fail(400, 'Lock hours must be 0–720.');
+    if (!Number.isInteger(mn) || mn < 1 || !Number.isInteger(mx) || mx < mn || mx > MAX_AMOUNT) fail(400, 'Check min / max amounts.');
+    D.settings.bonusCoin = { enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockHours: lock, minAmount: mn, maxAmount: mx };
+    audit(u.email, 'bonuscoin-settings', JSON.stringify(D.settings.bonusCoin)); await save(); return { ok: true };
+  },
+  'POST /api/admin/position': async (req, res, b, u) => {
+    needAdmin(u); const p = D.positions.find(x => x.id === b.id); if (!p) fail(404, 'Not found');
+    if (p.status !== 'Active') fail(409, 'Already ' + p.status + '.');
+    if (b.action === 'cancel') { const t = D.users.find(x => x.id === p.uid); if (t) t.balance = r2(t.balance + p.amount); p.status = 'Cancelled'; p.done = now(); }   // refund principal once
+    else if (b.action === 'settle') settlePosition(p); else fail(400, 'Bad action');
+    audit(u.email, 'position-' + b.action, `#${p.id} ₹${p.amount}`); await save(); return { item: p };
+  },
   'GET /api/admin/audit': async (req, res, b, u) => { needAdmin(u); return { items: [...D.audit].reverse().slice(0, 300) }; },
   'POST /api/admin/deposit': async (req, res, b, u) => {
     needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found');
@@ -403,6 +480,7 @@ async function seedAdmin() {
 
 if (require.main === module) {
   loadDB().then(seedAdmin).then(() => {
+    setInterval(() => settleAndSave().catch(e => console.error(e.message)), 30e3).unref();
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));
   }).catch(e => { console.error('Startup failed:', e.message); process.exit(1); });
 }

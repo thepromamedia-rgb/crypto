@@ -11,13 +11,14 @@ delete process.env.UPSTASH_REDIS_REST_URL;
 
 const stub = http.createServer((q, r) => {
   if (q.url.startsWith('/fx')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify({ rates: { INR: 80 } })); }
+  if (q.url.startsWith('/kl')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify(Array.from({ length: 5 }, (_, i) => [1700000000000 + i * 36e5, '100', '110', '95', String(100 + i), '5']))); }
   const ids = new URL(q.url, 'http://x').searchParams.get('ids').split(',');
   r.setHeader('Content-Type', 'application/json');
   r.end(JSON.stringify(ids.map((id, i) => ({ id, current_price: 100 + i, price_change_percentage_24h: i - 3, sparkline_in_7d: { price: Array.from({ length: 168 }, (_, k) => 90 + (k % 17)) } }))));
 });
 (async () => {
   await new Promise(r => stub.listen(0, r));
-  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`;
+  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`; process.env.BINANCE_KLINES_URL = `http://127.0.0.1:${stub.address().port}/kl`;
   const { server, loadDB, seedAdmin } = require('./server.js');
   await loadDB(); await seedAdmin();
   await new Promise(r => server.listen(0, r));
@@ -87,6 +88,35 @@ const stub = http.createServer((q, r) => {
   const before = saved.users.find(x => x.email === 'ravi@x.io').balance;
   assert.equal(before, 600);
   ok('data persisted to disk');
+
+  // candles
+  const kl = await anon('GET', '/api/klines?symbol=BTC&interval=1h'); assert.equal(kl.s, 200); assert.equal(kl.j.candles.length, 5); assert.equal(kl.j.candles[0].length, 5);
+  assert.equal((await anon('GET', '/api/klines?symbol=NOPE&interval=1h')).s, 400); assert.equal((await anon('GET', '/api/klines?symbol=BTC&interval=9x')).s, 400); ok('klines (candles) endpoint');
+
+  // bonus coin: 5% return, 10% referral of the return
+  const boss = mk(), kid = mk();
+  const bj = await boss('POST', '/api/register', { name: 'Boss', email: 'boss@x.io', password: 'password1' });
+  await kid('POST', '/api/register', { name: 'Kid', email: 'kid@x.io', password: 'password1', ref: bj.j.user.refCode });
+  const kidId = (await kid('GET', '/api/me')).j.user.id;
+  await a('POST', '/api/admin/user', { id: kidId, action: 'adjust', amount: 5000, reason: 'test' });
+  assert.equal((await kid('POST', '/api/bonus/trade', { amount: 1000 })).s, 403); ok('bonus coin closed by default');
+  const cfg = { enabled: true, symbol: 'CBX', name: 'CB Reward', returnPct: 5, refPct: 10, refBase: 'profit', lockHours: 24, minAmount: 100, maxAmount: 3000 };
+  assert.equal((await kid('POST', '/api/admin/bonuscoin', cfg)).s, 403);
+  assert.equal((await a('POST', '/api/admin/bonuscoin', { ...cfg, returnPct: 500 })).s, 400); assert.equal((await a('POST', '/api/admin/bonuscoin', { ...cfg, symbol: 'BTC' })).s, 400);
+  assert.equal((await a('POST', '/api/admin/bonuscoin', cfg)).s, 200); assert.equal((await anon('GET', '/api/config')).j.bonusCoin.returnPct, 5);
+  assert.equal((await kid('POST', '/api/bonus/trade', { amount: 50 })).s, 400); assert.equal((await kid('POST', '/api/bonus/trade', { amount: 4000 })).s, 400); assert.equal((await kid('POST', '/api/bonus/trade', { amount: 99999 })).s, 400);
+  const bt = await kid('POST', '/api/bonus/trade', { amount: 1000 }); assert.equal(bt.s, 200); assert.equal(bt.j.balance, 4000); assert.equal(bt.j.position.status, 'Active'); ok('bonus trade holds amount');
+  await a('POST', '/api/admin/bonuscoin', { ...cfg, returnPct: 50 });                       // later admin change must not affect open trade
+  assert.equal((await a('POST', '/api/admin/position', { id: bt.j.position.id, action: 'settle' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/position', { id: bt.j.position.id, action: 'settle' })).s, 409);
+  assert.equal((await a('POST', '/api/admin/position', { id: bt.j.position.id, action: 'cancel' })).s, 409);
+  assert.equal((await kid('GET', '/api/me')).j.user.balance, 5050); assert.equal((await boss('GET', '/api/me')).j.user.balance, 5); assert.equal((await boss('GET', '/api/me')).j.user.refEarned, 5); ok('5% return + 10% referral paid exactly once, snapshot rates');
+  await a('POST', '/api/admin/bonuscoin', { ...cfg, refBase: 'amount', lockHours: 0 });
+  const bi = await kid('POST', '/api/bonus/trade', { amount: 1000 }); assert.equal(bi.j.position.status, 'Settled');
+  assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await boss('GET', '/api/me')).j.user.balance, 105); ok('instant mode + referral on trade amount');
+  await a('POST', '/api/admin/bonuscoin', { ...cfg, lockHours: 24 });
+  const bc = await kid('POST', '/api/bonus/trade', { amount: 500 }); assert.equal((await a('POST', '/api/admin/position', { id: bc.j.position.id, action: 'cancel' })).s, 200);
+  assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await a('GET', '/api/admin/bonus')).j.items.length, 3); ok('admin cancel refunds principal');
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

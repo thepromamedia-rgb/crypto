@@ -35,3 +35,10 @@
 .quick{display:flex;gap:8px;margin:-4px 0 8px}.quick button{flex:1;border:1px solid var(--line);background:#f6f8fd;border-radius:9px;padding:8px;font-weight:700;cursor:pointer;color:var(--navy)}
 .asset-row[data-coin]:hover,.market-card[data-coin]:hover{background:#f6f8fd}
 .balance-actions+.balance-actions{margin-top:10px}
+
+.chart-card{padding:14px}.chart-bar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.seg{display:flex;background:#f1f4fa;border-radius:10px;padding:3px}.seg button{border:0;background:none;padding:7px 11px;border-radius:8px;font-weight:800;font-size:12px;cursor:pointer;color:#6b758c}.seg button.on{background:#fff;color:var(--blue);box-shadow:0 1px 4px #20335a1a}
+.chart-info{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);min-height:18px;margin-bottom:4px}.chart-info b{color:var(--navy)}
+.chart-box{width:100%;min-height:280px}.chart-box svg{display:block;max-width:100%}
+.coin.bonus-coin{background:linear-gradient(135deg,#ffd56b,#ff9f43);color:#fff;font-size:16px}.bonus-row{background:#fffaf0}
+.pill.Active{background:#e7efff;color:#315df5}.pill.Settled{background:#e4f8ee;color:#16805a}.pill.Cancelled{background:#fde8ea;color:#c0392b}

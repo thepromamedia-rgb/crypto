@@ -43,3 +43,17 @@ v2.1 ADDITIONS
   you owe, so keep enough real funds to honour withdrawals.
   Assets page: Recharge / Withdrawal / Buy-Sell / Change password / Logout buttons.
   Password fields have a show/hide eye. Optional env: USD_INR (fallback rate), FX_URL.
+
+v2.2 ADDITIONS
+  Charts: coin page now has Candlestick + Line chart (15m / 1H / 4H / 1D), touch/hover shows O-H-L-C.
+          Data: Binance klines via /api/klines (server cached; browser falls back to Binance directly).
+  Bonus coin (Admin > Bonus Coin) - everything is set by admin:
+    Open/close the coin, symbol + name, USER RETURN % (default 5), REFERRAL % (default 10),
+    referral base (user's return/profit OR user's trade amount), lock hours (0 = instant),
+    min / max trade. Coin shows at the top of Quotes/Home.
+    User trades from wallet -> after lock time gets amount + return %. If the user joined with a
+    referral code, the referrer's wallet gets the commission at that moment (exactly once).
+    Rates are saved on each trade, so changing settings never alters trades already open.
+    Admin can "Pay now" or "Cancel + refund" any active trade. Users tab shows referrer + earnings.
+  NOTE: returns and commissions are paid from the platform's own funds - keep enough real balance
+  to honour withdrawals, and check local rules on fixed-return / referral schemes.
