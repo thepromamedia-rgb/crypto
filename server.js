@@ -35,11 +35,18 @@ async function up(cmd) {
   return j.result;
 }
 
+const DEFAULT_COINS = [
+  ['BTC', 'Bitcoin', 'bitcoin', '₿'], ['ETH', 'Ethereum', 'ethereum', 'Ξ'], ['ETC', 'Ethereum Classic', 'ethereum-classic', 'E'],
+  ['TRX', 'TRON', 'tron', 'T'], ['DOGE', 'Dogecoin', 'dogecoin', 'Ð'], ['BCH', 'Bitcoin Cash', 'bitcoin-cash', 'B'],
+  ['COMP', 'Compound', 'compound-governance-token', 'C'], ['DASH', 'Dash', 'dash', 'D'], ['ADA', 'Cardano', 'cardano', 'A'],
+  ['LINK', 'Chainlink', 'chainlink', 'L'], ['LTC', 'Litecoin', 'litecoin', 'Ł'], ['BNB', 'BNB', 'binancecoin', 'B'],
+  ['XRP', 'XRP', 'ripple', 'X'], ['SOL', 'Solana', 'solana', 'S']
+];
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockHours: 24, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', bonusCoin: BONUS_DEFAULT() }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -54,6 +61,8 @@ async function loadDB() {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
     D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
+    if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
+    syncCoins();
     for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
   }
 }
@@ -115,13 +124,8 @@ const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
 
 // ---------- live prices (CoinGecko public API, cached, stale-if-error) ----------
-const COINS = [
-  ['BTC', 'Bitcoin', 'bitcoin', '₿'], ['ETH', 'Ethereum', 'ethereum', 'Ξ'], ['ETC', 'Ethereum Classic', 'ethereum-classic', 'E'],
-  ['TRX', 'TRON', 'tron', 'T'], ['DOGE', 'Dogecoin', 'dogecoin', 'Ð'], ['BCH', 'Bitcoin Cash', 'bitcoin-cash', 'B'],
-  ['COMP', 'Compound', 'compound-governance-token', 'C'], ['DASH', 'Dash', 'dash', 'D'], ['ADA', 'Cardano', 'cardano', 'A'],
-  ['LINK', 'Chainlink', 'chainlink', 'L'], ['LTC', 'Litecoin', 'litecoin', 'Ł'], ['BNB', 'BNB', 'binancecoin', 'B'],
-  ['XRP', 'XRP', 'ripple', 'X'], ['SOL', 'Solana', 'solana', 'S']
-];
+const COINS = DEFAULT_COINS.map(c => c.slice());   // live list; mutated in place when admin adds/removes coins
+const syncCoins = () => { COINS.length = 0; COINS.push(...D.settings.coins.map(c => c.slice())); };
 const PRICE_API = E.PRICE_API_URL || 'https://api.coingecko.com/api/v3/coins/markets';
 let priceCache = { ts: 0, data: null, error: null };
 const BINANCE_API = E.BINANCE_API_URL || 'https://data-api.binance.vision/api/v3/ticker/24hr';
@@ -180,7 +184,7 @@ async function getFx() {
 
 
 // ---------- candles (Binance klines, cached, stale-if-error) ----------
-const KL_LIMIT = { '15m': 96, '1h': 96, '4h': 90, '1d': 90 };
+const KL_LIMIT = { '1m': 130, '3m': 130, '5m': 130, '15m': 130, '1h': 130, '4h': 130, '1d': 130 };
 const KL_API = E.BINANCE_KLINES_URL || 'https://data-api.binance.vision/api/v3/klines';
 const klCache = new Map();
 async function getKlines(sym, iv) {
@@ -189,7 +193,7 @@ async function getKlines(sym, iv) {
   try {
     const r = await fetch(`${KL_API}?symbol=${sym}USDT&interval=${iv}&limit=${KL_LIMIT[iv]}`, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error('Binance ' + r.status);
-    const candles = (await r.json()).map(k => [k[0], +k[1], +k[2], +k[3], +k[4]]);
+    const candles = (await r.json()).map(k => [k[0], +k[1], +k[2], +k[3], +k[4], +k[5]]);
     klCache.set(key, { ts: now(), candles }); return candles;
   } catch (e) { if (c) return c.candles; fail(503, 'Chart data unavailable: ' + e.message); }
 }
@@ -213,7 +217,7 @@ function settleDue() { let n = 0; for (const p of D.positions) if (p.status === 
 async function settleAndSave() { if (settleDue()) await save(); }
 
 // ---------- API ----------
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE, bonusCoin: D.settings.bonusCoin });
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE, bonusCoin: D.settings.bonusCoin, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
@@ -366,6 +370,41 @@ const routes = {
     if (b.action === 'cancel') { const t = D.users.find(x => x.id === p.uid); if (t) t.balance = r2(t.balance + p.amount); p.status = 'Cancelled'; p.done = now(); }   // refund principal once
     else if (b.action === 'settle') settlePosition(p); else fail(400, 'Bad action');
     audit(u.email, 'position-' + b.action, `#${p.id} ₹${p.amount}`); await save(); return { item: p };
+  },
+  'GET /api/admin/report': async (req, res, b, u) => {      // per-day summary, last 14 days (IST)
+    needAdmin(u); await settleAndSave();
+    const day = ts => new Date(ts + 19800e3).toISOString().slice(0, 10), rows = {};
+    for (let i = 0; i < 14; i++) { const k = day(now() - i * 864e5); rows[k] = { date: k, signups: 0, deposits: 0, depositAmt: 0, withdrawals: 0, withdrawAmt: 0, trades: 0, tradeVol: 0 }; }
+    const add = (ts, f) => { const r = rows[day(ts)]; if (r) f(r); };
+    D.users.filter(x => x.role !== 'admin').forEach(x => add(x.created, r => r.signups++));
+    D.deposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
+    D.withdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += x.amount; }));
+    D.trades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
+    return { rows: Object.values(rows).sort((a, c) => c.date.localeCompare(a.date)) };
+  },
+  'POST /api/admin/coin': async (req, res, b, u) => {
+    needAdmin(u);
+    const sym = str(b.symbol, 10).toUpperCase();
+    if (b.action === 'add') {
+      const name = str(b.name, 40), id = str(b.id, 60).toLowerCase(), mark = str(b.mark, 2) || sym[0];
+      if (!/^[A-Z0-9]{2,10}$/.test(sym)) fail(400, 'Symbol must be 2–10 letters/digits (e.g. MATIC).'); if (name.length < 2) fail(400, 'Enter the coin name.');
+      if (!/^[a-z0-9-]{2,60}$/.test(id)) fail(400, 'Enter the CoinGecko id (e.g. polygon-ecosystem-token) — see coingecko.com coin page "API id".');
+      if (COINS.length >= 60) fail(400, 'Maximum 60 coins.'); if (COINS.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
+      if (D.settings.bonusCoin.symbol === sym) fail(409, 'Symbol clashes with the bonus coin.');
+      try {   // verify the coin really exists on both price sources before listing it
+        const r1 = await fetch(`${BINANCE_API}?symbols=${encodeURIComponent(JSON.stringify([sym + 'USDT']))}`, { signal: AbortSignal.timeout(8000) }); if (!r1.ok) throw new Error('not on Binance');
+        const hdr = { Accept: 'application/json' }; if (E.COINGECKO_API_KEY) hdr['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
+        const r2 = await fetch(`${PRICE_API}?vs_currency=usd&ids=${id}`, { headers: hdr, signal: AbortSignal.timeout(8000) }); const j2 = await r2.json(); if (!r2.ok || !Array.isArray(j2) || !j2.length) throw new Error('CoinGecko id not found');
+      } catch (e) { fail(400, `Could not verify ${sym}: ${e.message}. Use the exact Binance symbol (${sym}USDT must exist) and the CoinGecko API id.`); }
+      D.settings.coins.push([sym, name, id, mark]); syncCoins(); priceCache.ts = 0; audit(u.email, 'coin-add', `${sym} ${id}`);
+    } else if (b.action === 'remove') {
+      if (!COINS.some(c => c[0] === sym)) fail(404, 'Coin not listed.');
+      const holders = D.users.filter(x => (x.holdings && x.holdings[sym]) > 0).length;
+      if (holders) fail(409, `${holders} user(s) still hold ${sym}. Removing it would trap their coins — wait until they sell, or adjust their balance first.`);
+      if (COINS.length <= 1) fail(400, 'Keep at least one coin.');
+      D.settings.coins = D.settings.coins.filter(c => c[0] !== sym); syncCoins(); priceCache.ts = 0; audit(u.email, 'coin-remove', sym);
+    } else fail(400, 'Bad action');
+    await save(); return { coins: COINS };
   },
   'GET /api/admin/audit': async (req, res, b, u) => { needAdmin(u); return { items: [...D.audit].reverse().slice(0, 300) }; },
   'POST /api/admin/deposit': async (req, res, b, u) => {

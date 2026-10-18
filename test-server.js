@@ -11,6 +11,7 @@ delete process.env.UPSTASH_REDIS_REST_URL;
 
 const stub = http.createServer((q, r) => {
   if (q.url.startsWith('/fx')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify({ rates: { INR: 80 } })); }
+  if (q.url.startsWith('/b?')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify([{ symbol: 'MATICUSDT', lastPrice: '1', priceChangePercent: '0' }])); }
   if (q.url.startsWith('/kl')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify(Array.from({ length: 5 }, (_, i) => [1700000000000 + i * 36e5, '100', '110', '95', String(100 + i), '5']))); }
   const ids = new URL(q.url, 'http://x').searchParams.get('ids').split(',');
   r.setHeader('Content-Type', 'application/json');
@@ -18,7 +19,7 @@ const stub = http.createServer((q, r) => {
 });
 (async () => {
   await new Promise(r => stub.listen(0, r));
-  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`; process.env.BINANCE_KLINES_URL = `http://127.0.0.1:${stub.address().port}/kl`;
+  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`; process.env.BINANCE_API_URL = `http://127.0.0.1:${stub.address().port}/b`; process.env.BINANCE_KLINES_URL = `http://127.0.0.1:${stub.address().port}/kl`;
   const { server, loadDB, seedAdmin } = require('./server.js');
   await loadDB(); await seedAdmin();
   await new Promise(r => server.listen(0, r));
@@ -90,7 +91,7 @@ const stub = http.createServer((q, r) => {
   ok('data persisted to disk');
 
   // candles
-  const kl = await anon('GET', '/api/klines?symbol=BTC&interval=1h'); assert.equal(kl.s, 200); assert.equal(kl.j.candles.length, 5); assert.equal(kl.j.candles[0].length, 5);
+  const kl = await anon('GET', '/api/klines?symbol=BTC&interval=1h'); assert.equal(kl.s, 200); assert.equal(kl.j.candles.length, 5); assert.equal(kl.j.candles[0].length, 6);
   assert.equal((await anon('GET', '/api/klines?symbol=NOPE&interval=1h')).s, 400); assert.equal((await anon('GET', '/api/klines?symbol=BTC&interval=9x')).s, 400); ok('klines (candles) endpoint');
 
   // bonus coin: 5% return, 10% referral of the return
@@ -117,6 +118,18 @@ const stub = http.createServer((q, r) => {
   await a('POST', '/api/admin/bonuscoin', { ...cfg, lockHours: 24 });
   const bc = await kid('POST', '/api/bonus/trade', { amount: 500 }); assert.equal((await a('POST', '/api/admin/position', { id: bc.j.position.id, action: 'cancel' })).s, 200);
   assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await a('GET', '/api/admin/bonus')).j.items.length, 3); ok('admin cancel refunds principal');
+  const rp = await a('GET', '/api/admin/report'); assert.equal(rp.s, 200); assert.equal(rp.j.rows.length, 14); assert.ok(rp.j.rows[0].depositAmt >= 1000); assert.equal((await u('GET', '/api/admin/report')).s, 403); ok('admin report');
+  assert.equal((await anon('GET', '/api/klines?symbol=BTC&interval=1m')).s, 200); ok('1m interval');
+  // admin coin list: removal rules (add needs live Binance/CoinGecko, so only validation paths are tested offline)
+  assert.equal((await u('POST', '/api/admin/coin', { action: 'remove', symbol: 'DOGE' })).s, 403);
+  assert.equal((await a('POST', '/api/admin/coin', { action: 'add', symbol: 'x', name: 'X', id: 'x' })).s, 400);
+  assert.equal((await a('POST', '/api/admin/coin', { action: 'add', symbol: 'BTC', name: 'Bitcoin', id: 'bitcoin' })).s, 409);
+  assert.equal((await a('POST', '/api/admin/coin', { action: 'remove', symbol: 'DOGE' })).s, 200); assert.equal((await anon('GET', '/api/config')).j.coins.length, 13);
+  assert.equal((await u('POST', '/api/trade', { symbol: 'DOGE', side: 'buy', amount: 200 })).s, 400);
+  await u('POST', '/api/trade', { symbol: 'ETH', side: 'buy', amount: 200 });
+  assert.equal((await a('POST', '/api/admin/coin', { action: 'remove', symbol: 'ETH' })).s, 409); ok('admin remove coin (blocked while users hold it)');
+  assert.equal((await a('POST', '/api/admin/coin', { action: 'add', symbol: 'matic', name: 'Polygon', id: 'matic-network' })).s, 200); assert.equal((await anon('GET', '/api/config')).j.coins.length, 14);
+  assert.equal((await anon('GET', '/api/prices')).j.prices.some(p => p.symbol === 'MATIC'), true); ok('admin add coin + appears in prices');
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

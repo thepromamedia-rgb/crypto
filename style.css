@@ -42,3 +42,4 @@
 .chart-box{width:100%;min-height:280px}.chart-box svg{display:block;max-width:100%}
 .coin.bonus-coin{background:linear-gradient(135deg,#ffd56b,#ff9f43);color:#fff;font-size:16px}.bonus-row{background:#fffaf0}
 .pill.Active{background:#e7efff;color:#315df5}.pill.Settled{background:#e4f8ee;color:#16805a}.pill.Cancelled{background:#fde8ea;color:#c0392b}
+.ma-row{display:flex;gap:10px;flex-wrap:wrap;width:100%}.seg button{padding:7px 9px}.chart-bar{gap:6px}

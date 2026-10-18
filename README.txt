@@ -57,3 +57,13 @@ v2.2 ADDITIONS
     Admin can "Pay now" or "Cancel + refund" any active trade. Users tab shows referrer + earnings.
   NOTE: returns and commissions are paid from the platform's own funds - keep enough real balance
   to honour withdrawals, and check local rules on fixed-return / referral schemes.
+
+v2.3 ADDITIONS
+  Chart: timeframes 1m / 3m / 5m / 15m / 1H / 1D, MA5 / MA10 / MA30 lines, volume bars, OHLC + MA values on touch.
+  Admin > Reports: last 14 days (IST) sign-ups, deposits, withdrawals, net in, trade volume + CSV export
+  of deposits / withdrawals / trades / users.
+
+v2.4 ADDITIONS
+  Admin > Coins: add any number of market coins (symbol + name + CoinGecko API id; verified against Binance
+  and CoinGecko before listing) and remove coins. A coin cannot be removed while any user still holds it.
+  The list is saved in the database and survives deploys.
