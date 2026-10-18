@@ -1,8 +1,13 @@
 {
   "name": "crypto-bridge",
-  "version": "2.7.0",
+  "version": "2.9.0",
   "private": true,
-  "description": "Crypto Bridge — live prices, register/login, wallet deposits/withdrawals, admin panel",
-  "scripts": { "start": "node server.js", "test": "node test-server.js" },
-  "engines": { "node": ">=18" }
+  "description": "Crypto Bridge \u2014 multi bonus coins, configurable promotional rewards, live market prices and admin panel",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

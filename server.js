@@ -43,11 +43,11 @@ const DEFAULT_COINS = [
   ['LINK', 'Chainlink', 'chainlink', 'L'], ['LTC', 'Litecoin', 'litecoin', 'Ł'], ['BNB', 'BNB', 'binancecoin', 'B'],
   ['XRP', 'XRP', 'ripple', 'X'], ['SOL', 'Solana', 'solana', 'S']
 ];
-const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockHours: 24, minAmount: 100, maxAmount: 100000 });
+const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -61,7 +61,9 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [] } };
+    if (!Array.isArray(ss.bonusCoins) && D.settings.bonusCoin) D.settings.bonusCoins = [{ ...D.settings.bonusCoin, id: 'legacy-' + String(D.settings.bonusCoin.symbol || 'CBX'), startPrice: 1, priceHistory: [] }];
+    D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
     for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
@@ -237,7 +239,7 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoin, depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
@@ -359,13 +361,13 @@ const routes = {
 
   'POST /api/bonus/trade': async (req, res, b, u) => {
     needUser(u); limit('bonus:' + u.id, 30, 600e3);
-    const c = D.settings.bonusCoin; if (!c.enabled) fail(403, c.symbol + ' is not open right now.');
+    const sym = str(b.symbol || (D.settings.bonusCoins[0] || D.settings.bonusCoin).symbol, 8).toUpperCase(); const c = D.settings.bonusCoins.find(x => x.symbol === sym); if (!c || !c.enabled) fail(403, sym + ' is not open right now.');
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid whole-rupee amount.');
     if (amount < c.minAmount) fail(400, `Minimum is ₹${c.minAmount}.`); if (amount > c.maxAmount) fail(400, `Maximum per trade is ₹${c.maxAmount}.`);
     if (amount > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
     u.balance = r2(u.balance - amount);
     // rates are snapshotted on the position, so later admin changes never alter an open trade
-    const p = { id: nid(), uid: u.id, email: u.email, symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockHours: c.lockHours, status: 'Active', ts: now(), matureAt: now() + c.lockHours * 3600e3 };
+    const p = { id: nid(), uid: u.id, email: u.email, symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockSeconds: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600), lockHours: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) / 3600, status: 'Active', ts: now(), matureAt: now() + Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) * 1000 };
     D.positions.push(p); audit(u.email, 'bonus-trade', `#${p.id} ₹${amount} @${c.returnPct}%`);
     settleDue(); await save(); return { position: p, balance: u.balance };
   },
@@ -387,18 +389,33 @@ const routes = {
   'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); return { items: [...D.trades].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
-  'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: D.settings.bonusCoin, items: [...D.positions].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
+  'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: D.settings.bonusCoins[0] || BONUS_DEFAULT(), coins: D.settings.bonusCoins, items: [...D.positions].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
   'POST /api/admin/bonuscoin': async (req, res, b, u) => {
     needAdmin(u);
-    const sym = str(b.symbol, 8).toUpperCase(), name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockHours), mn = Number(b.minAmount), mx = Number(b.maxAmount);
-    if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.'); if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
+    const action = str(b.action || 'save', 12), sym = str(b.symbol, 8).toUpperCase();
+    if (action === 'delete') {
+      const coin = D.settings.bonusCoins.find(x => x.symbol === sym); if (!coin) fail(404, 'Bonus coin not found.');
+      if (D.positions.some(p => p.symbol === sym && p.status === 'Active')) fail(409, 'This coin has active positions. Settle or refund them first.');
+      D.settings.bonusCoins = D.settings.bonusCoins.filter(x => x.symbol !== sym); D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
+      audit(u.email, 'bonuscoin-delete', sym); await save(); return { ok: true, coins: D.settings.bonusCoins };
+    }
+    const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1);
+    if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.');
+    if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
     if (name.length < 2) fail(400, 'Enter a coin name.');
-    if (!(ret >= 0 && ret <= 100)) fail(400, 'Return % must be 0–100.'); if (!(refp >= 0 && refp <= 100)) fail(400, 'Referral % must be 0–100.');
-    if (b.refBase !== 'profit' && b.refBase !== 'amount') fail(400, 'Bad referral base.');
-    if (!(lock >= 0 && lock <= 720)) fail(400, 'Lock hours must be 0–720.');
+    if (!(ret >= 0 && ret <= 100) || !(refp >= 0 && refp <= 100)) fail(400, 'Return and referral percentages must be 0–100.');
+    if (!['profit','amount'].includes(b.refBase)) fail(400, 'Bad referral base.');
+    if (!Number.isInteger(lock) || lock < 0 || lock > 604800) fail(400, 'Countdown must be 0–604800 seconds.');
     if (!Number.isInteger(mn) || mn < 1 || !Number.isInteger(mx) || mx < mn || mx > MAX_AMOUNT) fail(400, 'Check min / max amounts.');
-    D.settings.bonusCoin = { enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockHours: lock, minAmount: mn, maxAmount: mx };
-    audit(u.email, 'bonuscoin-settings', JSON.stringify(D.settings.bonusCoin)); await save(); return { ok: true };
+    if (!Number.isFinite(startPrice) || startPrice <= 0 || startPrice > MAX_AMOUNT) fail(400, 'Starting price must be positive.');
+    let coin = D.settings.bonusCoins.find(x => x.symbol === sym);
+    if (action === 'add' && coin) fail(409, 'Bonus coin already exists.');
+    if (action !== 'add' && !coin && action !== 'save') fail(404, 'Bonus coin not found.');
+    const old = coin || {};
+    coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), priceMode: 'admin-simulated' };
+    if (!old.id) D.settings.bonusCoins.push(coin); else D.settings.bonusCoins = D.settings.bonusCoins.map(x => x.symbol === sym ? coin : x);
+    D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
+    audit(u.email, 'bonuscoin-' + action, JSON.stringify(coin)); await save(); return { ok: true, coin, coins: D.settings.bonusCoins };
   },
   'POST /api/admin/position': async (req, res, b, u) => {
     needAdmin(u); const p = D.positions.find(x => x.id === b.id); if (!p) fail(404, 'Not found');
@@ -443,7 +460,7 @@ const routes = {
       if (!/^[A-Z0-9]{2,10}$/.test(sym)) fail(400, 'Symbol must be 2–10 letters/digits (e.g. MATIC).'); if (name.length < 2) fail(400, 'Enter the coin name.');
       if (!/^[a-z0-9-]{2,60}$/.test(id)) fail(400, 'Enter the CoinGecko id (e.g. polygon-ecosystem-token) — see coingecko.com coin page "API id".');
       if (COINS.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
-      if (D.settings.bonusCoin.symbol === sym) fail(409, 'Symbol clashes with the bonus coin.');
+      if ((D.settings.bonusCoins || []).some(c => c.symbol === sym) || D.settings.bonusCoin.symbol === sym) fail(409, 'Symbol clashes with a bonus coin.');
       try {   // verify the coin really exists on both price sources before listing it
         const r1 = await fetch(`${BINANCE_API}?symbols=${encodeURIComponent(JSON.stringify([sym + 'USDT']))}`, { signal: AbortSignal.timeout(8000) }); if (!r1.ok) throw new Error('not on Binance');
         const hdr = { Accept: 'application/json' }; if (E.COINGECKO_API_KEY) hdr['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
@@ -577,7 +594,7 @@ async function seedAdmin() {
 
 if (require.main === module) {
   loadDB().then(seedAdmin).then(() => {
-    setInterval(() => settleAndSave().catch(e => console.error(e.message)), 30e3).unref();
+    setInterval(() => settleAndSave().catch(e => console.error(e.message)), 1000).unref();
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));
   }).catch(e => { console.error('Startup failed:', e.message); process.exit(1); });
 }

@@ -85,3 +85,10 @@ v2.7 ADDITIONS
   Each has independent Level 1 / Level 2 / Level 3 percentages (0–100%). Deposit commissions trigger only once when an admin approves the deposit. Trading-profit commissions trigger only when a sell realises positive profit; no payout on buys, losses or unrealised price changes. Optional per-level cap applies to trading-profit commissions.
   Admin > Coins no longer has a hard-coded 60-coin limit. Coins still must be supported by both Binance (SYMBOLUSDT) and CoinGecko to provide live market prices. Deletion is blocked while users hold that coin, to avoid trapping their holdings.
   Existing user, wallet, deposit, withdrawal, trade, coin and settings data is loaded and merged as before; new settings migrate with safe defaults.
+
+v2.9 multi bonus coin update
+- Admin can add unlimited bonus coins, edit per-coin settings, enable/disable, and delete coins.
+- Each bonus coin has its own symbol/name, admin-configured display price, promotional return percentage, referral rate/base, min/max trade, and countdown duration.
+- On purchase, the return and timer settings are snapshotted. Principal plus promotional reward settles once after the countdown; active positions prevent coin deletion.
+- Bonus coin chart is explicitly marked simulated/admin-configured. These custom coins do not have exchange-backed live market prices; listed market coins continue to use live exchange data.
+- Promotional rewards are not market trading profit or guaranteed investment returns. Review local financial/legal compliance before enabling real-money payouts.

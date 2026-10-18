@@ -36,10 +36,12 @@ const changeLabel = v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
 function assetRow(a, i) {
   return `<div class="asset-row" data-coin="${esc(a.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name">${coinIcon(a, i)}<div><strong>${esc(a.symbol)}</strong><small>${esc(a.name)}</small></div></div><div class="asset-price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</div>`;
 }
-const bonusCfg = () => (state.cfg && state.cfg.bonusCoin) || { enabled: false };
+const bonusCoins = () => (state.cfg && Array.isArray(state.cfg.bonusCoins) ? state.cfg.bonusCoins : ((state.cfg && state.cfg.bonusCoin && state.cfg.bonusCoin.enabled) ? [state.cfg.bonusCoin] : []));
+const bonusCfg = (symbol = state.coin) => bonusCoins().find(c => c.symbol === symbol) || (state.cfg && state.cfg.bonusCoin) || { enabled: false };
+const bonusSeconds = b => Number(b.lockSeconds ?? (Number(b.lockHours || 0) * 3600));
+const bonusWaitLabel = b => bonusSeconds(b) <= 0 ? 'Instant' : bonusSeconds(b) + ' sec';
 function bonusRow(q = '') {
-  const b = bonusCfg(); if (!b.enabled || (q && !(b.symbol + ' ' + b.name).toLowerCase().includes(q))) return '';
-  return `<div class="asset-row bonus-row" data-coin="${esc(b.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin bonus-coin" aria-hidden="true">★</span><div><strong>${esc(b.symbol)}</strong><small>${esc(b.name)}</small></div></div><div class="asset-price">+${b.returnPct}% return</div><div class="asset-change positive">${b.lockHours ? b.lockHours + 'h' : 'Instant'}</div></div>`;
+  return bonusCoins().filter(b => b.enabled && (!q || (b.symbol + ' ' + b.name).toLowerCase().includes(q))).map(b => `<div class="asset-row bonus-row" data-coin="${esc(b.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin bonus-coin" aria-hidden="true">★</span><div><strong>${esc(b.symbol)}</strong><small>${esc(b.name)} · promotional coin</small></div></div><div class="asset-price">+${b.returnPct}% reward</div><div class="asset-change positive">${bonusWaitLabel(b)}</div></div>`).join('');
 }
 function renderAssetRows(q = '') {
   q = q.trim().toLowerCase(); const br = bonusRow(q);
@@ -145,10 +147,10 @@ function holdingsList() {
 }
 
 function bonusBody() {
-  const b = bonusCfg(), u = state.me; if (!b.enabled) return '<div class="empty-state">This coin is not open right now.</div>';
+  const b = bonusCfg(state.coin), u = state.me; if (!b.enabled) return '<div class="empty-state">This coin is not open right now.</div>';
   const mine = state.positions.filter(p => p.status === 'Active');
-  return `<article class="balance-card"><span>${esc(b.name)} · ${esc(b.symbol)}</span><strong>+${b.returnPct}% return</strong><small>${b.lockHours ? 'Paid after ' + b.lockHours + ' hours' : 'Paid instantly'} · Trade ${inr(b.minAmount)} – ${inr(b.maxAmount)}</small>${u ? `<div class="stat-grid"><div><small>Wallet</small><b>${inr(u.balance)}</b></div><div><small>Active trades</small><b>${mine.length} · ${inr(mine.reduce((s, p) => s + p.amount, 0))}</b></div></div>` : ''}</article>
-  ${u ? `<form id="bonusForm" class="demo-form"><label for="bAmt">Amount to trade (₹)</label><input id="bAmt" type="number" inputmode="numeric" step="1" min="${b.minAmount}" max="${b.maxAmount}" required placeholder="min ${b.minAmount}"><div class="quick">${[25, 50, 100].map(p => `<button type="button" data-bpct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div><p class="fine-print" id="bEst"></p><p class="fine-print">Wallet: <b>${inr(u.balance)}</b> · Your amount plus the ${b.returnPct}% return is credited to your wallet ${b.lockHours ? 'after ' + b.lockHours + ' hours' : 'immediately'}.</p><p class="msg-err" id="bErr" role="alert"></p><button class="primary-btn" type="submit">Trade ${esc(b.symbol)}</button></form>`
+  return `<article class="balance-card"><span>${esc(b.name)} · ${esc(b.symbol)}</span><strong>+${b.returnPct}% return</strong><small>${bonusSeconds(b) ? 'Countdown: ' + bonusSeconds(b) + ' seconds' : 'Paid instantly'} · Trade ${inr(b.minAmount)} – ${inr(b.maxAmount)}</small>${u ? `<div class="stat-grid"><div><small>Wallet</small><b>${inr(u.balance)}</b></div><div><small>Active trades</small><b>${mine.length} · ${inr(mine.reduce((s, p) => s + p.amount, 0))}</b></div></div>` : ''}</article>
+  <div class="content-card"><b>Admin-configured display price: ${Number(b.startPrice || 1).toLocaleString('en-IN')}</b><p class="fine-print">Simulated bonus-coin chart · not an exchange live price. Reward is promotional and not market trading profit.</p><svg viewBox="0 0 320 70" width="100%" role="img" aria-label="Simulated bonus coin price chart"><polyline points="${Array.from({length:24},(_,i)=>`${i*13.8},${35+Math.sin(i*0.8)*12}`).join(' ')}" fill="none" stroke="#2bb78a" stroke-width="2.5"/></svg></div>${u ? `<form id="bonusForm" class="demo-form"><label for="bAmt">Amount to trade (₹)</label><input id="bAmt" type="number" inputmode="numeric" step="1" min="${b.minAmount}" max="${b.maxAmount}" required placeholder="min ${b.minAmount}"><div class="quick">${[25, 50, 100].map(p => `<button type="button" data-bpct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div><p class="fine-print" id="bEst"></p><p class="fine-print">Wallet: <b>${inr(u.balance)}</b> · Your amount plus the ${b.returnPct}% return is credited to your wallet ${bonusSeconds(b) ? 'after ' + bonusSeconds(b) + ' seconds' : 'immediately'}.</p><p class="msg-err" id="bErr" role="alert"></p><button class="primary-btn" type="submit">Trade ${esc(b.symbol)}</button></form>`
   : `<div class="demo-form"><p class="fine-print">Login to trade ${esc(b.symbol)}.</p><button class="primary-btn" data-page="Auth">Login / Register</button></div>`}`;
 }
 function bindBonus() {
@@ -158,7 +160,7 @@ function bindBonus() {
   $('#bAmt').oninput = est;
   f.onsubmit = async e => {
     e.preventDefault(); $('#bErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
-    try { const j = await api('bonus/trade', { amount: Number($('#bAmt').value) }); await loadMe(); const p = j.position; showModal('Trade placed', `${inr(p.amount)} traded. ${inr(p.amount + p.amount * p.returnPct / 100)} will be credited ${p.lockHours ? 'after ' + p.lockHours + ' hours' : 'now'}.`); renderPage('Coin', true); }
+    try { const j = await api('bonus/trade', { symbol: b.symbol, amount: Number($('#bAmt').value) }); await loadMe(); const p = j.position; showModal('Trade placed', `${inr(p.amount)} promotional position started for ${p.symbol}. Principal + ${p.returnPct}% promotional reward is scheduled after ${p.lockSeconds} seconds.`); renderPage('Coin', true); }
     catch (x) { $('#bErr').textContent = x.message; btn.disabled = false; }
   };
 }
@@ -262,8 +264,8 @@ function renderPage(page, quiet) {
   const main = $('#appMain'), c = state.cfg;
   if (page === 'Home') renderHome();
   else if (page === 'Coin') {
-    main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCfg().enabled && state.coin === bonusCfg().symbol ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
-    if (bonusCfg().enabled && state.coin === bonusCfg().symbol) bindBonus(); else { bindCoin(); if ($('#chartBox')) bindChart(); }
+    main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCoins().some(b => b.enabled && state.coin === b.symbol) ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
+    if (bonusCoins().some(b => b.enabled && state.coin === b.symbol)) bindBonus(); else { bindCoin(); if ($('#chartBox')) bindChart(); }
   }
   else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
   else if (page === 'Profile') {
