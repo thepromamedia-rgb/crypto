@@ -170,6 +170,51 @@ const stub = http.createServer((q, r) => {
   const pk = mk(); await pk('POST', '/api/register', { name: 'Self', email: 'self@x.io', phone: '9999900000', password: 'password1' });
   const rc = (await pk('GET', '/api/me')).j.user.refCode; await mk()('POST', '/api/register', { name: 'Twin', email: 'twin@x.io', phone: '9999900000', password: 'password1', ref: rc });
   assert.equal((await pk('GET', '/api/me')).j.referrals, 0); ok('same-phone self referral ignored');
+  // Admin-controlled withdrawal fee is stored on each request and rejected requests refund gross amount.
+  const feeUser = mk(); await feeUser('POST', '/api/register', { name: 'Fee User', email: 'fee@x.io', password: 'password1' });
+  const feeMe = (await feeUser('GET', '/api/me')).j.user;
+  assert.equal((await a('POST', '/api/admin/user', { id: feeMe.id, action: 'adjust', amount: 1000, reason: 'fee test' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/settings', { withdrawalFeeType: 'percent', withdrawalFeeValue: 2, withdrawalFeeLabel: 'Platform Fee', paymentMode: 'qr' })).s, 200);
+  const feeWd = await feeUser('POST', '/api/withdraw', { amount: 300, upi: 'fee@bank' });
+  assert.equal(feeWd.s, 200); assert.equal(feeWd.j.withdrawal.fee, 6); assert.equal(feeWd.j.withdrawal.netAmount, 294); assert.equal(feeWd.j.balance, 700);
+  assert.equal((await a('POST', '/api/admin/withdrawal', { id: feeWd.j.withdrawal.id, action: 'reject' })).s, 200);
+  assert.equal((await feeUser('GET', '/api/me')).j.user.balance, 1000); ok('admin withdrawal fee and gross refund');
+  assert.equal((await a('POST', '/api/admin/settings', { paymentMode: 'razorpay' })).s, 400); ok('Razorpay cannot be enabled without server secrets');
+  assert.equal((await feeUser('POST', '/api/razorpay/order', { amount: 1000 })).s, 403); ok('Razorpay order blocked while QR mode is selected');
+
+  // Full Razorpay flow against a deterministic API stub (no live money or secrets).
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
+  process.env.RAZORPAY_KEY_SECRET = 'test_api_secret';
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'test_webhook_secret';
+  let fakeOrderN = 0, fakeLastAmount = 100000;
+  const realFetch = global.fetch;
+  global.fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url.startsWith('https://api.razorpay.com/v1/orders')) {
+      const body = JSON.parse(init.body); fakeLastAmount = body.amount; fakeOrderN++;
+      return new Response(JSON.stringify({ id: 'order_mock_' + fakeOrderN, amount: body.amount, currency: body.currency, status: 'created' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.startsWith('https://api.razorpay.com/v1/payments/')) {
+      const id = url.split('/').pop();
+      return new Response(JSON.stringify({ id, order_id: 'order_mock_1', amount: fakeLastAmount, currency: 'INR', status: 'captured' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return realFetch(input, init);
+  };
+  assert.equal((await a('POST', '/api/admin/settings', { paymentMode: 'razorpay' })).s, 200);
+  const balBeforeRz = (await feeUser('GET', '/api/me')).j.user.balance;
+  const ord = await feeUser('POST', '/api/razorpay/order', { amount: 1000 });
+  assert.equal(ord.s, 200); assert.equal(ord.j.orderId, 'order_mock_1'); assert.equal(ord.j.amount, 100000); ok('Razorpay server-side order creation');
+  const paySig = require('node:crypto').createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update('order_mock_1|pay_mock_1').digest('hex');
+  const ver = await feeUser('POST', '/api/razorpay/verify', { razorpay_order_id: 'order_mock_1', razorpay_payment_id: 'pay_mock_1', razorpay_signature: paySig });
+  assert.equal(ver.s, 200); assert.equal((await feeUser('GET', '/api/me')).j.user.balance, balBeforeRz + 1000); ok('Razorpay captured payment verified and credited');
+  const balAfterVerify = (await feeUser('GET', '/api/me')).j.user.balance;
+  const whEvent = JSON.stringify({ event: 'payment.captured', payload: { payment: { entity: { id: 'pay_mock_1', order_id: 'order_mock_1', amount: 100000, currency: 'INR', status: 'captured' } } } });
+  const whSig = require('node:crypto').createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET).update(whEvent).digest('hex');
+  const wh = await fetch(base + '/api/razorpay/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': whSig }, body: whEvent });
+  assert.equal(wh.status, 200); assert.equal((await feeUser('GET', '/api/me')).j.user.balance, balAfterVerify); ok('Razorpay duplicate webhook does not double-credit');
+  const badWh = await fetch(base + '/api/razorpay/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': '0'.repeat(64) }, body: whEvent });
+  assert.equal(badWh.status, 400); ok('Razorpay webhook rejects invalid signature');
+  global.fetch = realFetch;
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

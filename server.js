@@ -47,7 +47,7 @@ const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward C
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -61,7 +61,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24 } };
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24, paymentMode: ss.paymentMode === 'razorpay' ? 'razorpay' : 'qr', withdrawalFeeType: ss.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent', withdrawalFeeValue: Math.max(0, Number(ss.withdrawalFeeValue || 0)), withdrawalFeeLabel: String(ss.withdrawalFeeLabel || 'Platform Fee').slice(0, 40) } };
     if (!Array.isArray(ss.bonusCoins) && D.settings.bonusCoin) D.settings.bonusCoins = [{ ...D.settings.bonusCoin, id: 'legacy-' + String(D.settings.bonusCoin.symbol || 'CBX'), startPrice: 1, priceHistory: [] }];
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
@@ -72,15 +72,19 @@ async function loadDB() {
 let saveChain = Promise.resolve();
 function save() {
   const snap = JSON.stringify(D);
-  saveChain = saveChain.then(async () => {
+  // Serialize writes, but do not report success to an API caller if durable storage failed.
+  // Recover the queue after a failed write so later requests can retry.
+  const write = saveChain.then(async () => {
     if (UP_URL) await up(['SET', KEY, snap]);
     else {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       const tmp = DB_FILE + '.tmp';
-      fs.writeFileSync(tmp, snap); fs.renameSync(tmp, DB_FILE);
+      fs.writeFileSync(tmp, snap);
+      fs.renameSync(tmp, DB_FILE);
     }
-  }).catch(e => console.error('SAVE FAILED', e.message));
-  return saveChain;
+  });
+  saveChain = write.catch(e => { console.error('SAVE FAILED', e.message); });
+  return write;
 }
 
 // ---------- helpers ----------
@@ -239,9 +243,49 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = () => ({ withdrawalMode: D.settings.withdrawalMode || 'all', withdrawalCooldownHours: D.settings.withdrawalCooldownHours ?? 24, upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
+const PUBLIC_SETTINGS = () => ({ withdrawalMode: D.settings.withdrawalMode || 'all', withdrawalCooldownHours: D.settings.withdrawalCooldownHours ?? 24, withdrawalFeeType: D.settings.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(D.settings.withdrawalFeeValue || 0), withdrawalFeeLabel: D.settings.withdrawalFeeLabel || 'Platform Fee', paymentMode: D.settings.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, footerText: D.settings.footerText || 'India-focused platform', minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
+
+async function razorpayRequest(method, endpoint, payload) {
+  const id = E.RAZORPAY_KEY_ID, secret = E.RAZORPAY_KEY_SECRET;
+  if (!id || !secret) fail(503, 'Razorpay is not configured on the server.');
+  const r = await fetch('https://api.razorpay.com/v1' + endpoint, { method, headers: { Authorization: 'Basic ' + Buffer.from(id + ':' + secret).toString('base64'), 'Content-Type': 'application/json' }, body: payload ? JSON.stringify(payload) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { console.error('Razorpay API error', r.status, j.error && j.error.code); fail(502, 'Razorpay could not process the request. Please retry or contact support.'); }
+  return j;
+}
+function signatureMatches(expected, supplied) {
+  if (typeof supplied !== 'string' || !/^[a-f0-9]{64}$/i.test(supplied)) return false;
+  const a = Buffer.from(expected, 'hex'), b = Buffer.from(supplied, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function creditDeposit(d, paymentId) {
+  if (!d || d.status === 'Approved') return false;
+  if (d.status !== 'Pending' || d.provider !== 'razorpay') return false;
+  const user = D.users.find(x => x.id === d.uid);
+  if (!user) return false;
+  // No await between status check and balance update: webhook/callback is idempotent in this single process.
+  user.balance = r2((user.balance || 0) + d.amount);
+  d.status = 'Approved'; d.paymentId = paymentId; d.providerStatus = 'captured'; d.done = now(); d.by = 'Razorpay verified';
+  const cfg = D.settings.depositRef || { enabled: false, levels: [0,0,0] };
+  if (cfg.enabled && user.refBy) { d.refPayments = payReferralLevels(user, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); }
+  audit('system', 'razorpay-deposit-captured', `deposit #${d.id}, order ${d.orderId}, payment ${paymentId}, ₹${d.amount}`);
+  return true;
+}
+async function confirmRazorpayPayment(orderId, paymentId, suppliedSignature) {
+  const d = D.deposits.find(x => x.provider === 'razorpay' && x.orderId === orderId);
+  if (!d) fail(404, 'Payment order not found.');
+  if (d.status === 'Approved') return { ok: true, alreadyCredited: true };
+  if (d.status !== 'Pending' || d.uid == null) fail(409, 'This deposit is no longer pending.');
+  const expected = crypto.createHmac('sha256', E.RAZORPAY_KEY_SECRET).update(orderId + '|' + paymentId).digest('hex');
+  if (!signatureMatches(expected, suppliedSignature)) fail(400, 'Payment signature verification failed.');
+  const payment = await razorpayRequest('GET', '/payments/' + encodeURIComponent(paymentId));
+  if (payment.order_id !== orderId || payment.status !== 'captured' || Number(payment.amount) !== Number(d.amount) * 100 || payment.currency !== 'INR') fail(409, 'Payment is not captured for the expected amount. Balance was not credited.');
+  const changed = creditDeposit(d, paymentId);
+  if (changed) await save();
+  return { ok: true, alreadyCredited: !changed, deposit: d };
+}
 
 const routes = {
   'GET /api/prices': async () => { const c = await getPrices(); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
@@ -293,8 +337,27 @@ const routes = {
     const pw = String(b.password || ''); if (pw.length < 8 || pw.length > 100) fail(400, 'New password must be 8–100 characters.');
     u.pass = hashPw(pw); audit(u.email, 'password-change', ''); await save(); return { ok: true };
   },
+  'POST /api/razorpay/order': async (req, res, b, u) => {
+    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts cannot make real deposits.');
+    if (D.settings.paymentMode !== 'razorpay') fail(403, 'Razorpay deposits are currently disabled by the administrator.');
+    if (!E.RAZORPAY_KEY_ID || !E.RAZORPAY_KEY_SECRET || !E.RAZORPAY_WEBHOOK_SECRET) fail(503, 'Razorpay is not fully configured on the server.');
+    limit('rzorder:' + u.id, 8, 3600e3);
+    const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
+    if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
+    const d = { id: nid(), uid: u.id, email: u.email, amount, status: 'Pending', provider: 'razorpay', paymentMethod: 'razorpay', ts: now() };
+    const order = await razorpayRequest('POST', '/orders', { amount: amount * 100, currency: 'INR', receipt: 'cb_' + d.id + '_' + now(), notes: { app: 'Crypto Bridge', deposit_id: String(d.id), user_id: String(u.id) } });
+    d.orderId = order.id; d.providerStatus = order.status || 'created'; D.deposits.push(d);
+    audit(u.email, 'razorpay-order-created', `deposit #${d.id}, order ${order.id}, ₹${amount}`); await save();
+    return { keyId: E.RAZORPAY_KEY_ID, orderId: order.id, amount: order.amount, currency: order.currency, depositId: d.id, name: 'Crypto Bridge', description: 'Wallet deposit' };
+  },
+  'POST /api/razorpay/verify': async (req, res, b, u) => {
+    needUser(u); const orderId = str(b.razorpay_order_id, 80), paymentId = str(b.razorpay_payment_id, 80), sig = str(b.razorpay_signature, 128);
+    const d = D.deposits.find(x => x.provider === 'razorpay' && x.orderId === orderId);
+    if (!d || d.uid !== u.id) fail(404, 'Your payment order was not found.');
+    return await confirmRazorpayPayment(orderId, paymentId, sig);
+  },
   'POST /api/deposit': async (req, res, b, u) => {
-    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real deposits are disabled.'); limit('dep:' + u.id, 10, 3600e3);
+    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real deposits are disabled.'); if (D.settings.paymentMode === 'razorpay') fail(403, 'QR/UTR deposits are disabled. Use Razorpay Checkout.'); limit('dep:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
     if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
     const utr = str(b.utr, 30).toUpperCase(); if (!/^[A-Z0-9]{8,30}$/.test(utr)) fail(400, 'Enter the UTR / transaction reference (8–30 letters/digits).');
@@ -319,9 +382,14 @@ const routes = {
       if (amount > availableProfit) fail(400, `Profit-only withdrawals are enabled. Available profit for withdrawal: ₹${availableProfit}. To request principal release, contact support.`);
     }
     const upi = str(b.upi, 60); if (!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(upi)) fail(400, 'Enter a valid UPI ID (name@bank).');
-    u.balance = r2(u.balance - amount);   // held at request time; refunded once if rejected
-    const w = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), amount, upi, status: 'Pending', ts: now() };
-    D.withdrawals.push(w); audit(u.email, 'withdraw-request', `₹${amount} ${upi}`); await save(); return { withdrawal: w, balance: u.balance };
+    const feeType = D.settings.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent';
+    const feeValue = Math.max(0, Number(D.settings.withdrawalFeeValue || 0));
+    const fee = Math.min(amount, r2(feeType === 'fixed' ? feeValue : amount * feeValue / 100));
+    const netAmount = r2(amount - fee);
+    if (netAmount <= 0) fail(400, 'Withdrawal fee must be less than the requested amount.');
+    u.balance = r2(u.balance - amount);   // gross amount held; refunded once if rejected
+    const w = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), amount, fee, feeType, feeValue, feeLabel: str(D.settings.withdrawalFeeLabel || 'Platform Fee', 40), netAmount, upi, status: 'Pending', ts: now() };
+    D.withdrawals.push(w); audit(u.email, 'withdraw-request', `gross ₹${amount}; fee ₹${fee}; payout ₹${netAmount} ${upi}`); await save(); return { withdrawal: w, balance: u.balance };
   },
 
   'POST /api/trade': async (req, res, b, u) => {
@@ -388,9 +456,10 @@ const routes = {
     needAdmin(u); await settleAndSave();
     const users = D.users.filter(x => x.role !== 'admin'), ok = D.deposits.filter(d => d.status === 'Approved'), paid = D.withdrawals.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
+    const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
-      users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length, demoUsers: D.demoUsers.length, demoWallets: r2(D.demoUsers.reduce((s, x) => s + Number(x.balance || 0), 0)),
-      depositsApproved: sum(ok), withdrawalsPaid: sum(paid),
+      users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length, demoUsers: D.demoUsers.length, demoWallets: r2(D.demoUsers.reduce((s, x) => s + Number(x.balance || 0), 0)),
+      depositsApproved: sum(ok), withdrawalsPaid: sumPayout(paid),
       pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
       bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(D.trades.reduce((s, t) => s + (t.refPaid || 0), 0)) },
       storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: LIM().minDeposit, withdraw: LIM().minWithdraw, trade: LIM().minTrade }
@@ -464,7 +533,7 @@ const routes = {
     const add = (ts, f) => { const r = rows[day(ts)]; if (r) f(r); };
     D.users.filter(x => x.role !== 'admin').forEach(x => add(x.created, r => r.signups++));
     D.deposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
-    D.withdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += x.amount; }));
+    D.withdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += Number(x.netAmount == null ? x.amount : x.netAmount); }));
     D.trades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
     return { rows: Object.values(rows).sort((a, c) => c.date.localeCompare(a.date)) };
   },
@@ -513,6 +582,7 @@ const routes = {
   'POST /api/admin/deposit': async (req, res, b, u) => {
     needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found');
     if (d.status !== 'Pending') fail(409, 'Already ' + d.status + '.');     // credit exactly once
+    if (d.provider === 'razorpay' && b.action === 'approve') fail(403, 'Razorpay deposits can only be credited by verified payment status/webhook.');
     if (b.action === 'approve') { const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing'); t.balance = r2((t.balance || 0) + d.amount); d.status = 'Approved'; const cfg = D.settings.depositRef || { enabled: false, levels: [0,0,0] }; if (cfg.enabled && t.refBy) { d.refPayments = payReferralLevels(t, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); if (d.refPaid) audit('system', 'deposit-referral', `Deposit #${d.id}: ₹${d.refPaid} referral commission across ${d.refPayments.length} level(s)`); } }
     else if (b.action === 'reject') d.status = 'Rejected'; else fail(400, 'Bad action');
     d.by = u.email; d.done = now(); audit(u.email, 'deposit-' + b.action, `#${d.id} ₹${d.amount}`); await save(); return { item: d };
@@ -547,7 +617,11 @@ const routes = {
     needAdmin(u); const s = D.settings;
     if (b.withdrawalMode !== undefined) { if (!['all','profit'].includes(b.withdrawalMode)) fail(400, 'Invalid withdrawal policy.'); s.withdrawalMode = b.withdrawalMode; }
     if (b.withdrawalCooldownHours !== undefined) { const h = Number(b.withdrawalCooldownHours); if (!Number.isInteger(h) || h < 0 || h > 720) fail(400, 'Withdrawal retry delay must be 0–720 hours.'); s.withdrawalCooldownHours = h; }
-    s.upi = str(b.upi, 60); s.payee = str(b.payee, 60); s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600);
+    if (b.paymentMode !== undefined) { if (!['qr','razorpay'].includes(b.paymentMode)) fail(400, 'Invalid payment mode.'); if (b.paymentMode === 'razorpay' && !(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET)) fail(400, 'Configure RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET in Render before enabling Razorpay.'); s.paymentMode = b.paymentMode; }
+    if (b.withdrawalFeeType !== undefined) { if (!['percent','fixed'].includes(b.withdrawalFeeType)) fail(400, 'Invalid withdrawal fee type.'); s.withdrawalFeeType = b.withdrawalFeeType; }
+    if (b.withdrawalFeeValue !== undefined) { const n = Number(b.withdrawalFeeValue); if (!Number.isFinite(n) || n < 0 || n > 100000 || (s.withdrawalFeeType === 'percent' && n > 100)) fail(400, 'Withdrawal fee must be between 0 and 100% (or ₹100,000 fixed).'); s.withdrawalFeeValue = n; }
+    if (b.withdrawalFeeLabel !== undefined) s.withdrawalFeeLabel = str(b.withdrawalFeeLabel, 40) || 'Platform Fee';
+    s.upi = str(b.upi, 60); s.payee = str(b.payee, 60); s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
     if (b.minDeposit !== undefined) {
       const md = Number(b.minDeposit), mw = Number(b.minWithdraw), mt = Number(b.minTrade);
@@ -605,6 +679,12 @@ const server = http.createServer((req, res) => {
   catch { res.writeHead(400); return res.end('Bad Request'); }
 
   if (pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end('ok'); }
+  if (pathname === '/api/razorpay/webhook') {
+    if (req.method !== 'POST') { res.writeHead(405); return res.end('Method Not Allowed'); }
+    const secret = E.RAZORPAY_WEBHOOK_SECRET; if (!secret) { res.writeHead(503); return res.end('Webhook not configured'); }
+    const chunks = []; let total = 0; req.on('data', c => { total += c.length; if (total > 1024 * 1024) req.destroy(); else chunks.push(c); });
+    req.on('end', async () => { try { const raw = Buffer.concat(chunks); const supplied = req.headers['x-razorpay-signature']; const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex'); if (!signatureMatches(expected, supplied)) { res.writeHead(400); return res.end('Invalid signature'); } const event = JSON.parse(raw.toString('utf8')); const entity = event.payload && event.payload.payment && event.payload.payment.entity; if (['payment.captured','order.paid'].includes(event.event) && entity && entity.order_id && entity.status === 'captured') { const d = D.deposits.find(x => x.provider === 'razorpay' && x.orderId === entity.order_id); if (d && d.status === 'Pending' && Number(entity.amount) === d.amount * 100 && entity.currency === 'INR') { creditDeposit(d, entity.id); await save(); } } res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); res.end('ok'); } catch (err) { console.error('Razorpay webhook processing failed', err.message); if (!res.headersSent) { res.writeHead(400); res.end('Invalid webhook'); } } }); return;
+  }
   if (pathname.startsWith('/api/')) return handleApi(req, res, pathname);
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end('Method Not Allowed'); }
   if (pathname === '/') pathname = '/index.html';
@@ -621,6 +701,8 @@ const server = http.createServer((req, res) => {
 async function seedAdmin() {
   const email = normEmail(E.ADMIN_EMAIL || 'admin@cryptobridge.local');
   let pw = E.ADMIN_PASSWORD;
+  if (!emailOk(email)) throw new Error('ADMIN_EMAIL must be a valid email address.');
+  if (pw && (pw.length < 8 || pw.length > 100)) throw new Error('ADMIN_PASSWORD must be 8–100 characters.');
   let admin = D.users.find(u => u.role === 'admin' && u.email === email);
   if (!admin) {
     const generated = !pw; if (!pw) pw = crypto.randomBytes(9).toString('base64url');

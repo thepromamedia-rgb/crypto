@@ -87,10 +87,11 @@ const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class
 
 // ---------- session ----------
 async function loadMe() {
-  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; }
-  catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; } catch {} }
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; updateFooter(); }
+  catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; updateFooter(); } catch {} }
   $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login';
 }
+const updateFooter = () => { const el = $('#siteFooter'); if (el) el.textContent = (state.cfg && state.cfg.footerText) || 'India-focused platform'; };
 const noticeBar = () => `${state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : ''}`;
 const needLogin = page => { state.after = page; renderPage('Auth'); };
 
@@ -136,7 +137,7 @@ function txList() {
   const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★' }, plus = { Deposit: 1, Sell: 1 };
   return `<div class="activity-list">${rows.map(r => {
     const rw = r.kind === 'Reward', val = rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
-    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
+    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
     return `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${rw ? esc(r.symbol) : r.kind}${!rw && r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${rw ? ' · ' : ''}${sub}</small></span><strong class="${cls}">${val}</strong></div>`;
   }).join('')}</div>`;
 }
@@ -298,19 +299,36 @@ function renderPage(page, quiet) {
   } else if (page === 'Bonus') {
     main.innerHTML = `<section class="page-intro"><span class="eyebrow">OFFERS</span><h1>Bonus</h1><p>Announcements from Crypto Bridge.</p></section>${c.bonus ? `<article class="content-card"><p style="white-space:pre-wrap">${esc(c.bonus)}</p></article>` : '<div class="empty-state">No active offers right now.</div>'}`;
   } else if (page === 'Recharge') {
-    const pay = c.upi || c.qr;
-    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Recharge</h1><p>Minimum deposit ${inr(c.minDeposit)}. Pay by UPI, then submit your UTR. Balance is credited after admin verification.</p></section>
-    ${pay ? `<article class="content-card"><h2>Pay to</h2>${c.qr ? `<img class="qr-img" alt="Payment QR" src="${esc(c.qr)}">` : ''}${c.upi ? `<div class="copy-row"><code>${esc(c.upi)}</code><button class="primary-btn compact" id="copyUpi" type="button">Copy</button></div>` : ''}${c.payee ? `<p class="fine-print">Payee: ${esc(c.payee)}</p>` : ''}</article>` : '<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Deposits not open</h2><p>Payment details have not been set up yet. Please contact support.</p></div></article>'}
-    <form id="depForm" class="demo-form"><label for="dAmt">Amount paid (₹)</label><input id="dAmt" type="number" inputmode="numeric" min="${c.minDeposit}" step="1" required placeholder="${c.minDeposit}"><label for="dUtr">UTR / transaction reference</label><input id="dUtr" required maxlength="30" autocomplete="off" placeholder="12-digit UTR"><p class="msg-err" id="depErr" role="alert"></p><button class="primary-btn" type="submit" ${pay ? '' : 'disabled'}>Submit for verification</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    const razor = c.paymentMode === 'razorpay';
+    const pay = razor ? !!c.razorpayEnabled : !!(c.upi || c.qr);
+    const pendingDep = state.deposits.filter(d => d.status === 'Pending' && d.provider !== 'razorpay').sort((a,b) => b.ts-a.ts)[0];
+    const countdownCard = pendingDep && !razor ? `<article class="content-card"><h2>Deposit review timer</h2><p>Your QR deposit request is pending admin verification.</p><strong class="deposit-countdown" data-deposit-countdown="${Number(pendingDep.ts) + 30 * 60 * 1000}">30:00</strong><p class="fine-print">This is a review timer, not payment confirmation. Your balance is credited only after an admin verifies the payment.</p></article>` : '';
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Recharge</h1><p>Minimum deposit ${inr(c.minDeposit)}. ${razor ? 'Pay securely using Razorpay. Captured payments are verified by the server.' : 'Pay by UPI QR and submit your UTR for admin verification.'}</p></section>${countdownCard}
+    ${razor ? (pay ? `<article class="content-card"><h2>Razorpay Checkout</h2><p>Your payment is verified automatically after Razorpay confirms capture. Do not close the page until Checkout reports the result.</p><p class="fine-print">Deposits are credited only after server-side payment verification.</p></article>` : `<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Razorpay is not configured</h2><p>The administrator must configure Razorpay credentials in Render Environment.</p></div></article>`) : (pay ? `<article class="content-card"><h2>Pay to</h2>${c.qr ? `<img class="qr-img" alt="Payment QR" src="${esc(c.qr)}">` : ''}${c.upi ? `<div class="copy-row"><code>${esc(c.upi)}</code><button class="primary-btn compact" id="copyUpi" type="button">Copy</button></div>` : ''}${c.payee ? `<p class="fine-print">Payee: ${esc(c.payee)}</p>` : ''}</article>` : '<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Deposits not open</h2><p>Payment details have not been set up yet. Please contact support.</p></div></article>')}
+    <form id="depForm" class="demo-form"><label for="dAmt">${razor ? 'Deposit amount (₹)' : 'Amount paid (₹)'}</label><input id="dAmt" type="number" inputmode="numeric" min="${c.minDeposit}" step="1" required placeholder="${c.minDeposit}">${razor ? '' : '<label for="dUtr">UTR / transaction reference</label><input id="dUtr" required maxlength="30" autocomplete="off" placeholder="12-digit UTR">'}<p class="msg-err" id="depErr" role="alert"></p><button class="primary-btn" type="submit" ${pay ? '' : 'disabled'}>${razor ? 'Pay securely with Razorpay' : 'Submit for verification'}</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
     const cu = $('#copyUpi'); if (cu) cu.onclick = async () => { try { await navigator.clipboard.writeText(c.upi); showToast('UPI ID copied.'); } catch { showToast(c.upi); } };
     $('#depForm').onsubmit = async e => {
       e.preventDefault(); $('#depErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
-      try { await api('deposit', { amount: Number($('#dAmt').value), utr: $('#dUtr').value }); await loadMe(); showModal('Submitted', 'Your deposit is pending verification. It will be credited once an admin confirms the payment.'); renderPage('Assets'); }
-      catch (x) { $('#depErr').textContent = x.message; btn.disabled = false; }
+      try {
+        const amount = Number($('#dAmt').value);
+        if (razor) {
+          const order = await api('razorpay/order', { amount });
+          if (!window.Razorpay) await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.onload = resolve; script.onerror = () => reject(new Error('Could not load Razorpay Checkout. Please retry.')); document.head.appendChild(script); });
+          await new Promise((resolve, reject) => {
+            let finished = false;
+            const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: order.name, description: order.description, order_id: order.orderId, handler: async response => { try { await api('razorpay/verify', response); finished = true; resolve(); } catch (err) { reject(err); } }, modal: { ondismiss: () => { if (!finished) reject(new Error('Checkout closed. If you paid, your deposit will update after Razorpay webhook verification.')); } }, theme: { color: '#245ce8' } });
+            checkout.on('payment.failed', response => reject(new Error(response.error && response.error.description || 'Payment failed. Please retry.'))); checkout.open();
+          });
+          await loadMe(); showModal('Payment verified', 'Razorpay confirmed your payment and your wallet deposit was credited.'); renderPage('Assets');
+        } else {
+          await api('deposit', { amount, utr: $('#dUtr').value }); await loadMe(); showDepositCountdown(); renderPage('Assets');
+        }
+      } catch (x) { $('#depErr').textContent = x.message; btn.disabled = false; }
     };
   } else if (page === 'Withdrawal') {
     main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Withdrawal</h1><p>Minimum withdrawal ${inr(c.minWithdraw)}. Available: <b>${inr(state.me.balance)}</b>. ${state.me.mode === 'demo' ? 'Demo withdrawals are simulated and do not send real money.' : ''} ${c.withdrawalMode === 'profit' ? 'Profit-only policy is enabled: only recorded realized profits can be requested. Contact support to request principal release.' : 'Full-balance withdrawals are enabled, subject to admin review.'} The amount is held while your request is pending. ${state.withdrawals.some(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()) ? `Retry available after ${new Date(Math.max(...state.withdrawals.filter(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()).map(w => w.retryAt))).toLocaleString()}.` : ''}</p></section>
-    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><label for="wUpi">${state.me.mode === 'demo' ? 'Demo payout reference / UPI ID' : 'Your UPI ID'}</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><div class="content-card" style="margin:12px 0"><p>Withdrawal amount: <b id="wdGross">—</b></p><p>${esc(c.withdrawalFeeLabel || 'Platform Fee')}: <b id="wdFee">—</b></p><p>Estimated payout: <b id="wdNet">—</b></p><small class="fine-print">Fee settings are set by the administrator. The full requested amount is held; if rejected, the gross amount is refunded.</small></div><label for="wUpi">${state.me.mode === 'demo' ? 'Demo payout reference / UPI ID' : 'Your UPI ID'}</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    const updateWdPreview = () => { const gross = Math.max(0, Number($('#wAmt').value) || 0); const val = Math.max(0, Number(c.withdrawalFeeValue || 0)); const fee = Math.min(gross, c.withdrawalFeeType === 'fixed' ? val : Math.round(gross * val) / 100); $('#wdGross').textContent = inr(gross); $('#wdFee').textContent = inr(fee); $('#wdNet').textContent = inr(Math.max(0, gross - fee)); }; $('#wAmt').addEventListener('input', updateWdPreview); updateWdPreview();
     $('#wdForm').onsubmit = async e => {
       e.preventDefault(); $('#wdErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
       try { await api('withdraw', { amount: Number($('#wAmt').value), upi: $('#wUpi').value }); await loadMe(); showModal('Requested', 'Your withdrawal request is pending. You can follow its status in Assets.'); renderPage('Assets'); }
@@ -322,13 +340,28 @@ function renderPage(page, quiet) {
   } else if (page === 'Service') {
     main.innerHTML = `<section class="page-intro"><span class="eyebrow">HELP CENTER</span><h1>Service</h1><p>Answers and support.</p></section>${c.support ? `<a class="primary-btn" style="display:block;text-align:center;text-decoration:none;margin-bottom:14px" target="_blank" rel="noopener" href="${esc(c.support)}">Contact support ↗</a>` : ''}<div class="faq-list"><details open><summary>How do I deposit?</summary><p>Open Recharge, pay the shown UPI/QR (minimum ${inr(c.minDeposit)}), then submit amount and UTR. Your balance updates after admin verification.</p></details><details><summary>How do I withdraw?</summary><p>Open Withdrawal, enter an amount (minimum ${inr(c.minWithdraw)}, up to your balance) and your UPI ID. If rejected, the amount returns to your balance.</p></details><details><summary>Are prices live?</summary><p>Yes, prices come from CoinGecko and refresh about every 20 seconds. They can be slightly delayed.</p></details></div>`;
   } else if (page === 'Guide') {
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">QUICK START</span><h1>Guide</h1><p>Get going in three steps.</p></section><div class="faq-list"><details open><summary>1. Register or login</summary><p>Create an account with your email and a password of at least 8 characters.</p></details><details open><summary>2. Recharge</summary><p>Minimum ${inr(c.minDeposit)}. Pay via UPI, submit the UTR, wait for verification.</p></details><details open><summary>3. Withdraw</summary><p>Minimum ${inr(c.minWithdraw)}. Requests are reviewed and paid to your UPI ID.</p></details></div>`;
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">QUICK START</span><h1>Guide</h1><p>Get going in three steps.</p></section><div class="faq-list"><details open><summary>1. Register or login</summary><p>Create an account with your email and a password of at least 8 characters.</p></details><details open><summary>2. Recharge</summary><p>Minimum ${inr(c.minDeposit)}. ${(c.paymentMode === 'razorpay' && c.razorpayEnabled) ? 'Pay securely using Razorpay Checkout. Your wallet is credited after server-side payment verification.' : 'Pay via the displayed UPI QR/ID, submit the UTR, and wait for admin verification.'}</p></details><details open><summary>3. Withdraw</summary><p>Minimum ${inr(c.minWithdraw)}. Requests are reviewed and paid to your UPI ID. The configured ${esc(c.withdrawalFeeLabel || 'Platform Fee')} is deducted from the gross request; the net payout is shown before submission.</p></details></div>`;
   }
   if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function doLogout() { try { await api('logout', {}); } catch {} state.me = null; state.deposits = state.withdrawals = state.trades = state.positions = []; await loadMe(); showToast('Logged out.'); renderPage('Home'); }
 function showModal(title, text) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = ''; const p = document.createElement('p'); p.textContent = text; $('#modalBody').appendChild(p); $('#modal').hidden = false; $('#okModal').focus(); }
+function showDepositCountdown() {
+  $('#modalTitle').textContent = 'Deposit submitted';
+  $('#modalBody').innerHTML = '<p>Your deposit request has been received.</p><p class="fine-print">Estimated review timer</p><strong class="deposit-countdown" id="depositModalCountdown">30:00</strong><p class="fine-print">This timer does not confirm payment or guarantee automatic credit. Your balance will be credited only after an admin verifies the payment.</p>';
+  $('#modal').hidden = false; $('#okModal').focus(); updateDepositCountdowns();
+}
+function updateDepositCountdowns() {
+  const nodes = document.querySelectorAll('[data-deposit-countdown], #depositModalCountdown');
+  nodes.forEach(node => {
+    let end = Number(node.dataset.depositCountdown);
+    if (!end) { const pending = state.deposits.filter(d => d.status === 'Pending').sort((a,b) => b.ts-a.ts)[0]; end = pending ? Number(pending.ts) + 30 * 60 * 1000 : Date.now() + 30 * 60 * 1000; node.dataset.depositCountdown = String(end); }
+    const left = Math.max(0, end - Date.now()); const mins = Math.floor(left / 60000); const secs = Math.floor((left % 60000) / 1000);
+    node.textContent = left > 0 ? `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` : 'Review time elapsed';
+  });
+}
+setInterval(updateDepositCountdowns, 1000);
 function hideModal() { $('#modal').hidden = true; }
 function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
 

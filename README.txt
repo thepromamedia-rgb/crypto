@@ -33,7 +33,7 @@ DATA SAFETY: existing data is loaded and merged on start, never reset. Writes ar
 server refuses to start if Upstash is configured but unreachable (so it can't overwrite your data).
 Backups exclude password hashes.
 
-TESTS: npm test  (19 checks: rules, one-time credit/refund, auth, file exposure, persistence)
+TESTS: npm test  (offline integration suite: auth, balances, trading, fees, Razorpay mocked flow, webhook signatures, persistence)
 
 v2.1 ADDITIONS
   Buy/Sell: tap any coin in Quotes/Home -> coin page -> Buy (min Rs 100, from wallet) / Sell. Price is
@@ -99,3 +99,46 @@ V3.0 ADMIN ACCOUNT MANAGEMENT
 - Demo records are stored in a separate demoUsers collection. They are excluded from real user lists, real wallet totals, deposits, withdrawals, referrals and financial overview. Demo credentials do not authenticate through the real-user login. This section is for isolated admin-managed demo records, not a separate customer-facing demo trading login.
 - Admin > Users supports block/unblock, set password, balance adjustment with a required audit reason, and delete. Deleted user IDs cannot authenticate; financial records are retained for audit.
 - Backup JSON omits password hashes for both real and demo accounts.
+
+
+RAZORPAY CHECKOUT + WITHDRAWAL FEES (ADDED)
+------------------------------------------------------------
+Admin > Settings now lets you choose one deposit flow:
+- QR: user submits UTR and admin manually verifies it.
+- Razorpay Checkout: server creates an order and the site verifies the Checkout signature plus the Razorpay payment status before crediting the wallet.
+
+Render Environment variables required before selecting Razorpay:
+- RAZORPAY_KEY_ID = your Razorpay Key ID (public key ID)
+- RAZORPAY_KEY_SECRET = your Razorpay Key Secret (server only; never put in frontend or chat)
+- RAZORPAY_WEBHOOK_SECRET = a separate secret configured for the webhook in Razorpay Dashboard
+
+Razorpay Dashboard webhook URL:
+https://crypto-bridge-demo.onrender.com/api/razorpay/webhook
+Subscribe to payment.captured. Use the exact same webhook secret in Render. The webhook endpoint verifies the X-Razorpay-Signature against the raw request body. Test with Razorpay test keys first; switch to live credentials only after tests and account approval. Successful payment must be captured and match the stored order ID, INR currency and exact amount. Duplicate callback/webhook deliveries do not credit twice in the running process.
+
+Admin > Settings > Withdrawal fee:
+- Set fee label, percentage or fixed rupee fee.
+- Fee is snapshotted when the withdrawal request is made. User's gross amount is held; fee and net payout are shown separately. Rejection refunds the full gross amount. Payout remains manual; this does not send money automatically.
+
+IMPORTANT DEPLOYMENT NOTES:
+- This project stores data in a JSON file unless Upstash Redis is configured. On Render ephemeral storage can be lost on restart/deploy. Configure persistent storage/Upstash before handling real payment records.
+- The current JSON storage is not a transactional database. For production payments, use a durable transactional database with a unique constraint on Razorpay order/payment IDs and atomic wallet ledger credits. Do not treat this demo implementation as production-ready custody/exchange infrastructure.
+- Automatic payment verification only confirms a payment received by Razorpay; it does not automatically process crypto deposits or withdrawals. Withdrawals are still manually paid by admin.
+- Real crypto exchange/custody operations require appropriate provider access, security and legal/compliance review.
+
+AUDIT / LIVE-MONEY SAFETY NOTES
+-------------------------------
+- `npm test` now runs the full offline suite, including mocked Razorpay order creation,
+  captured-payment verification, webhook-signature rejection and duplicate-credit checks.
+  This is not a live Razorpay transaction test; use Razorpay TEST keys first.
+- Storage writes now fail the request if persistence fails rather than falsely reporting success.
+- Do not run multiple Render instances/replicas against this JSON/Upstash single-key store for
+  real-money balances. The webhook/callback duplicate guard is process-local and this storage
+  layer is not a transactional ledger. Before accepting live customer funds, move balances,
+  deposits, and webhook event IDs to a durable transactional database with unique constraints
+  and atomic crediting; also add operational reconciliation and backups.
+- Withdrawals are still manually paid by the admin. Razorpay Checkout in this build handles
+  deposits only; it does not automatically send withdrawals to users.
+- Crypto market/Bonus Coin activity in this app is not an exchange order-book or custody system.
+  Do not represent it as a regulated exchange or accept real funds until appropriate licensing,
+  compliance, custody, and security reviews are completed.
