@@ -143,7 +143,13 @@ function txList() {
 
 function holdingsList() {
   const h = Object.entries(state.me.holdings || {}); if (!h.length) return '<div class="empty-state">No coins yet. Tap any coin in Quotes to buy.</div>';
-  return `<div class="asset-list">${h.map(([sym, q]) => { const a = state.prices.find(x => x.symbol === sym); const val = a && state.fx ? inr(q * a.price * state.fx) : ''; return `<div class="asset-row" data-coin="${esc(sym)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin" aria-hidden="true">${esc(a ? a.mark : sym[0])}</span><div><strong>${esc(sym)}</strong><small>${qtyFmt(q)}</small></div></div><div class="asset-price">${val}</div></div>`; }).join('')}</div>`;
+  return `<div class="asset-list">${h.map(([sym, q]) => {
+    const a = state.prices.find(x => x.symbol === sym), fx = Number(state.fx || 0), value = a && fx ? q * a.price * fx : null;
+    const cost = Number((state.me.cost || {})[sym] || 0), pnl = value == null ? null : value - cost;
+    const pnlText = pnl == null ? 'P/L unavailable' : `${pnl >= 0 ? '+' : '−'}${inr(Math.abs(pnl))} unrealized`;
+    const pnlClass = pnl == null ? '' : pnl >= 0 ? 'positive' : 'negative';
+    return `<div class="asset-row" data-coin="${esc(sym)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin" aria-hidden="true">${esc(a ? a.mark : sym[0])}</span><div><strong>${esc(sym)}</strong><small>${qtyFmt(q)} · Cost ${inr(cost)}</small><small class="${pnlClass}">${pnlText}</small></div></div><div class="asset-price">${value == null ? '—' : inr(value)}<small style="display:block">Market value</small></div></div>`;
+  }).join('')}</div>`;
 }
 
 function bonusBody() {
@@ -303,8 +309,8 @@ function renderPage(page, quiet) {
       catch (x) { $('#depErr').textContent = x.message; btn.disabled = false; }
     };
   } else if (page === 'Withdrawal') {
-    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Withdrawal</h1><p>Minimum withdrawal ${inr(c.minWithdraw)}. Available: <b>${inr(state.me.balance)}</b>. The amount is held when you request and paid to your UPI after admin approval.</p></section>
-    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><label for="wUpi">Your UPI ID</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Withdrawal</h1><p>Minimum withdrawal ${inr(c.minWithdraw)}. Available: <b>${inr(state.me.balance)}</b>. ${state.me.mode === 'demo' ? 'Demo withdrawals are simulated and do not send real money.' : ''} ${c.withdrawalMode === 'profit' ? 'Profit-only policy is enabled: only recorded realized profits can be requested. Contact support to request principal release.' : 'Full-balance withdrawals are enabled, subject to admin review.'} The amount is held while your request is pending. ${state.withdrawals.some(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()) ? `Retry available after ${new Date(Math.max(...state.withdrawals.filter(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()).map(w => w.retryAt))).toLocaleString()}.` : ''}</p></section>
+    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><label for="wUpi">${state.me.mode === 'demo' ? 'Demo payout reference / UPI ID' : 'Your UPI ID'}</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
     $('#wdForm').onsubmit = async e => {
       e.preventDefault(); $('#wdErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
       try { await api('withdraw', { amount: Number($('#wAmt').value), upi: $('#wUpi').value }); await loadMe(); showModal('Requested', 'Your withdrawal request is pending. You can follow its status in Assets.'); renderPage('Assets'); }

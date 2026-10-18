@@ -47,7 +47,7 @@ const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward C
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -61,7 +61,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [] } };
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24 } };
     if (!Array.isArray(ss.bonusCoins) && D.settings.bonusCoin) D.settings.bonusCoins = [{ ...D.settings.bonusCoin, id: 'legacy-' + String(D.settings.bonusCoin.symbol || 'CBX'), startPrice: 1, priceHistory: [] }];
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
@@ -239,7 +239,7 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
+const PUBLIC_SETTINGS = () => ({ withdrawalMode: D.settings.withdrawalMode || 'all', withdrawalCooldownHours: D.settings.withdrawalCooldownHours ?? 24, upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
@@ -304,13 +304,23 @@ const routes = {
     D.deposits.push(d); audit(u.email, 'deposit-request', `₹${amount} ${utr}`); await save(); return { deposit: d };
   },
   'POST /api/withdraw': async (req, res, b, u) => {
-    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real withdrawals are disabled.'); limit('wd:' + u.id, 10, 3600e3);
+    needUser(u); limit('wd:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
     if (amount < LIM().minWithdraw) fail(400, `Minimum withdrawal is ₹${LIM().minWithdraw}.`);
+    const lastRejected = D.withdrawals.filter(w => w.uid === u.id && w.status === 'Rejected' && Number(w.retryAt || 0) > now()).sort((a,b) => Number(b.retryAt || 0) - Number(a.retryAt || 0))[0];
+    if (lastRejected) { const mins = Math.ceil((lastRejected.retryAt - now()) / 60000); fail(429, `Your last withdrawal was rejected. You can submit another request in about ${mins} minute(s).`); }
     if (amount > u.balance) fail(400, 'Amount is more than your available balance.');
+    const mode = D.settings.withdrawalMode || 'all';
+    if (mode === 'profit') {
+      const userTrades = u.mode === 'demo' ? (u.trades || []) : D.trades.filter(t => t.uid === u.id);
+      const earned = r2(D.positions.filter(p => p.uid === u.id && p.status === 'Settled').reduce((n,p) => n + Math.max(0, Number(p.profit || 0)), 0) + userTrades.reduce((n,t) => n + Math.max(0, Number(t.profit || 0)), 0));
+      const alreadyRequested = r2(D.withdrawals.filter(w => w.uid === u.id && ['Pending','Paid'].includes(w.status)).reduce((n,w) => n + Number(w.amount || 0), 0));
+      const availableProfit = Math.max(0, r2(earned - alreadyRequested));
+      if (amount > availableProfit) fail(400, `Profit-only withdrawals are enabled. Available profit for withdrawal: ₹${availableProfit}. To request principal release, contact support.`);
+    }
     const upi = str(b.upi, 60); if (!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(upi)) fail(400, 'Enter a valid UPI ID (name@bank).');
-    u.balance -= amount;   // held at request time; refunded once if rejected
-    const w = { id: nid(), uid: u.id, email: u.email, amount, upi, status: 'Pending', ts: now() };
+    u.balance = r2(u.balance - amount);   // held at request time; refunded once if rejected
+    const w = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), amount, upi, status: 'Pending', ts: now() };
     D.withdrawals.push(w); audit(u.email, 'withdraw-request', `₹${amount} ${upi}`); await save(); return { withdrawal: w, balance: u.balance };
   },
 
@@ -411,7 +421,7 @@ const routes = {
   },
   'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
-  'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); return { items: [...D.trades].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
+  'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); const demo = D.demoUsers.flatMap(x => (x.trades || []).map(t => ({ ...t, mode: 'demo', email: t.email || x.email }))); const real = D.trades.map(t => ({ ...t, mode: 'real' })); return { items: [...real, ...demo].sort((a, c) => c.ts - a.ts).slice(0, 1000) }; },
   'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: D.settings.bonusCoins[0] || BONUS_DEFAULT(), coins: D.settings.bonusCoins, items: [...D.positions].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
   'POST /api/admin/bonuscoin': async (req, res, b, u) => {
     needAdmin(u);
@@ -510,8 +520,8 @@ const routes = {
   'POST /api/admin/withdrawal': async (req, res, b, u) => {
     needAdmin(u); const w = D.withdrawals.find(x => x.id === b.id); if (!w) fail(404, 'Not found');
     if (w.status !== 'Pending') fail(409, 'Already ' + w.status + '.');
-    if (b.action === 'paid') { w.status = 'Paid'; w.ref = str(b.ref, 40); }
-    else if (b.action === 'reject') { const t = D.users.find(x => x.id === w.uid); if (t) t.balance += w.amount; w.status = 'Rejected'; w.note = str(b.note, 120); } // refund once
+    if (b.action === 'paid') { w.status = 'Paid'; w.ref = str(b.ref, 40); w.payoutType = w.mode === 'demo' ? 'Simulated demo withdrawal' : 'Manual payout'; }
+    else if (b.action === 'reject') { const t = D.users.find(x => x.id === w.uid) || D.demoUsers.find(x => x.id === w.uid); if (t) t.balance = r2((t.balance || 0) + w.amount); w.status = 'Rejected'; w.note = str(b.note, 120); w.rejectedAt = now(); w.cooldownHours = Number(D.settings.withdrawalCooldownHours ?? 24); w.retryAt = w.rejectedAt + w.cooldownHours * 3600e3; } // refund once
     else fail(400, 'Bad action');
     w.by = u.email; w.done = now(); audit(u.email, 'withdrawal-' + b.action, `#${w.id} ₹${w.amount}`); await save(); return { item: w };
   },
@@ -535,6 +545,8 @@ const routes = {
   },
   'POST /api/admin/settings': async (req, res, b, u) => {
     needAdmin(u); const s = D.settings;
+    if (b.withdrawalMode !== undefined) { if (!['all','profit'].includes(b.withdrawalMode)) fail(400, 'Invalid withdrawal policy.'); s.withdrawalMode = b.withdrawalMode; }
+    if (b.withdrawalCooldownHours !== undefined) { const h = Number(b.withdrawalCooldownHours); if (!Number.isInteger(h) || h < 0 || h > 720) fail(400, 'Withdrawal retry delay must be 0–720 hours.'); s.withdrawalCooldownHours = h; }
     s.upi = str(b.upi, 60); s.payee = str(b.payee, 60); s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
     if (b.minDeposit !== undefined) {

@@ -58,6 +58,8 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/deposit', { id: d.j.deposit.id, action: 'approve' })).s, 409); ok('approve credits exactly once');
   assert.equal((await u('GET', '/api/me')).j.user.balance, 1000);
 
+  // Set zero retry delay for this legacy withdrawal flow; cooldown enforcement is tested separately in production checks.
+  assert.equal((await a('POST', '/api/admin/settings', { withdrawalCooldownHours: 0, upi: '', payee: '', support: '', notice: '', bonus: '' })).s, 200);
   // withdrawal rules
   assert.equal((await u('POST', '/api/withdraw', { amount: 299, upi: 'ravi@bank' })).s, 400); ok('withdraw < 300 rejected');
   assert.equal((await u('POST', '/api/withdraw', { amount: 1001, upi: 'ravi@bank' })).s, 400);
