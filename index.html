@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crypto Bridge — Demo</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar"><div class="brand"><span class="brandmark">B</span><div><b>Crypto Bridge</b><small>Market demo</small></div></div><button class="language" id="language">EN ▾</button></header>
+<main>
+<section class="welcome"><div><span class="eyebrow">WELCOME</span><h1>Explore digital markets</h1><p>A clean crypto dashboard prototype for testing and design.</p></div><div class="coin-art">₿</div></section>
+<section class="actions" aria-label="Quick actions">
+<button data-page="Recharge">↗<span>Recharge</span></button><button data-page="Withdrawal">↙<span>Withdrawal</span></button><button data-page="Signal">⌁<span>Signal</span></button><button data-page="Service">☏<span>Service</span></button><button data-page="Invite">♧<span>Invite</span></button>
+</section>
+<section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>BNV Guide</h2><p>Learn how this demo dashboard is organized.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">REWARDS</span><h2>Red envelope</h2><p>Preview the rewards area.</p><button class="light-btn" data-page="Bonus">Explore ↗</button></div><div class="promo-icon">🎁</div></article></section>
+<section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
+<section class="market-cards" id="marketCards"></section>
+<section class="section-head list-head"><div><span class="eyebrow">LIVE-STYLE SAMPLE DATA</span><h2>Trending assets</h2></div><span class="demo-pill">DEMO</span></section>
+<section class="asset-list" id="assetList"></section>
+</main>
+<nav class="bottom-nav"><button class="active" data-page="Home"><span>⌂</span>Home</button><button data-page="Quotes"><span>⌁</span>Quotes</button><button data-page="Team"><span>♙</span>Team</button><button data-page="Bonus"><span>✦</span>Bonus</button><button data-page="Assets"><span>▣</span>Assets</button></nav>
+<div class="modal-backdrop" id="modal" hidden><div class="modal"><button class="close" id="closeModal" aria-label="Close">×</button><div class="modal-symbol">i</div><h2 id="modalTitle">Demo notice</h2><p id="modalText">This is a front-end demo. No real funds, wallets, deposits, or withdrawals are connected.</p><button class="primary-btn" id="okModal">Got it</button></div></div>
+<footer>Prototype only · Sample market values · No real trading or financial transactions</footer>
+<script src="app.js"></script>
+</body></html>
