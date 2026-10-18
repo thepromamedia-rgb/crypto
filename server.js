@@ -205,10 +205,10 @@ async function getKlines(sym, iv) {
 // Settlement is idempotent: only an 'Active' position can be settled, so principal+return are paid exactly once.
 function settlePosition(p) {
   if (p.status !== 'Active') return false;
-  const u = D.users.find(x => x.id === p.uid), profit = r2(p.amount * p.returnPct / 100);
+  const u = p.mode === 'demo' ? D.demoUsers.find(x => x.id === p.uid) : D.users.find(x => x.id === p.uid), profit = r2(p.amount * p.returnPct / 100);
   p.status = 'Settled'; p.profit = profit; p.done = now();
   if (u) u.balance = r2(u.balance + p.amount + profit);
-  const ref = u && u.refBy && D.users.find(x => x.id === u.refBy);
+  const ref = p.mode !== 'demo' && u && u.refBy && D.users.find(x => x.id === u.refBy);
   if (ref && !ref.blocked && p.refPct > 0) {
     const c = r2((p.refBase === 'amount' ? p.amount : profit) * p.refPct / 100);
     if (c > 0) { ref.balance = r2(ref.balance + c); ref.refEarned = r2((ref.refEarned || 0) + c); p.refUid = ref.id; p.refPaid = c; }
@@ -361,14 +361,14 @@ const routes = {
   },
 
   'POST /api/bonus/trade': async (req, res, b, u) => {
-    needUser(u); if (u.mode === 'demo') fail(403, 'Bonus Coin positions are not available in demo mode yet. Use simulated spot buy/sell.'); limit('bonus:' + u.id, 30, 600e3);
+    needUser(u); limit('bonus:' + u.id, 30, 600e3);
     const sym = str(b.symbol || (D.settings.bonusCoins[0] || D.settings.bonusCoin).symbol, 8).toUpperCase(); const c = D.settings.bonusCoins.find(x => x.symbol === sym); if (!c || !c.enabled) fail(403, sym + ' is not open right now.');
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid whole-rupee amount.');
     if (amount < c.minAmount) fail(400, `Minimum is ₹${c.minAmount}.`); if (amount > c.maxAmount) fail(400, `Maximum per trade is ₹${c.maxAmount}.`);
     if (amount > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
     u.balance = r2(u.balance - amount);
     // rates are snapshotted on the position, so later admin changes never alter an open trade
-    const p = { id: nid(), uid: u.id, email: u.email, symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockSeconds: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600), lockHours: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) / 3600, status: 'Active', ts: now(), matureAt: now() + Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) * 1000 };
+    const p = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockSeconds: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600), lockHours: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) / 3600, status: 'Active', ts: now(), matureAt: now() + Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) * 1000 };
     D.positions.push(p); audit(u.email, 'bonus-trade', `#${p.id} ₹${amount} @${c.returnPct}%`);
     settleDue(); await save(); return { position: p, balance: u.balance };
   },

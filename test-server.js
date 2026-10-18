@@ -89,7 +89,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('GET', '/api/admin/demo-users')).j.users.length, 1);
   assert.equal((await a('POST', '/api/admin/demo-user', { action: 'adjust', id: demoId, amount: 999999 })).s, 200);
   assert.equal((await a('GET', '/api/admin/overview')).j.wallets, 600); ok('demo accounts isolated from real overview/wallets');
-  assert.equal((await mk()('POST', '/api/login', { email: 'demo1@x.io', password: 'DemoPass123' })).s, 401); ok('demo account cannot log into real-user auth');
+  assert.equal((await mk()('POST', '/api/login', { email: 'demo1@x.io', password: 'DemoPass123' })).s, 200); ok('demo account login uses shared login page');
 
   // block + persistence across restart (data preserved)
   const bk = await a('GET', '/api/admin/backup'); assert.ok(!JSON.stringify(bk.j).includes('"pass"')); ok('backup has no password hashes');
@@ -113,6 +113,9 @@ const stub = http.createServer((q, r) => {
   assert.equal((await kid('POST', '/api/admin/bonuscoin', cfg)).s, 403);
   assert.equal((await a('POST', '/api/admin/bonuscoin', { ...cfg, returnPct: 500 })).s, 400); assert.equal((await a('POST', '/api/admin/bonuscoin', { ...cfg, symbol: 'BTC' })).s, 400);
   assert.equal((await a('POST', '/api/admin/bonuscoin', cfg)).s, 200); assert.equal((await anon('GET', '/api/config')).j.bonusCoin.returnPct, 5);
+  const demoLogin = mk(); assert.equal((await demoLogin('POST', '/api/login', { email: 'demo1@x.io', password: 'DemoPass123' })).s, 200);
+  await a('POST', '/api/admin/demo-user', { id: demoId, action: 'adjust', amount: 5000, reason: 'demo bonus test' });
+  const demoTrade = await demoLogin('POST', '/api/bonus/trade', { symbol: 'CBX', amount: 1000 }); assert.equal(demoTrade.s, 200); assert.equal(demoTrade.j.balance, 1003999); assert.equal(demoTrade.j.position.mode, 'demo'); ok('demo Bonus Coin position opens with isolated demo balance');
   assert.equal((await kid('POST', '/api/bonus/trade', { amount: 50 })).s, 400); assert.equal((await kid('POST', '/api/bonus/trade', { amount: 4000 })).s, 400); assert.equal((await kid('POST', '/api/bonus/trade', { amount: 99999 })).s, 400);
   const bt = await kid('POST', '/api/bonus/trade', { amount: 1000 }); assert.equal(bt.s, 200); assert.equal(bt.j.balance, 4000); assert.equal(bt.j.position.status, 'Active'); ok('bonus trade holds amount');
   await a('POST', '/api/admin/bonuscoin', { ...cfg, returnPct: 50 });                       // later admin change must not affect open trade
@@ -125,7 +128,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await boss('GET', '/api/me')).j.user.balance, 105); ok('instant mode + referral on trade amount');
   await a('POST', '/api/admin/bonuscoin', { ...cfg, lockHours: 24 });
   const bc = await kid('POST', '/api/bonus/trade', { amount: 500 }); assert.equal((await a('POST', '/api/admin/position', { id: bc.j.position.id, action: 'cancel' })).s, 200);
-  assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await a('GET', '/api/admin/bonus')).j.items.length, 3); ok('admin cancel refunds principal');
+  assert.equal((await kid('GET', '/api/me')).j.user.balance, 5100); assert.equal((await a('GET', '/api/admin/bonus')).j.items.length, 4); ok('admin cancel refunds principal');
   const rp = await a('GET', '/api/admin/report'); assert.equal(rp.s, 200); assert.equal(rp.j.rows.length, 14); assert.ok(rp.j.rows[0].depositAmt >= 1000); assert.equal((await u('GET', '/api/admin/report')).s, 403); ok('admin report');
   assert.equal((await anon('GET', '/api/klines?symbol=BTC&interval=1m')).s, 200); ok('1m interval');
   // admin coin list: removal rules (add needs live Binance/CoinGecko, so only validation paths are tested offline)
