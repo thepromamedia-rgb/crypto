@@ -47,7 +47,7 @@ const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward C
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0 }, bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -61,7 +61,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}) }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
     for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
@@ -218,7 +218,26 @@ function settleDue() { let n = 0; for (const p of D.positions) if (p.status === 
 async function settleAndSave() { if (settleDue()) await save(); }
 
 // ---------- API ----------
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoin, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct }, coins: COINS });
+function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
+  const payments = []; let parentId = user && user.refBy;
+  for (let level = 0; level < 3 && parentId; level++) {
+    const ref = D.users.find(x => x.id === parentId);
+    if (!ref) break;
+    const pct = Number(rates[level] || 0);
+    if (!ref.blocked && pct > 0 && baseAmount > 0) {
+      let amount = r2(baseAmount * pct / 100);
+      if (kind === 'trade' && maxPerTrade > 0) amount = Math.min(amount, maxPerTrade);
+      if (amount > 0) {
+        ref.balance = r2((ref.balance || 0) + amount);
+        ref.refEarned = r2((ref.refEarned || 0) + amount);
+        payments.push({ level: level + 1, uid: ref.id, email: ref.email, pct, amount });
+      }
+    }
+    parentId = ref.refBy;
+  }
+  return payments;
+}
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoin, depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
@@ -302,7 +321,7 @@ const routes = {
     const p = pc.data.find(x => x.symbol === sym); if (!p) fail(503, 'Price unavailable for ' + sym);
     const unit = p.price * fx;                       // ₹ per coin, decided on the server only
     if (!u.holdings) u.holdings = {};
-    let qty, inrAmt, profit = null, refPaid = 0, refUid = null;
+    let qty, inrAmt, profit = null, refPaid = 0, refUid = null, tRefPayments = [];
     if (b.side === 'buy') {
       inrAmt = r2(Number(b.amount));
       if (!Number.isFinite(inrAmt) || inrAmt < LIM().minTrade) fail(400, `Minimum buy is ₹${LIM().minTrade}.`);
@@ -324,14 +343,16 @@ const routes = {
       profit = r2(inrAmt - costPart); u.cost[sym] = r2(Math.max(0, (u.cost[sym] == null ? 0 : u.cost[sym]) - costPart));
       u.balance = r2(u.balance + inrAmt); u.holdings[sym] = r8(have - qty); if (u.holdings[sym] <= 1e-9) { delete u.holdings[sym]; delete u.cost[sym]; }
       // referral commission: only on REAL realised profit, paid from platform funds (the user's own proceeds are not reduced)
-      const tr = D.settings.tradeRef, ref = u.refBy && D.users.find(x => x.id === u.refBy);
-      if (tr.enabled && tr.pct > 0 && profit > 0 && ref && !ref.blocked) {
-        let c = r2(profit * tr.pct / 100); if (tr.maxPerTrade > 0) c = Math.min(c, tr.maxPerTrade);
-        if (c > 0) { ref.balance = r2(ref.balance + c); ref.refEarned = r2((ref.refEarned || 0) + c); refPaid = c; refUid = ref.id; }
+      const tr = D.settings.tradeRef;
+      if (tr.enabled && profit > 0 && u.refBy) {
+        const rates = Array.isArray(tr.levels) ? tr.levels : [Number(tr.pct || 0), 0, 0];
+        const payments = payReferralLevels(u, profit, rates, 'trade', Number(tr.maxPerTrade || 0));
+        refPaid = r2(payments.reduce((sum, x) => sum + x.amount, 0));
+        if (payments.length) { tRefPayments = payments; refUid = payments[0].uid; }
       }
     }
     const t = { id: nid(), uid: u.id, email: u.email, side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
-    if (profit !== null) t.profit = profit; if (refPaid) { t.refPaid = refPaid; t.refUid = refUid; audit('system', 'trade-referral', `#${t.id} ${u.email} profit ₹${profit} -> ₹${refPaid} to user #${refUid}`); }
+    if (profit !== null) t.profit = profit; if (refPaid) { t.refPaid = refPaid; t.refUid = refUid; t.refPayments = tRefPayments; audit('system', 'trade-referral', `#${t.id} ${u.email} profit ₹${profit} -> ₹${refPaid} across ${tRefPayments.length} level(s)`); }
     D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000);
     await save(); return { trade: t, balance: u.balance, holdings: u.holdings };
   },
@@ -398,10 +419,21 @@ const routes = {
     return { rows: Object.values(rows).sort((a, c) => c.date.localeCompare(a.date)) };
   },
   'POST /api/admin/referral': async (req, res, b, u) => {
-    needAdmin(u); const pct = Number(b.pct), mx = Number(b.maxPerTrade || 0);
-    if (!(pct >= 0 && pct <= 100)) fail(400, 'Percent must be 0–100.'); if (!(mx >= 0 && mx <= MAX_AMOUNT)) fail(400, 'Max per trade must be 0 or more.');
-    D.settings.tradeRef = { enabled: !!b.enabled, pct: r2(pct), maxPerTrade: r2(mx) };
+    needAdmin(u); const mx = Number(b.maxPerTrade || 0);
+    const levels = Array.isArray(b.levels) ? b.levels.slice(0, 3).map(Number) : [Number(b.pct || 0), 0, 0];
+    while (levels.length < 3) levels.push(0);
+    if (levels.some(x => !Number.isFinite(x) || x < 0 || x > 100)) fail(400, 'Each level percent must be 0–100.');
+    if (!(mx >= 0 && mx <= MAX_AMOUNT)) fail(400, 'Max per trade must be 0 or more.');
+    D.settings.tradeRef = { enabled: !!b.enabled, pct: r2(levels[0]), levels: levels.map(r2), maxPerTrade: r2(mx) };
     audit(u.email, 'trade-referral-settings', JSON.stringify(D.settings.tradeRef)); await save(); return { ok: true };
+  },
+  'POST /api/admin/depositreferral': async (req, res, b, u) => {
+    needAdmin(u);
+    const levels = Array.isArray(b.levels) ? b.levels.slice(0, 3).map(Number) : [];
+    while (levels.length < 3) levels.push(0);
+    if (levels.some(x => !Number.isFinite(x) || x < 0 || x > 100)) fail(400, 'Each level percent must be 0–100.');
+    D.settings.depositRef = { enabled: !!b.enabled, levels: levels.map(r2) };
+    audit(u.email, 'deposit-referral-settings', JSON.stringify(D.settings.depositRef)); await save(); return { ok: true };
   },
   'POST /api/admin/coin': async (req, res, b, u) => {
     needAdmin(u);
@@ -410,7 +442,7 @@ const routes = {
       const name = str(b.name, 40), id = str(b.id, 60).toLowerCase(), mark = str(b.mark, 2) || sym[0];
       if (!/^[A-Z0-9]{2,10}$/.test(sym)) fail(400, 'Symbol must be 2–10 letters/digits (e.g. MATIC).'); if (name.length < 2) fail(400, 'Enter the coin name.');
       if (!/^[a-z0-9-]{2,60}$/.test(id)) fail(400, 'Enter the CoinGecko id (e.g. polygon-ecosystem-token) — see coingecko.com coin page "API id".');
-      if (COINS.length >= 60) fail(400, 'Maximum 60 coins.'); if (COINS.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
+      if (COINS.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
       if (D.settings.bonusCoin.symbol === sym) fail(409, 'Symbol clashes with the bonus coin.');
       try {   // verify the coin really exists on both price sources before listing it
         const r1 = await fetch(`${BINANCE_API}?symbols=${encodeURIComponent(JSON.stringify([sym + 'USDT']))}`, { signal: AbortSignal.timeout(8000) }); if (!r1.ok) throw new Error('not on Binance');
@@ -431,7 +463,7 @@ const routes = {
   'POST /api/admin/deposit': async (req, res, b, u) => {
     needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found');
     if (d.status !== 'Pending') fail(409, 'Already ' + d.status + '.');     // credit exactly once
-    if (b.action === 'approve') { const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing'); t.balance += d.amount; d.status = 'Approved'; }
+    if (b.action === 'approve') { const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing'); t.balance = r2((t.balance || 0) + d.amount); d.status = 'Approved'; const cfg = D.settings.depositRef || { enabled: false, levels: [0,0,0] }; if (cfg.enabled && t.refBy) { d.refPayments = payReferralLevels(t, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); if (d.refPaid) audit('system', 'deposit-referral', `Deposit #${d.id}: ₹${d.refPaid} referral commission across ${d.refPayments.length} level(s)`); } }
     else if (b.action === 'reject') d.status = 'Rejected'; else fail(400, 'Bad action');
     d.by = u.email; d.done = now(); audit(u.email, 'deposit-' + b.action, `#${d.id} ₹${d.amount}`); await save(); return { item: d };
   },

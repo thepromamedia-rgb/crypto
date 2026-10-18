@@ -78,3 +78,10 @@ v2.6 ADDITIONS
   platform; the user's own proceeds are not reduced. Nothing on deposits, losses or zero-profit trades.
   Sell confirmation now shows the user's profit/loss. Same-phone self-referral is ignored.
   Admin Overview shows total trade-referral commission paid.
+
+
+v2.7 ADDITIONS
+  Admin > Referral now has separate settings for: (1) commissions on approved deposits and (2) commissions on REAL realised market-trading profit.
+  Each has independent Level 1 / Level 2 / Level 3 percentages (0–100%). Deposit commissions trigger only once when an admin approves the deposit. Trading-profit commissions trigger only when a sell realises positive profit; no payout on buys, losses or unrealised price changes. Optional per-level cap applies to trading-profit commissions.
+  Admin > Coins no longer has a hard-coded 60-coin limit. Coins still must be supported by both Binance (SYMBOLUSDT) and CoinGecko to provide live market prices. Deletion is blocked while users hold that coin, to avoid trapping their holdings.
+  Existing user, wallet, deposit, withdrawal, trade, coin and settings data is loaded and merged as before; new settings migrate with safe defaults.
