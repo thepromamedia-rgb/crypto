@@ -29,3 +29,9 @@
 .stale{font-size:11px;color:var(--muted);margin:6px 0 10px}
 .link-btn{background:none;border:0;color:var(--blue);font-weight:800;cursor:pointer;padding:6px 0}
 .notice-banner.admin-note{margin-bottom:14px}
+.pw-wrap{position:relative;margin-bottom:12px}.pw-wrap input{margin-bottom:0!important;padding-right:48px}
+.eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;background:none;color:#77819a;cursor:pointer;display:grid;place-items:center;border-radius:10px}.eye:hover{color:var(--blue)}
+.tabs2{display:flex;gap:8px;margin:14px 0 0}.tabs2 button{flex:1;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px;font-weight:800;cursor:pointer;color:var(--navy)}.tabs2 button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.quick{display:flex;gap:8px;margin:-4px 0 8px}.quick button{flex:1;border:1px solid var(--line);background:#f6f8fd;border-radius:9px;padding:8px;font-weight:700;cursor:pointer;color:var(--navy)}
+.asset-row[data-coin]:hover,.market-card[data-coin]:hover{background:#f6f8fd}
+.balance-actions+.balance-actions{margin-top:10px}

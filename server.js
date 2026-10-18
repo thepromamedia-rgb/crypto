@@ -15,6 +15,9 @@ const PROD = E.NODE_ENV === 'production' || !!E.RENDER;
 const MIN_DEPOSIT = 1000;   // ₹
 const MIN_WITHDRAW = 300;   // ₹
 const MAX_AMOUNT = 10000000;
+const MIN_TRADE = 100;     // ₹ per buy order
+const r2 = x => Math.round(x * 100) / 100;
+const r8 = x => Math.round(x * 1e8) / 1e8;
 
 // ---------- storage (Upstash Redis if configured, else JSON file) ----------
 const clean = v => (v || '').trim().replace(/^["']|["']$/g, '');
@@ -34,7 +37,7 @@ async function up(cmd) {
 
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], deposits: [], withdrawals: [], audit: [],
+  users: [], deposits: [], withdrawals: [], trades: [], audit: [],
   settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '' }
 });
 let D = defaults();
@@ -49,7 +52,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...(saved.settings || {}) } };
-    for (const k of ['users', 'deposits', 'withdrawals', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
+    for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
   }
 }
 let saveChain = Promise.resolve();
@@ -104,7 +107,7 @@ function limit(key, max, windowMs) {
 }
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
-const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, balance: u.balance, refCode: u.refCode, created: u.created });
+const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, balance: u.balance, refCode: u.refCode, created: u.created, holdings: u.holdings || {} });
 const normEmail = v => str(v, 120).toLowerCase();
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
@@ -152,17 +155,34 @@ async function getPrices() {
     catch (e) { errs.push(e.message); }
   }
   priceCache = { ...priceCache, error: errs.join(' | ') };
-  if (!priceCache.data) fail(503, 'Live prices are temporarily unavailable.');
+  if (!priceCache.data) fail(503, 'Price sources failed: ' + errs.join(' | '));
   return priceCache;
 }
 
+
+// USD->INR rate for trades (cached). Trades are refused if no trustworthy rate is available.
+const FX_URL = E.FX_URL || 'https://open.er-api.com/v6/latest/USD';
+let fxCache = { ts: 0, v: Number(E.USD_INR) || 0 };
+async function getFx() {
+  if (fxCache.v && now() - fxCache.ts < 600e3) return fxCache.v;
+  let v = 0;
+  try { const r = await fetch(FX_URL, { signal: AbortSignal.timeout(6000) }); const j = await r.json(); v = Number(j.rates && j.rates.INR); } catch {}
+  if (!(v > 50 && v < 200)) {
+    try { const r = await fetch((E.BINANCE_FX_URL || 'https://data-api.binance.vision/api/v3/ticker/price') + '?symbol=USDTINR', { signal: AbortSignal.timeout(6000) }); v = Number((await r.json()).price); } catch {}
+  }
+  if (v > 50 && v < 200) fxCache = { ts: now(), v };
+  else if (fxCache.v) fxCache.ts = now() - 540e3;       // keep last good rate, retry in ~1 min
+  if (!fxCache.v) fail(503, 'INR rate unavailable right now. Try again shortly.');
+  return fxCache.v;
+}
+
 // ---------- API ----------
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW });
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
 const routes = {
-  'GET /api/prices': async () => { const c = await getPrices(); return { prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
+  'GET /api/prices': async () => { const c = await getPrices(); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async () => PUBLIC_SETTINGS(),
 
   'POST /api/register': async (req, res, b) => {
@@ -193,7 +213,8 @@ const routes = {
       user: pubUser(u), config: PUBLIC_SETTINGS(),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
-      referrals: D.users.filter(x => x.refBy === u.id).length
+      referrals: D.users.filter(x => x.refBy === u.id).length,
+      trades: D.trades.filter(t => t.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50)
     };
   },
   'POST /api/password': async (req, res, b, u) => {
@@ -223,13 +244,43 @@ const routes = {
     D.withdrawals.push(w); audit(u.email, 'withdraw-request', `₹${amount} ${upi}`); await save(); return { withdrawal: w, balance: u.balance };
   },
 
+  'POST /api/trade': async (req, res, b, u) => {
+    needUser(u); limit('trade:' + u.id, 40, 600e3);
+    const sym = str(b.symbol, 10).toUpperCase(), coin = COINS.find(c => c[0] === sym); if (!coin) fail(400, 'Unknown coin.');
+    if (b.side !== 'buy' && b.side !== 'sell') fail(400, 'Bad order.');
+    const pc = await getPrices(), fx = await getFx();
+    if (pc.error || now() - pc.ts > 60e3) fail(503, 'Live price is not fresh right now. Please try again in a moment.');
+    const p = pc.data.find(x => x.symbol === sym); if (!p) fail(503, 'Price unavailable for ' + sym);
+    const unit = p.price * fx;                       // ₹ per coin, decided on the server only
+    if (!u.holdings) u.holdings = {};
+    let qty, inrAmt;
+    if (b.side === 'buy') {
+      inrAmt = r2(Number(b.amount));
+      if (!Number.isFinite(inrAmt) || inrAmt < MIN_TRADE) fail(400, `Minimum buy is ₹${MIN_TRADE}.`);
+      if (inrAmt > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
+      qty = Math.floor(inrAmt / unit * 1e8) / 1e8; if (qty <= 0) fail(400, 'Amount too small.');
+      u.balance = r2(u.balance - inrAmt); u.holdings[sym] = r8((u.holdings[sym] || 0) + qty);
+    } else {
+      const have = u.holdings[sym] || 0;
+      qty = b.all ? have : r8(Number(b.qty));
+      if (!Number.isFinite(qty) || qty <= 0) fail(400, 'Enter a quantity to sell.');
+      if (qty > have + 1e-9) fail(400, 'You do not hold that much ' + sym + '.');
+      qty = Math.min(qty, have); inrAmt = r2(qty * unit);
+      if (inrAmt <= 0) fail(400, 'Amount too small.');
+      u.balance = r2(u.balance + inrAmt); u.holdings[sym] = r8(have - qty); if (u.holdings[sym] <= 1e-9) delete u.holdings[sym];
+    }
+    const t = { id: nid(), uid: u.id, email: u.email, side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
+    D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000);
+    await save(); return { trade: t, balance: u.balance, holdings: u.holdings };
+  },
+
   // ----- admin -----
   'GET /api/admin/overview': async (req, res, b, u) => {
     needAdmin(u);
     const users = D.users.filter(x => x.role !== 'admin'), ok = D.deposits.filter(d => d.status === 'Approved'), paid = D.withdrawals.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     return {
-      users: users.length, wallets: users.reduce((s, x) => s + x.balance, 0),
+      users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length,
       depositsApproved: sum(ok), withdrawalsPaid: sum(paid),
       pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
       storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: MIN_DEPOSIT, withdraw: MIN_WITHDRAW }
@@ -238,6 +289,7 @@ const routes = {
   'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: D.users.map(x => ({ ...pubUser(x), blocked: x.blocked, refBy: x.refBy })) }; },
   'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
+  'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); return { items: [...D.trades].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
   'GET /api/admin/audit': async (req, res, b, u) => { needAdmin(u); return { items: [...D.audit].reverse().slice(0, 300) }; },
   'POST /api/admin/deposit': async (req, res, b, u) => {
     needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found');

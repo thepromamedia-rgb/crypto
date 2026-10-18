@@ -1,7 +1,7 @@
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN');
+const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 const dt = ts => ts ? new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
 let tab = 'over', ov = null, q = '';
 function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
@@ -10,7 +10,8 @@ async function api(path, body) {
   const j = await r.json().catch(() => ({})); if (!r.ok) { const e = new Error(j.error || 'Failed'); e.status = r.status; throw e; } return j;
 }
 function loginView(msg) {
-  $('#root').innerHTML = `<form class="box login" id="lf"><h1 style="margin-top:0">Admin login</h1><label>Email</label><input id="e" type="email" autocomplete="username" required><label>Password</label><input id="p" type="password" autocomplete="current-password" required><p class="msg-err" id="err">${esc(msg || '')}</p><button class="primary-btn" type="submit">Login</button></form>`;
+  $('#root').innerHTML = `<form class="box login" id="lf"><h1 style="margin-top:0">Admin login</h1><label>Email</label><input id="e" type="email" autocomplete="username" required><label>Password</label><div class="pw-wrap"><input id="p" type="password" autocomplete="current-password" required><button type="button" class="eye" id="eye" aria-label="Show password">👁</button></div><p class="msg-err" id="err">${esc(msg || '')}</p><button class="primary-btn" type="submit">Login</button></form>`;
+  $('#eye').onclick = () => { const i = $('#p'); i.type = i.type === 'password' ? 'text' : 'password'; };
   $('#lf').onsubmit = async ev => { ev.preventDefault(); try { const j = await api('login', { email: $('#e').value, password: $('#p').value }); if (j.user.role !== 'admin') { await api('logout', {}); return loginView('Not an admin account.'); } start(); } catch (x) { $('#err').textContent = x.message; } };
 }
 async function start() {
@@ -19,7 +20,7 @@ async function start() {
 }
 async function draw() {
   ov = await api('admin/overview').catch(() => ov);
-  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['users', 'Users'], ['set', 'Settings'], ['log', 'Audit log']];
+  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['trd', 'Trades'], ['users', 'Users'], ['set', 'Settings'], ['log', 'Audit log']];
   $('#root').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0">Crypto Bridge Admin</h1><div><a class="sm" href="/" style="text-decoration:none">Site</a><button class="sm" id="out">Logout</button></div></div>
   <div class="tabs">${tabs.map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}${t[2] ? `<span class="dot">${t[2]}</span>` : ''}</button>`).join('')}</div><div id="body"></div>`;
   document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tab = b.dataset.t; q = ''; draw(); });
@@ -27,7 +28,7 @@ async function draw() {
   const body = $('#body');
   if (tab === 'over') {
     body.innerHTML = `${ov.storage === 'file' ? '<div class="notice-banner"><span>⚠</span><p><b>Database is a local file.</b> On Render this is wiped at every deploy/restart. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN so data is preserved.</p></div>' : ''}
-    <div class="stats">${[['Users', ov.users], ['Wallet liabilities', inr(ov.wallets)], ['Deposits approved', inr(ov.depositsApproved)], ['Withdrawals paid', inr(ov.withdrawalsPaid)], ['Pending deposits', ov.pendingDeposits], ['Pending withdrawals', ov.pendingWithdrawals]].map(s => `<div class="stat"><small>${s[0]}</small><b>${s[1]}</b></div>`).join('')}</div>
+    <div class="stats">${[['Users', ov.users], ['Wallet liabilities', inr(ov.wallets)], ['Deposits approved', inr(ov.depositsApproved)], ['Withdrawals paid', inr(ov.withdrawalsPaid)], ['Pending deposits', ov.pendingDeposits], ['Pending withdrawals', ov.pendingWithdrawals], ['Trades', ov.trades]].map(s => `<div class="stat"><small>${s[0]}</small><b>${s[1]}</b></div>`).join('')}</div>
     <div class="box"><b>Rules</b><p class="fine-print">Minimum deposit ${inr(ov.min.deposit)} · Minimum withdrawal ${inr(ov.min.withdraw)} · Storage: ${ov.storage}</p><button class="sm" id="bk">Download backup (JSON)</button></div>`;
     $('#bk').onclick = async () => { const d = await api('admin/backup'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); a.download = 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); };
   } else if (tab === 'dep' || tab === 'wd') {
@@ -40,6 +41,9 @@ async function draw() {
       else if (!confirm(`${a === 'approve' ? 'Approve and credit' : 'Reject'} #${id}?`)) return;
       try { await api(dep ? 'admin/deposit' : 'admin/withdrawal', { id, action: a, ...extra }); toast('Done'); } catch (x) { toast(x.message); } draw();
     });
+  } else if (tab === 'trd') {
+    const { items } = await api('admin/trades');
+    body.innerHTML = `<div class="tbl"><table><tr><th>#</th><th>Time</th><th>User</th><th>Side</th><th>Coin</th><th>Qty</th><th>Price ₹</th><th>Amount</th></tr>${items.map(t => `<tr><td>${t.id}</td><td>${dt(t.ts)}</td><td>${esc(t.email)}</td><td>${esc(t.side)}</td><td>${esc(t.symbol)}</td><td>${t.qty}</td><td>${inr(t.price)}</td><td><b>${inr(t.amount)}</b></td></tr>`).join('') || '<tr><td colspan="8">No trades yet.</td></tr>'}</table></div>`;
   } else if (tab === 'users') {
     const { users } = await api('admin/users');
     body.innerHTML = `<div class="tbl"><table><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Joined</th><th>Actions</th></tr>${users.filter(u => u.role !== 'admin').map(u => `<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td><b>${inr(u.balance)}</b></td><td>${dt(u.created)}</td><td><button class="sm ${u.blocked ? 'ok' : 'no'}" data-u="${u.blocked ? 'unblock' : 'block'}" data-id="${u.id}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-u="password" data-id="${u.id}">Set password</button><button class="sm" data-u="adjust" data-id="${u.id}">Adjust</button></td></tr>`).join('')}</table></div>`;

@@ -10,13 +10,14 @@ process.env.DATA_DIR = tmp; process.env.ADMIN_EMAIL = 'admin@test.io'; process.e
 delete process.env.UPSTASH_REDIS_REST_URL;
 
 const stub = http.createServer((q, r) => {
+  if (q.url.startsWith('/fx')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify({ rates: { INR: 80 } })); }
   const ids = new URL(q.url, 'http://x').searchParams.get('ids').split(',');
   r.setHeader('Content-Type', 'application/json');
   r.end(JSON.stringify(ids.map((id, i) => ({ id, current_price: 100 + i, price_change_percentage_24h: i - 3, sparkline_in_7d: { price: Array.from({ length: 168 }, (_, k) => 90 + (k % 17)) } }))));
 });
 (async () => {
   await new Promise(r => stub.listen(0, r));
-  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`;
+  process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`;
   const { server, loadDB, seedAdmin } = require('./server.js');
   await loadDB(); await seedAdmin();
   await new Promise(r => server.listen(0, r));
@@ -67,6 +68,18 @@ const stub = http.createServer((q, r) => {
   assert.equal((await u('GET', '/api/me')).j.user.balance, 600); ok('paid withdrawal keeps deduction');
   assert.equal((await a('GET', '/api/admin/overview')).j.withdrawalsPaid, 400);
   assert.equal((await a('POST', '/api/admin/user', { id: (await u('GET', '/api/me')).j.user.id, action: 'adjust', amount: -5000, reason: 'x' })).s, 400); ok('adjust cannot go negative');
+
+  // trading: BTC stub price = $100 -> ₹8000 at fx 80
+  assert.equal((await u('POST', '/api/trade', { symbol: 'BTC', side: 'buy', amount: 99 })).s, 400); ok('buy < ₹100 rejected');
+  assert.equal((await u('POST', '/api/trade', { symbol: 'BTC', side: 'buy', amount: 99999 })).s, 400); ok('buy > balance rejected');
+  assert.equal((await u('POST', '/api/trade', { symbol: 'NOPE', side: 'buy', amount: 200 })).s, 400);
+  assert.equal((await anon('POST', '/api/trade', { symbol: 'BTC', side: 'buy', amount: 200 })).s, 401);
+  const by = await u('POST', '/api/trade', { symbol: 'BTC', side: 'buy', amount: 400 });
+  assert.equal(by.s, 200); assert.equal(by.j.balance, 200); assert.equal(by.j.holdings.BTC, 0.05); assert.equal(by.j.trade.price, 8000); ok('buy at server price');
+  assert.equal((await u('POST', '/api/trade', { symbol: 'BTC', side: 'sell', qty: 0.06 })).s, 400); ok('cannot oversell');
+  const sl = await u('POST', '/api/trade', { symbol: 'BTC', side: 'sell', qty: 0.02 }); assert.equal(sl.j.balance, 360); assert.equal(sl.j.holdings.BTC, 0.03);
+  const sa = await u('POST', '/api/trade', { symbol: 'BTC', side: 'sell', all: true }); assert.equal(sa.j.balance, 600); assert.ok(!sa.j.holdings.BTC); ok('sell + sell all');
+  assert.equal((await a('GET', '/api/admin/trades')).j.items.length, 3);
 
   // block + persistence across restart (data preserved)
   const bk = await a('GET', '/api/admin/backup'); assert.ok(!JSON.stringify(bk.j).includes('"pass"')); ok('backup has no password hashes');

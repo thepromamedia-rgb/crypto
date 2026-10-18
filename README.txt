@@ -34,3 +34,12 @@ server refuses to start if Upstash is configured but unreachable (so it can't ov
 Backups exclude password hashes.
 
 TESTS: npm test  (19 checks: rules, one-time credit/refund, auth, file exposure, persistence)
+
+v2.1 ADDITIONS
+  Buy/Sell: tap any coin in Quotes/Home -> coin page -> Buy (min Rs 100, from wallet) / Sell. Price is
+  decided on the server (live USD price x USD/INR rate, no fee). Orders are refused if the live price
+  is stale. Holdings are shown in Assets; Admin > Trades lists all orders.
+  NOTE: the platform itself is the counterparty — user profits/losses move the wallet liabilities
+  you owe, so keep enough real funds to honour withdrawals.
+  Assets page: Recharge / Withdrawal / Buy-Sell / Change password / Logout buttons.
+  Password fields have a show/hide eye. Optional env: USD_INR (fallback rate), FX_URL.
