@@ -1,0 +1,28 @@
+CRYPTO BRIDGE DEMO — TEST REPORT
+Date: 2026-10-18
+
+OFFLINE SMOKE TESTS: 13 PASSED, 0 FAILED
+- HTML parsing
+- Duplicate HTML IDs
+- Linked CSS/JS files exist
+- Viewport metadata
+- Accessible main navigation
+- Demo-only disclosure text
+- No remote script dependency
+- Page route handlers exist for Home, Quotes, Assets, Team, Bonus, Recharge, Withdrawal, Signal, Service, Invite and Guide
+- Asset search handler exists
+- Recharge/withdrawal demo-only handling exists
+- Responsive CSS media query
+- Static deployment files are at project root
+- JavaScript syntax (`node --check`)
+
+BROWSER INTERACTION TEST LIMITATION
+A headless Chromium interaction run was attempted in the build environment, but navigation to both local HTTP and file URLs was blocked by the environment's browser policy (ERR_BLOCKED_BY_ADMINISTRATOR). Therefore a full real-browser interaction run could not be confirmed here. The site should be checked in a browser after deployment; use Render's deploy logs if it fails.
+
+RENDER STATIC SITE SETTINGS
+Build Command: leave blank
+Publish Directory: .
+The repository root must directly contain index.html, style.css and app.js.
+
+SCOPE
+This is a static front-end demo. It does not implement real user authentication, a backend, database, live prices, real deposits/withdrawals, wallet integrations or trading.
