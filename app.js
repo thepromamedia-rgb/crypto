@@ -38,9 +38,9 @@ function renderAssetRows(q = '') {
   const f = state.prices.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q));
   return f.length ? f.map(assetRow).join('') : '<div class="empty-state">No assets match that search.</div>';
 }
-const staleNote = () => state.prices.length ? `<p class="stale">${state.stale ? '⚠ Showing last known prices — live feed delayed. ' : ''}Updated ${new Date(state.updated).toLocaleTimeString('en-IN')} · refreshes every 20s</p>` : '';
+const staleNote = () => state.prices.length ? `<p class="stale">${state.stale ? '⚠ Showing last known prices — live feed delayed. ' : ''}Updated ${new Date(state.updated).toLocaleTimeString('en-IN')} · ${state.source || 'live'} · refreshes every 20s</p>` : '';
 async function pullPrices() {
-  try { const j = await api('prices'); state.prices = j.prices; state.updated = j.updated; state.stale = j.stale; state.priceErr = ''; }
+  try { const j = await api('prices'); state.prices = j.prices; state.updated = j.updated; state.stale = j.stale; state.source = j.source; state.priceErr = ''; }
   catch (e) { state.priceErr = e.message; }
   if (['Home', 'Quotes', 'Signal'].includes(state.page) && document.activeElement !== $('#assetSearch')) refreshPriceViews();
 }
@@ -71,7 +71,7 @@ function renderHome() {
     <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
     <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
     <section class="market-cards" id="marketCards">${marketCards()}</section>
-    <section class="section-head list-head"><div><span class="eyebrow">LIVE · COINGECKO</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
+    <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
     <section class="asset-list" id="assetList">${renderAssetRows()}</section>`;
 }
 

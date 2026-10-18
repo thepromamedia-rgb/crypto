@@ -119,26 +119,40 @@ const COINS = [
 ];
 const PRICE_API = E.PRICE_API_URL || 'https://api.coingecko.com/api/v3/coins/markets';
 let priceCache = { ts: 0, data: null, error: null };
+const BINANCE_API = E.BINANCE_API_URL || 'https://data-api.binance.vision/api/v3/ticker/24hr';
+async function fromCoinGecko() {
+  const url = `${PRICE_API}?vs_currency=usd&ids=${COINS.map(c => c[2]).join(',')}&sparkline=true&price_change_percentage=24h`;
+  const headers = { Accept: 'application/json' };
+  if (E.COINGECKO_API_KEY) headers['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
+  const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error('CoinGecko ' + r.status);
+  const rows = await r.json(), by = Object.fromEntries(rows.map(x => [x.id, x]));
+  return COINS.map(([symbol, name, id, mark]) => {
+    const x = by[id]; if (!x) return null;
+    const sp = (x.sparkline_in_7d && x.sparkline_in_7d.price) || [], step = Math.max(1, Math.floor(sp.length / 28));
+    return { symbol, name, mark, price: x.current_price, change: x.price_change_percentage_24h_in_currency ?? x.price_change_percentage_24h ?? 0, spark: sp.filter((_, i) => i % step === 0) };
+  }).filter(Boolean);
+}
+async function fromBinance() {   // backup source: no geo-block on data-api.binance.vision, USDT ≈ USD
+  const syms = encodeURIComponent(JSON.stringify(COINS.map(c => c[0] + 'USDT')));
+  const r = await fetch(`${BINANCE_API}?symbols=${syms}`, { signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error('Binance ' + r.status);
+  const by = Object.fromEntries((await r.json()).map(x => [x.symbol, x]));
+  const old = Object.fromEntries(((priceCache.data) || []).map(x => [x.symbol, x.spark]));
+  return COINS.map(([symbol, name, , mark]) => {
+    const x = by[symbol + 'USDT']; if (!x) return null;
+    return { symbol, name, mark, price: Number(x.lastPrice), change: Number(x.priceChangePercent), spark: old[symbol] || [] };
+  }).filter(Boolean);
+}
 async function getPrices() {
   if (priceCache.data && now() - priceCache.ts < 20e3) return priceCache;
-  try {
-    const url = `${PRICE_API}?vs_currency=usd&ids=${COINS.map(c => c[2]).join(',')}&sparkline=true&price_change_percentage=24h`;
-    const headers = { Accept: 'application/json' };
-    if (E.COINGECKO_API_KEY) headers['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
-    const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
-    if (!r.ok) throw new Error('price API ' + r.status);
-    const rows = await r.json(), by = Object.fromEntries(rows.map(x => [x.id, x]));
-    const data = COINS.map(([symbol, name, id, mark]) => {
-      const x = by[id]; if (!x) return null;
-      const sp = (x.sparkline_in_7d && x.sparkline_in_7d.price) || [], step = Math.max(1, Math.floor(sp.length / 28));
-      return { symbol, name, mark, price: x.current_price, change: x.price_change_percentage_24h_in_currency ?? x.price_change_percentage_24h ?? 0, spark: sp.filter((_, i) => i % step === 0) };
-    }).filter(Boolean);
-    if (!data.length) throw new Error('empty price response');
-    priceCache = { ts: now(), data, error: null };
-  } catch (e) {
-    priceCache = { ...priceCache, ts: priceCache.data ? priceCache.ts : 0, error: e.message };
-    if (!priceCache.data) fail(503, 'Live prices are temporarily unavailable.');
+  let data = null, errs = [];
+  for (const src of [fromCoinGecko, fromBinance]) {
+    try { data = await src(); if (data.length) { priceCache = { ts: now(), data, error: null, source: src === fromBinance ? 'Binance' : 'CoinGecko' }; return priceCache; } }
+    catch (e) { errs.push(e.message); }
   }
+  priceCache = { ...priceCache, error: errs.join(' | ') };
+  if (!priceCache.data) fail(503, 'Live prices are temporarily unavailable.');
   return priceCache;
 }
 
@@ -148,7 +162,7 @@ const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
 const routes = {
-  'GET /api/prices': async () => { const c = await getPrices(); return { prices: c.data, updated: c.ts, stale: !!c.error }; },
+  'GET /api/prices': async () => { const c = await getPrices(); return { prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async () => PUBLIC_SETTINGS(),
 
   'POST /api/register': async (req, res, b) => {
