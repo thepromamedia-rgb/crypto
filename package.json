@@ -1,8 +1,8 @@
 {
   "name": "crypto-bridge",
-  "version": "2.9.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Crypto Bridge \u2014 multi bonus coins, configurable promotional rewards, live market prices and admin panel",
+  "description": "Crypto Bridge \u2014 isolated demo account management, multi bonus coins, configurable rewards and admin controls",
   "scripts": {
     "start": "node server.js",
     "test": "node test-server.js"

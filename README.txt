@@ -92,3 +92,10 @@ v2.9 multi bonus coin update
 - On purchase, the return and timer settings are snapshotted. Principal plus promotional reward settles once after the countdown; active positions prevent coin deletion.
 - Bonus coin chart is explicitly marked simulated/admin-configured. These custom coins do not have exchange-backed live market prices; listed market coins continue to use live exchange data.
 - Promotional rewards are not market trading profit or guaranteed investment returns. Review local financial/legal compliance before enabling real-money payouts.
+
+
+V3.0 ADMIN ACCOUNT MANAGEMENT
+- Admin > Demo Accounts is a separate sandbox section. Create unlimited demo account records, set/reset demo balance, set password, block/unblock, reset demo state, and delete demo records.
+- Demo records are stored in a separate demoUsers collection. They are excluded from real user lists, real wallet totals, deposits, withdrawals, referrals and financial overview. Demo credentials do not authenticate through the real-user login. This section is for isolated admin-managed demo records, not a separate customer-facing demo trading login.
+- Admin > Users supports block/unblock, set password, balance adjustment with a required audit reason, and delete. Deleted user IDs cannot authenticate; financial records are retained for audit.
+- Backup JSON omits password hashes for both real and demo accounts.

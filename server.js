@@ -46,7 +46,7 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
   settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
@@ -66,7 +66,7 @@ async function loadDB() {
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
-    for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
+    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
   }
 }
 let saveChain = Promise.resolve();
@@ -378,7 +378,7 @@ const routes = {
     const users = D.users.filter(x => x.role !== 'admin'), ok = D.deposits.filter(d => d.status === 'Approved'), paid = D.withdrawals.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     return {
-      users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length,
+      users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length, demoUsers: D.demoUsers.length, demoWallets: r2(D.demoUsers.reduce((s, x) => s + Number(x.balance || 0), 0)),
       depositsApproved: sum(ok), withdrawalsPaid: sum(paid),
       pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
       bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(D.trades.reduce((s, t) => s + (t.refPaid || 0), 0)) },
@@ -386,6 +386,28 @@ const routes = {
     };
   },
   'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: D.users.map(x => ({ ...pubUser(x), blocked: x.blocked, refBy: x.refBy })) }; },
+  'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: D.demoUsers.map(x => ({ id: x.id, name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
+  'POST /api/admin/demo-user': async (req, res, b, u) => {
+    needAdmin(u); const action = str(b.action, 16);
+    if (action === 'create') {
+      const name = str(b.name, 60), email = normEmail(b.email), password = String(b.password || '');
+      if (name.length < 2) fail(400, 'Enter a demo account name.');
+      if (!emailOk(email)) fail(400, 'Enter a valid email.');
+      if (password.length < 8 || password.length > 100) fail(400, 'Password must be 8–100 characters.');
+      if (D.demoUsers.some(x => x.email === email) || D.users.some(x => x.email === email)) fail(409, 'Email already exists in real or demo accounts.');
+      const x = { id: 'demo-' + nid(), name, email, phone: str(b.phone, 20), pass: hashPw(password), balance: 0, holdings: {}, trades: [], blocked: false, mode: 'demo', created: now() };
+      D.demoUsers.push(x); audit(u.email, 'demo-create', x.id + ' ' + x.email); await save(); return { user: { id: x.id, name: x.name, email: x.email, balance: x.balance, created: x.created } };
+    }
+    const x = D.demoUsers.find(v => v.id === b.id); if (!x) fail(404, 'Demo account not found.');
+    if (action === 'delete') D.demoUsers = D.demoUsers.filter(v => v.id !== x.id);
+    else if (action === 'block') x.blocked = true;
+    else if (action === 'unblock') x.blocked = false;
+    else if (action === 'password') { const pw = String(b.password || ''); if (pw.length < 8) fail(400, 'Min 8 characters'); x.pass = hashPw(pw); }
+    else if (action === 'adjust') { const amt = Number(b.amount); if (!Number.isInteger(amt) || Math.abs(amt) > MAX_AMOUNT || x.balance + amt < 0) fail(400, 'Invalid balance adjustment.'); x.balance = r2(x.balance + amt); }
+    else if (action === 'reset') { x.balance = 0; x.holdings = {}; x.trades = []; }
+    else fail(400, 'Bad action');
+    audit(u.email, 'demo-' + action, x.id + ' ' + x.email); await save(); return { ok: true };
+  },
   'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
   'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); return { items: [...D.trades].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
@@ -497,6 +519,11 @@ const routes = {
     if (t.role === 'admin') fail(400, 'Admin accounts cannot be changed here.');
     if (b.action === 'block') t.blocked = true; else if (b.action === 'unblock') t.blocked = false;
     else if (b.action === 'password') { const pw = String(b.password || ''); if (pw.length < 8) fail(400, 'Min 8 characters'); t.pass = hashPw(pw); }
+    else if (b.action === 'delete') {
+      const email = t.email, id = t.id; D.users = D.users.filter(x => x.id !== id);
+      for (const row of [...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (row.uid === id) row.userDeleted = true;
+      audit(u.email, 'user-delete', `#${id} ${email}`); await save(); return { ok: true };
+    }
     else if (b.action === 'adjust') {        // manual wallet correction, always logged with a reason
       const amt = Number(b.amount), reason = str(b.reason, 120);
       if (!Number.isInteger(amt) || amt === 0 || Math.abs(amt) > MAX_AMOUNT) fail(400, 'Enter a non-zero whole amount.');
@@ -519,7 +546,7 @@ const routes = {
   },
   'GET /api/admin/backup': async (req, res, b, u) => {
     needAdmin(u);
-    const copy = JSON.parse(JSON.stringify(D)); delete copy.secret; copy.users.forEach(x => delete x.pass);
+    const copy = JSON.parse(JSON.stringify(D)); delete copy.secret; copy.users.forEach(x => delete x.pass); if (Array.isArray(copy.demoUsers)) copy.demoUsers.forEach(x => delete x.pass);
     return { __download: 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: copy };
   }
 };

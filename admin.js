@@ -20,7 +20,7 @@ async function start() {
 }
 async function draw() {
   ov = await api('admin/overview').catch(() => ov);
-  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['trd', 'Trades'], ['coins', 'Coins'], ['bonus', 'Bonus Coin', ov.bonus && ov.bonus.active], ['users', 'Users'], ['rep', 'Reports'], ['ref', 'Referral'], ['set', 'Settings'], ['log', 'Audit log']];
+  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['trd', 'Trades'], ['coins', 'Coins'], ['bonus', 'Bonus Coin', ov.bonus && ov.bonus.active], ['users', 'Users'], ['demo', 'Demo Accounts'], ['rep', 'Reports'], ['ref', 'Referral'], ['set', 'Settings'], ['log', 'Audit log']];
   $('#root').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0">Crypto Bridge Admin</h1><div><a class="sm" href="/" style="text-decoration:none">Site</a><button class="sm" id="out">Logout</button></div></div>
   <div class="tabs">${tabs.map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}${t[2] ? `<span class="dot">${t[2]}</span>` : ''}</button>`).join('')}</div><div id="body"></div>`;
   document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tab = b.dataset.t; q = ''; draw(); });
@@ -76,13 +76,28 @@ async function draw() {
     });
   } else if (tab === 'users') {
     const { users } = await api('admin/users');
-    body.innerHTML = `<div class="tbl"><table><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Referred by</th><th>Ref earned</th><th>Joined</th><th>Actions</th></tr>${users.filter(u => u.role !== 'admin').map(u => `<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td><b>${inr(u.balance)}</b></td><td>${esc((users.find(x => x.id === u.refBy) || {}).email || '')}</td><td>${inr(u.refEarned)}</td><td>${dt(u.created)}</td><td><button class="sm ${u.blocked ? 'ok' : 'no'}" data-u="${u.blocked ? 'unblock' : 'block'}" data-id="${u.id}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-u="password" data-id="${u.id}">Set password</button><button class="sm" data-u="adjust" data-id="${u.id}">Adjust</button></td></tr>`).join('')}</table></div>`;
+    body.innerHTML = `<div class="tbl"><table><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Referred by</th><th>Ref earned</th><th>Joined</th><th>Actions</th></tr>${users.filter(u => u.role !== 'admin').map(u => `<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td><b>${inr(u.balance)}</b></td><td>${esc((users.find(x => x.id === u.refBy) || {}).email || '')}</td><td>${inr(u.refEarned)}</td><td>${dt(u.created)}</td><td><button class="sm ${u.blocked ? 'ok' : 'no'}" data-u="${u.blocked ? 'unblock' : 'block'}" data-id="${u.id}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-u="password" data-id="${u.id}">Set password</button><button class="sm" data-u="adjust" data-id="${u.id}">Adjust</button><button class="sm no" data-u="delete" data-id="${u.id}">Delete</button></td></tr>`).join('')}</table></div>`;
     body.querySelectorAll('[data-u]').forEach(b => b.onclick = async () => {
       const a = b.dataset.u, id = Number(b.dataset.id); let p = { id, action: a };
       if (a === 'password') { p.password = prompt('New password (min 8):'); if (!p.password) return; }
       else if (a === 'adjust') { p.amount = Number(prompt('Amount to add (negative to deduct), whole ₹:')); if (!p.amount) return; p.reason = prompt('Reason (required, logged):'); if (!p.reason) return; }
-      else if (!confirm(a + ' user #' + id + '?')) return;
+      else if (!confirm(a === 'delete' ? 'Permanently delete user #' + id + '? Historical financial records will be retained for audit.' : a + ' user #' + id + '?')) return;
       try { await api('admin/user', p); toast('Done'); } catch (x) { toast(x.message); } draw();
+    });
+  } else if (tab === 'demo') {
+    const { users = [] } = await api('admin/demo-users');
+    const demoWallet = users.reduce((n, u) => n + Number(u.balance || 0), 0);
+    body.innerHTML = `<div class="stats"><div class="stat"><small>Demo accounts</small><b>${users.length}</b></div><div class="stat"><small>Demo wallet total</small><b>${inr(demoWallet)}</b></div><div class="stat"><small>Isolation</small><b>Separate</b></div></div>
+      <div class="notice-banner"><span>ℹ</span><p><b>Demo-only workspace.</b> Demo balances, holdings and trades are isolated from real users, real wallet totals, deposits, withdrawals, referrals and financial reports. Demo accounts cannot log in through the real-user login.</p></div>
+      <form class="box" id="demof"><b>Create demo account</b><label>Name</label><input id="dn" required maxlength="60"><label>Email (must not exist in real or demo accounts)</label><input id="de" type="email" required maxlength="120"><label>Demo password (min 8 characters)</label><input id="dp" type="password" required minlength="8" maxlength="100"><label>Phone (optional)</label><input id="dphone" maxlength="20"><button class="primary-btn" type="submit">Create demo account</button></form>
+      <div class="box"><b>Demo account management (${users.length})</b><div class="tbl"><table><tr><th>ID</th><th>Name</th><th>Email</th><th>Demo balance</th><th>Holdings</th><th>Demo trades</th><th>Status</th><th>Actions</th></tr>${users.map(u => `<tr><td>${esc(u.id)}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td><b>${inr(u.balance)}</b></td><td>${Object.keys(u.holdings || {}).length}</td><td>${u.trades || 0}</td><td>${u.blocked ? 'Blocked' : 'Active'}</td><td><button class="sm" data-demo="adjust" data-id="${esc(u.id)}">Set balance</button><button class="sm" data-demo="password" data-id="${esc(u.id)}">Set password</button><button class="sm" data-demo="${u.blocked ? 'unblock' : 'block'}" data-id="${esc(u.id)}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-demo="reset" data-id="${esc(u.id)}">Reset demo</button><button class="sm no" data-demo="delete" data-id="${esc(u.id)}">Delete</button></td></tr>`).join('') || '<tr><td colspan="8">No demo accounts yet.</td></tr>'}</table></div></div>`;
+    $('#demof').onsubmit = async e => { e.preventDefault(); try { await api('admin/demo-user', { action: 'create', name: $('#dn').value, email: $('#de').value, password: $('#dp').value, phone: $('#dphone').value }); toast('Demo account created'); } catch (x) { toast(x.message); } draw(); };
+    body.querySelectorAll('[data-demo]').forEach(b => b.onclick = async () => {
+      const action = b.dataset.demo, id = b.dataset.id; const p = { action, id };
+      if (action === 'adjust') { const amt = prompt('Set demo balance to this amount in ₹ (0 or greater):'); if (amt === null) return; p.amount = Number(amt); const current = users.find(x => x.id === id); p.amount = p.amount - Number(current.balance || 0); p.action = 'adjust'; }
+      if (action === 'password') { p.password = prompt('New demo password (min 8 characters):'); if (!p.password) return; }
+      if (['block','unblock','delete','reset'].includes(action) && !confirm(`${action} demo account ${id}?`)) return;
+      try { await api('admin/demo-user', p); toast('Demo account updated'); } catch (x) { toast(x.message); } draw();
     });
   } else if (tab === 'set') {
     const s = ov.settings;

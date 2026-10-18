@@ -84,6 +84,13 @@ const stub = http.createServer((q, r) => {
   const sa = await u('POST', '/api/trade', { symbol: 'BTC', side: 'sell', all: true }); assert.equal(sa.j.balance, 600); assert.ok(!sa.j.holdings.BTC); ok('sell + sell all');
   assert.equal((await a('GET', '/api/admin/trades')).j.items.length, 3);
 
+  // Demo workspace is isolated from real users, wallets and login.
+  const dc = await a('POST', '/api/admin/demo-user', { action: 'create', name: 'Demo One', email: 'demo1@x.io', password: 'DemoPass123' }); assert.equal(dc.s, 200); const demoId = dc.j.user.id;
+  assert.equal((await a('GET', '/api/admin/demo-users')).j.users.length, 1);
+  assert.equal((await a('POST', '/api/admin/demo-user', { action: 'adjust', id: demoId, amount: 999999 })).s, 200);
+  assert.equal((await a('GET', '/api/admin/overview')).j.wallets, 600); ok('demo accounts isolated from real overview/wallets');
+  assert.equal((await mk()('POST', '/api/login', { email: 'demo1@x.io', password: 'DemoPass123' })).s, 401); ok('demo account cannot log into real-user auth');
+
   // block + persistence across restart (data preserved)
   const bk = await a('GET', '/api/admin/backup'); assert.ok(!JSON.stringify(bk.j).includes('"pass"')); ok('backup has no password hashes');
   const saved = JSON.parse(fs.readFileSync(path.join(tmp, 'db.json'), 'utf8')); assert.equal(saved.users.length, 2); assert.equal(saved.deposits.length, 1);
