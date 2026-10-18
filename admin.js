@@ -20,7 +20,7 @@ async function start() {
 }
 async function draw() {
   ov = await api('admin/overview').catch(() => ov);
-  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['trd', 'Trades'], ['coins', 'Coins'], ['bonus', 'Bonus Coin', ov.bonus && ov.bonus.active], ['users', 'Users'], ['rep', 'Reports'], ['set', 'Settings'], ['log', 'Audit log']];
+  const tabs = [['over', 'Overview'], ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['trd', 'Trades'], ['coins', 'Coins'], ['bonus', 'Bonus Coin', ov.bonus && ov.bonus.active], ['users', 'Users'], ['rep', 'Reports'], ['ref', 'Referral'], ['set', 'Settings'], ['log', 'Audit log']];
   $('#root').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0">Crypto Bridge Admin</h1><div><a class="sm" href="/" style="text-decoration:none">Site</a><button class="sm" id="out">Logout</button></div></div>
   <div class="tabs">${tabs.map(t => `<button data-t="${t[0]}" class="${tab === t[0] ? 'on' : ''}">${t[1]}${t[2] ? `<span class="dot">${t[2]}</span>` : ''}</button>`).join('')}</div><div id="body"></div>`;
   document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { tab = b.dataset.t; q = ''; draw(); });
@@ -28,8 +28,8 @@ async function draw() {
   const body = $('#body');
   if (tab === 'over') {
     body.innerHTML = `${ov.storage === 'file' ? '<div class="notice-banner"><span>⚠</span><p><b>Database is a local file.</b> On Render this is wiped at every deploy/restart. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN so data is preserved.</p></div>' : ''}
-    <div class="stats">${[['Users', ov.users], ['Wallet liabilities', inr(ov.wallets)], ['Deposits approved', inr(ov.depositsApproved)], ['Withdrawals paid', inr(ov.withdrawalsPaid)], ['Pending deposits', ov.pendingDeposits], ['Pending withdrawals', ov.pendingWithdrawals], ['Trades', ov.trades], ['Bonus coin active', ov.bonus.active + ' · ' + inr(ov.bonus.activeAmount)], ['Bonus returns paid', inr(ov.bonus.profitPaid)], ['Referral paid', inr(ov.bonus.refPaid)]].map(s => `<div class="stat"><small>${s[0]}</small><b>${s[1]}</b></div>`).join('')}</div>
-    <div class="box"><b>Rules</b><p class="fine-print">Minimum deposit ${inr(ov.min.deposit)} · Minimum withdrawal ${inr(ov.min.withdraw)} · Storage: ${ov.storage}</p><button class="sm" id="bk">Download backup (JSON)</button></div>`;
+    <div class="stats">${[['Users', ov.users], ['Wallet liabilities', inr(ov.wallets)], ['Deposits approved', inr(ov.depositsApproved)], ['Withdrawals paid', inr(ov.withdrawalsPaid)], ['Pending deposits', ov.pendingDeposits], ['Pending withdrawals', ov.pendingWithdrawals], ['Trades', ov.trades], ['Bonus coin active', ov.bonus.active + ' · ' + inr(ov.bonus.activeAmount)], ['Bonus returns paid', inr(ov.bonus.profitPaid)], ['Referral paid (bonus coin)', inr(ov.bonus.refPaid)], ['Referral paid (trade profit)', inr(ov.bonus.tradeRefPaid)]].map(s => `<div class="stat"><small>${s[0]}</small><b>${s[1]}</b></div>`).join('')}</div>
+    <div class="box"><b>Rules</b><p class="fine-print">Minimum deposit ${inr(ov.min.deposit)} · Minimum withdrawal ${inr(ov.min.withdraw)} · Minimum buy ${inr(ov.min.trade)} (change in Settings) · Storage: ${ov.storage}</p><button class="sm" id="bk">Download backup (JSON)</button></div>`;
     $('#bk').onclick = async () => { const d = await api('admin/backup'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); a.download = 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json'; a.click(); };
   } else if (tab === 'dep' || tab === 'wd') {
     const dep = tab === 'dep', { items } = await api(dep ? 'admin/deposits' : 'admin/withdrawals');
@@ -87,14 +87,22 @@ async function draw() {
     });
   } else if (tab === 'set') {
     const s = ov.settings;
-    body.innerHTML = `<form class="box" id="sf"><label>UPI ID (for deposits)</label><input id="upi" value="${esc(s.upi)}" maxlength="60"><label>Payee name</label><input id="payee" value="${esc(s.payee)}" maxlength="60"><label>Payment QR image (PNG/JPG/WEBP, under 250 KB)</label>${s.qr ? `<img class="qr-img" style="margin:0 0 8px" src="${esc(s.qr)}" alt="QR"><label style="font-weight:600"><input type="checkbox" id="rmqr" style="width:auto"> Remove current QR</label>` : ''}<input id="qr" type="file" accept="image/png,image/jpeg,image/webp"><label>Support link (https://…)</label><input id="sup" value="${esc(s.support)}" maxlength="200"><label>Site notice (shown on top of pages)</label><input id="notice" value="${esc(s.notice)}" maxlength="300"><label>Bonus / offers text</label><textarea id="bonus" rows="4" maxlength="600">${esc(s.bonus)}</textarea><button class="primary-btn" type="submit">Save settings</button></form>`;
+    body.innerHTML = `<form class="box" id="sf"><b>Limits</b><label>Minimum deposit (₹)</label><input id="minDep" type="number" step="1" min="1" value="${ov.min.deposit}"><label>Minimum withdrawal (₹)</label><input id="minWd" type="number" step="1" min="1" value="${ov.min.withdraw}"><label>Minimum buy order (₹)</label><input id="minTr" type="number" step="1" min="1" value="${ov.min.trade}"><b style="display:block;margin-top:16px">Payment details</b><label>UPI ID (for deposits)</label><input id="upi" value="${esc(s.upi)}" maxlength="60"><label>Payee name</label><input id="payee" value="${esc(s.payee)}" maxlength="60"><label>Payment QR image (PNG/JPG/WEBP, under 250 KB)</label>${s.qr ? `<img class="qr-img" style="margin:0 0 8px" src="${esc(s.qr)}" alt="QR"><label style="font-weight:600"><input type="checkbox" id="rmqr" style="width:auto"> Remove current QR</label>` : ''}<input id="qr" type="file" accept="image/png,image/jpeg,image/webp"><label>Support link (https://…)</label><input id="sup" value="${esc(s.support)}" maxlength="200"><label>Site notice (shown on top of pages)</label><input id="notice" value="${esc(s.notice)}" maxlength="300"><label>Bonus / offers text</label><textarea id="bonus" rows="4" maxlength="600">${esc(s.bonus)}</textarea><button class="primary-btn" type="submit">Save settings</button></form>`;
     $('#sf').onsubmit = async e => {
-      e.preventDefault(); const p = { upi: $('#upi').value, payee: $('#payee').value, support: $('#sup').value, notice: $('#notice').value, bonus: $('#bonus').value };
+      e.preventDefault(); const p = { upi: $('#upi').value, payee: $('#payee').value, support: $('#sup').value, notice: $('#notice').value, bonus: $('#bonus').value, minDeposit: Number($('#minDep').value), minWithdraw: Number($('#minWd').value), minTrade: Number($('#minTr').value) };
       const f = $('#qr').files[0];
       if (f) { if (f.size > 250000) return toast('QR image too large'); p.qr = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(f); }); }
       else if ($('#rmqr') && $('#rmqr').checked) p.qr = '';
       try { await api('admin/settings', p); toast('Saved'); } catch (x) { toast(x.message); } draw();
     };
+  } else if (tab === 'ref') {
+    const r = ov.settings.tradeRef;
+    body.innerHTML = `<form class="box" id="rf"><b>Referral on trading profit (level 1 only)</b><p class="fine-print">When a user who joined with someone's invite code SELLS a market coin at a real profit, the referrer gets this % of that profit. It is paid by the platform; the user's own proceeds are not reduced. Nothing is paid on deposits, on losses or on trades with no profit.</p>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="r_en" style="width:auto" ${r.enabled ? 'checked' : ''}> Referral commission is on</label>
+    <label>Commission % of the user's realised profit</label><input id="r_pct" type="number" step="0.01" min="0" max="100" value="${r.pct}">
+    <label>Maximum commission per trade in ₹ (0 = no cap)</label><input id="r_max" type="number" step="1" min="0" value="${r.maxPerTrade || 0}">
+    <button class="primary-btn" type="submit">Save</button></form>`;
+    $('#rf').onsubmit = async e => { e.preventDefault(); try { await api('admin/referral', { enabled: $('#r_en').checked, pct: Number($('#r_pct').value), maxPerTrade: Number($('#r_max').value) }); toast('Saved'); } catch (x) { toast(x.message); } draw(); };
   } else if (tab === 'log') {
     const { items } = await api('admin/audit');
     body.innerHTML = `<div class="tbl"><table><tr><th>Time</th><th>Who</th><th>Action</th><th>Detail</th></tr>${items.map(i => `<tr><td>${dt(i.ts)}</td><td>${esc(i.who)}</td><td>${esc(i.action)}</td><td>${esc(i.detail)}</td></tr>`).join('')}</table></div>`;

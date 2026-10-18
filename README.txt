@@ -67,3 +67,14 @@ v2.4 ADDITIONS
   Admin > Coins: add any number of market coins (symbol + name + CoinGecko API id; verified against Binance
   and CoinGecko before listing) and remove coins. A coin cannot be removed while any user still holds it.
   The list is saved in the database and survives deploys.
+
+v2.5 ADDITIONS
+  Admin > Settings > Limits: minimum deposit, minimum withdrawal and minimum buy order are now set by admin
+  (defaults Rs 1,000 / 300 / 100). Applied instantly on the site and checked on the server.
+
+v2.6 ADDITIONS
+  Admin > Referral: level-1 referral commission on the referred user's REAL realised trading profit
+  (market coins, average-cost method). Admin sets on/off, % and an optional max per trade. Paid by the
+  platform; the user's own proceeds are not reduced. Nothing on deposits, losses or zero-profit trades.
+  Sell confirmation now shows the user's profit/loss. Same-phone self-referral is ignored.
+  Admin Overview shows total trade-referral commission paid.

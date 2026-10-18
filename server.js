@@ -12,10 +12,11 @@ const HOST = '0.0.0.0';
 const E = process.env;
 const PROD = E.NODE_ENV === 'production' || !!E.RENDER;
 
-const MIN_DEPOSIT = 1000;   // ₹
-const MIN_WITHDRAW = 300;   // ₹
+const MIN_DEPOSIT = 1000;   // ₹ default; admin can change in Settings
+const MIN_WITHDRAW = 300;   // ₹ default
 const MAX_AMOUNT = 10000000;
-const MIN_TRADE = 100;     // ₹ per buy order
+const MIN_TRADE = 100;     // ₹ per buy order (default)
+const LIM = () => D.settings.limits;
 const r2 = x => Math.round(x * 100) / 100;
 const r8 = x => Math.round(x * 1e8) / 1e8;
 
@@ -46,7 +47,7 @@ const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward C
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0 }, bonusCoin: BONUS_DEFAULT(), coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 
@@ -60,7 +61,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
+    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}) }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) } } };
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
     for (const k of ['users', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
@@ -217,7 +218,7 @@ function settleDue() { let n = 0; for (const p of D.positions) if (p.status === 
 async function settleAndSave() { if (settleDue()) await save(); }
 
 // ---------- API ----------
-const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE, bonusCoin: D.settings.bonusCoin, coins: COINS });
+const PUBLIC_SETTINGS = () => ({ upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoin, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct }, coins: COINS });
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
 
@@ -238,7 +239,8 @@ const routes = {
     if (!emailOk(email)) fail(400, 'Enter a valid email.');
     if (pw.length < 8 || pw.length > 100) fail(400, 'Password must be 8–100 characters.');
     if (D.users.some(u => u.email === email)) fail(409, 'This email is already registered.');
-    const ref = str(b.ref, 20).toUpperCase(), refBy = ref && D.users.find(u => u.refCode === ref);
+    const ref = str(b.ref, 20).toUpperCase(); let refBy = ref && D.users.find(u => u.refCode === ref);
+    if (refBy && ((refBy.phone && refBy.phone === phone) || refBy.email === email)) refBy = null;   // no self-referral with the same phone
     const u = { id: nid(), name, email, phone, role: 'user', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
     D.users.push(u); audit('system', 'register', u.email); await save();
     setCookie(res, makeToken(u.id), 7 * 86400);
@@ -273,7 +275,7 @@ const routes = {
   'POST /api/deposit': async (req, res, b, u) => {
     needUser(u); limit('dep:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
-    if (amount < MIN_DEPOSIT) fail(400, `Minimum deposit is ₹${MIN_DEPOSIT.toLocaleString('en-IN')}.`);
+    if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
     const utr = str(b.utr, 30).toUpperCase(); if (!/^[A-Z0-9]{8,30}$/.test(utr)) fail(400, 'Enter the UTR / transaction reference (8–30 letters/digits).');
     if (D.deposits.some(d => d.utr === utr)) fail(409, 'This UTR has already been submitted.');
     if (!D.settings.upi && !D.settings.qr) fail(503, 'Deposits are not open yet. Contact support.');
@@ -283,7 +285,7 @@ const routes = {
   'POST /api/withdraw': async (req, res, b, u) => {
     needUser(u); limit('wd:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
-    if (amount < MIN_WITHDRAW) fail(400, `Minimum withdrawal is ₹${MIN_WITHDRAW}.`);
+    if (amount < LIM().minWithdraw) fail(400, `Minimum withdrawal is ₹${LIM().minWithdraw}.`);
     if (amount > u.balance) fail(400, 'Amount is more than your available balance.');
     const upi = str(b.upi, 60); if (!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(upi)) fail(400, 'Enter a valid UPI ID (name@bank).');
     u.balance -= amount;   // held at request time; refunded once if rejected
@@ -300,12 +302,15 @@ const routes = {
     const p = pc.data.find(x => x.symbol === sym); if (!p) fail(503, 'Price unavailable for ' + sym);
     const unit = p.price * fx;                       // ₹ per coin, decided on the server only
     if (!u.holdings) u.holdings = {};
-    let qty, inrAmt;
+    let qty, inrAmt, profit = null, refPaid = 0, refUid = null;
     if (b.side === 'buy') {
       inrAmt = r2(Number(b.amount));
-      if (!Number.isFinite(inrAmt) || inrAmt < MIN_TRADE) fail(400, `Minimum buy is ₹${MIN_TRADE}.`);
+      if (!Number.isFinite(inrAmt) || inrAmt < LIM().minTrade) fail(400, `Minimum buy is ₹${LIM().minTrade}.`);
       if (inrAmt > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
       qty = Math.floor(inrAmt / unit * 1e8) / 1e8; if (qty <= 0) fail(400, 'Amount too small.');
+      if (!u.cost) u.cost = {};
+      if (u.cost[sym] == null && (u.holdings[sym] || 0) > 0) u.cost[sym] = r2(u.holdings[sym] * unit);   // legacy holding: cost basis = value now (no profit claimed)
+      u.cost[sym] = r2((u.cost[sym] || 0) + inrAmt);
       u.balance = r2(u.balance - inrAmt); u.holdings[sym] = r8((u.holdings[sym] || 0) + qty);
     } else {
       const have = u.holdings[sym] || 0;
@@ -314,9 +319,19 @@ const routes = {
       if (qty > have + 1e-9) fail(400, 'You do not hold that much ' + sym + '.');
       qty = Math.min(qty, have); inrAmt = r2(qty * unit);
       if (inrAmt <= 0) fail(400, 'Amount too small.');
-      u.balance = r2(u.balance + inrAmt); u.holdings[sym] = r8(have - qty); if (u.holdings[sym] <= 1e-9) delete u.holdings[sym];
+      if (!u.cost) u.cost = {};
+      const costPart = u.cost[sym] == null ? inrAmt : r2(u.cost[sym] * qty / have);       // average-cost method
+      profit = r2(inrAmt - costPart); u.cost[sym] = r2(Math.max(0, (u.cost[sym] == null ? 0 : u.cost[sym]) - costPart));
+      u.balance = r2(u.balance + inrAmt); u.holdings[sym] = r8(have - qty); if (u.holdings[sym] <= 1e-9) { delete u.holdings[sym]; delete u.cost[sym]; }
+      // referral commission: only on REAL realised profit, paid from platform funds (the user's own proceeds are not reduced)
+      const tr = D.settings.tradeRef, ref = u.refBy && D.users.find(x => x.id === u.refBy);
+      if (tr.enabled && tr.pct > 0 && profit > 0 && ref && !ref.blocked) {
+        let c = r2(profit * tr.pct / 100); if (tr.maxPerTrade > 0) c = Math.min(c, tr.maxPerTrade);
+        if (c > 0) { ref.balance = r2(ref.balance + c); ref.refEarned = r2((ref.refEarned || 0) + c); refPaid = c; refUid = ref.id; }
+      }
     }
     const t = { id: nid(), uid: u.id, email: u.email, side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
+    if (profit !== null) t.profit = profit; if (refPaid) { t.refPaid = refPaid; t.refUid = refUid; audit('system', 'trade-referral', `#${t.id} ${u.email} profit ₹${profit} -> ₹${refPaid} to user #${refUid}`); }
     D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000);
     await save(); return { trade: t, balance: u.balance, holdings: u.holdings };
   },
@@ -343,8 +358,8 @@ const routes = {
       users: users.length, wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length,
       depositsApproved: sum(ok), withdrawalsPaid: sum(paid),
       pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
-      bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)) },
-      storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: MIN_DEPOSIT, withdraw: MIN_WITHDRAW }
+      bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(D.trades.reduce((s, t) => s + (t.refPaid || 0), 0)) },
+      storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: LIM().minDeposit, withdraw: LIM().minWithdraw, trade: LIM().minTrade }
     };
   },
   'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: D.users.map(x => ({ ...pubUser(x), blocked: x.blocked, refBy: x.refBy })) }; },
@@ -381,6 +396,12 @@ const routes = {
     D.withdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += x.amount; }));
     D.trades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
     return { rows: Object.values(rows).sort((a, c) => c.date.localeCompare(a.date)) };
+  },
+  'POST /api/admin/referral': async (req, res, b, u) => {
+    needAdmin(u); const pct = Number(b.pct), mx = Number(b.maxPerTrade || 0);
+    if (!(pct >= 0 && pct <= 100)) fail(400, 'Percent must be 0–100.'); if (!(mx >= 0 && mx <= MAX_AMOUNT)) fail(400, 'Max per trade must be 0 or more.');
+    D.settings.tradeRef = { enabled: !!b.enabled, pct: r2(pct), maxPerTrade: r2(mx) };
+    audit(u.email, 'trade-referral-settings', JSON.stringify(D.settings.tradeRef)); await save(); return { ok: true };
   },
   'POST /api/admin/coin': async (req, res, b, u) => {
     needAdmin(u);
@@ -439,8 +460,13 @@ const routes = {
     needAdmin(u); const s = D.settings;
     s.upi = str(b.upi, 60); s.payee = str(b.payee, 60); s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
+    if (b.minDeposit !== undefined) {
+      const md = Number(b.minDeposit), mw = Number(b.minWithdraw), mt = Number(b.minTrade);
+      for (const [v, n] of [[md, 'deposit'], [mw, 'withdrawal'], [mt, 'trade']]) if (!Number.isInteger(v) || v < 1 || v > 1000000) fail(400, `Minimum ${n} must be a whole number between 1 and 10,00,000.`);
+      s.limits = { minDeposit: md, minWithdraw: mw, minTrade: mt };
+    }
     if (b.qr !== undefined) { const q = String(b.qr || ''); if (q && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q) || q.length > 400000)) fail(400, 'QR must be a PNG/JPG/WEBP under ~250 KB.'); s.qr = q; }
-    audit(u.email, 'settings', ''); await save(); return { ok: true };
+    audit(u.email, 'settings', JSON.stringify(s.limits)); await save(); return { ok: true };
   },
   'GET /api/admin/backup': async (req, res, b, u) => {
     needAdmin(u);
@@ -523,4 +549,4 @@ if (require.main === module) {
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));
   }).catch(e => { console.error('Startup failed:', e.message); process.exit(1); });
 }
-module.exports = { server, loadDB, seedAdmin, MIN_DEPOSIT, MIN_WITHDRAW };
+module.exports = { server, loadDB, seedAdmin, MIN_DEPOSIT, MIN_WITHDRAW, _resetPrices: () => { priceCache.ts = 0; } };

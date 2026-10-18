@@ -9,18 +9,19 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-'));
 process.env.DATA_DIR = tmp; process.env.ADMIN_EMAIL = 'admin@test.io'; process.env.ADMIN_PASSWORD = 'AdminPass123';
 delete process.env.UPSTASH_REDIS_REST_URL;
 
+global.__mult = 1;
 const stub = http.createServer((q, r) => {
   if (q.url.startsWith('/fx')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify({ rates: { INR: 80 } })); }
   if (q.url.startsWith('/b?')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify([{ symbol: 'MATICUSDT', lastPrice: '1', priceChangePercent: '0' }])); }
   if (q.url.startsWith('/kl')) { r.setHeader('Content-Type', 'application/json'); return r.end(JSON.stringify(Array.from({ length: 5 }, (_, i) => [1700000000000 + i * 36e5, '100', '110', '95', String(100 + i), '5']))); }
   const ids = new URL(q.url, 'http://x').searchParams.get('ids').split(',');
   r.setHeader('Content-Type', 'application/json');
-  r.end(JSON.stringify(ids.map((id, i) => ({ id, current_price: 100 + i, price_change_percentage_24h: i - 3, sparkline_in_7d: { price: Array.from({ length: 168 }, (_, k) => 90 + (k % 17)) } }))));
+  r.end(JSON.stringify(ids.map((id, i) => ({ id, current_price: (100 + i) * global.__mult, price_change_percentage_24h: i - 3, sparkline_in_7d: { price: Array.from({ length: 168 }, (_, k) => 90 + (k % 17)) } }))));
 });
 (async () => {
   await new Promise(r => stub.listen(0, r));
   process.env.PRICE_API_URL = `http://127.0.0.1:${stub.address().port}/m`; process.env.FX_URL = `http://127.0.0.1:${stub.address().port}/fx`; process.env.BINANCE_API_URL = `http://127.0.0.1:${stub.address().port}/b`; process.env.BINANCE_KLINES_URL = `http://127.0.0.1:${stub.address().port}/kl`;
-  const { server, loadDB, seedAdmin } = require('./server.js');
+  const { server, loadDB, seedAdmin, _resetPrices } = require('./server.js');
   await loadDB(); await seedAdmin();
   await new Promise(r => server.listen(0, r));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -130,6 +131,33 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/coin', { action: 'remove', symbol: 'ETH' })).s, 409); ok('admin remove coin (blocked while users hold it)');
   assert.equal((await a('POST', '/api/admin/coin', { action: 'add', symbol: 'matic', name: 'Polygon', id: 'matic-network' })).s, 200); assert.equal((await anon('GET', '/api/config')).j.coins.length, 14);
   assert.equal((await anon('GET', '/api/prices')).j.prices.some(p => p.symbol === 'MATIC'), true); ok('admin add coin + appears in prices');
+  const sv = { upi: 'shop@upi', payee: 'CB', support: '', notice: '', bonus: '' };
+  assert.equal((await a('POST', '/api/admin/settings', { ...sv, minDeposit: 0, minWithdraw: 300, minTrade: 100 })).s, 400);
+  assert.equal((await u('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 403);
+  assert.equal((await a('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 200);
+  assert.equal((await anon('GET', '/api/config')).j.minDeposit, 500);
+  assert.equal((await u('POST', '/api/deposit', { amount: 499, utr: 'ZZZZZZZZ9999' })).s, 400); assert.equal((await u('POST', '/api/deposit', { amount: 500, utr: 'ZZZZZZZZ9999' })).s, 200);
+  assert.equal((await u('POST', '/api/withdraw', { amount: 199, upi: 'ravi@bank' })).s, 400); ok('admin-set minimum deposit / withdrawal');
+  // referral on real trading profit (level 1 only)
+  assert.equal((await boss('POST', '/api/admin/referral', { enabled: true, pct: 10 })).s, 403);
+  assert.equal((await a('POST', '/api/admin/referral', { enabled: true, pct: 150 })).s, 400);
+  assert.equal((await a('POST', '/api/admin/referral', { enabled: true, pct: 10, maxPerTrade: 0 })).s, 200);
+  const bossBefore = (await boss('GET', '/api/me')).j.user.balance, kidBefore = (await kid('GET', '/api/me')).j.user.balance;
+  await kid('POST', '/api/trade', { symbol: 'LINK', side: 'buy', amount: 1000 });
+  const sell1 = await kid('POST', '/api/trade', { symbol: 'LINK', side: 'sell', all: true });      // same stub price -> no profit
+  assert.equal(sell1.j.trade.profit, 0); assert.equal((await boss('GET', '/api/me')).j.user.balance, bossBefore); ok('no commission when no profit');
+  await kid('POST', '/api/trade', { symbol: 'LINK', side: 'buy', amount: 1000 });
+  global.__mult = 1.5; _resetPrices();                                                              // price +50%
+  const bossB2 = (await boss('GET', '/api/me')).j.user.balance;
+  const sell2 = await kid('POST', '/api/trade', { symbol: 'LINK', side: 'sell', all: true });
+  assert.ok(Math.abs(sell2.j.trade.profit - 500) < 1, 'profit ' + sell2.j.trade.profit); assert.ok(Math.abs(sell2.j.trade.refPaid - 50) < 0.2);
+  assert.ok(Math.abs((await boss('GET', '/api/me')).j.user.balance - bossB2 - 50) < 0.2); ok('10% of real profit paid to referrer, user keeps full proceeds');
+  global.__mult = 0.5; _resetPrices(); await kid('POST', '/api/trade', { symbol: 'LINK', side: 'buy', amount: 1000 }); global.__mult = 0.25; _resetPrices();
+  const bossB3 = (await boss('GET', '/api/me')).j.user.balance; const sell3 = await kid('POST', '/api/trade', { symbol: 'LINK', side: 'sell', all: true });
+  assert.ok(sell3.j.trade.profit < 0); assert.equal((await boss('GET', '/api/me')).j.user.balance, bossB3); ok('no commission on a loss');
+  const pk = mk(); await pk('POST', '/api/register', { name: 'Self', email: 'self@x.io', phone: '9999900000', password: 'password1' });
+  const rc = (await pk('GET', '/api/me')).j.user.refCode; await mk()('POST', '/api/register', { name: 'Twin', email: 'twin@x.io', phone: '9999900000', password: 'password1', ref: rc });
+  assert.equal((await pk('GET', '/api/me')).j.referrals, 0); ok('same-phone self referral ignored');
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });
