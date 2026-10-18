@@ -91,7 +91,7 @@ async function loadMe() {
   catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; } catch {} }
   $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login';
 }
-const noticeBar = () => state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : '';
+const noticeBar = () => `${state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : ''}`;
 const needLogin = page => { state.after = page; renderPage('Auth'); };
 
 // ---------- pages ----------
@@ -260,6 +260,8 @@ function bindCoin() {
 function renderPage(page, quiet) {
   if (PROTECTED.has(page) && !state.me) return needLogin(page);
   state.page = page;
+  const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
+  if (location.hash !== route) history.replaceState(null, '', route);
   $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   const main = $('#appMain'), c = state.cfg;
   if (page === 'Home') renderHome();
@@ -337,7 +339,19 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
 (async function init() {
   const ref = new URLSearchParams(location.search).get('ref');
   await loadMe();
-  renderPage(ref && !state.me ? 'Auth' : 'Home');
+  const route = decodeURIComponent(location.hash.slice(1) || 'Home');
+  let initialPage = route.split(':')[0];
+  if (route.startsWith('Coin:')) state.coin = route.slice(5);
+  const allowedPages = new Set(['Home','Quotes','Signal','Assets','Recharge','Withdrawal','Team','Invite','Bonus','Service','Guide','Coin','Auth','Profile']);
+  if (!allowedPages.has(initialPage)) initialPage = 'Home';
+  if (ref && !state.me) initialPage = 'Auth';
+  renderPage(initialPage);
   if (ref && !state.me) { state.authMode = 'register'; authPage(); }
+  window.addEventListener('hashchange', async () => {
+    const next = decodeURIComponent(location.hash.slice(1) || 'Home');
+    const page = next.split(':')[0];
+    if (next.startsWith('Coin:')) state.coin = next.slice(5);
+    if (allowedPages.has(page) && page !== state.page) { await loadMe(); renderPage(page); }
+  });
   pullPrices(); setInterval(pullPrices, 20000);
 })();

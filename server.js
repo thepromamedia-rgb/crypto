@@ -110,7 +110,7 @@ function readToken(t) {
 }
 function cookies(req) { const o = {}; (req.headers.cookie || '').split(';').forEach(c => { const i = c.indexOf('='); if (i > 0) o[c.slice(0, i).trim()] = decodeURIComponent(c.slice(i + 1).trim()); }); return o; }
 const setCookie = (res, v, maxAge) => res.setHeader('Set-Cookie', `cb_session=${v}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${PROD ? '; Secure' : ''}`);
-function authUser(req) { const uid = readToken(cookies(req).cb_session); const u = uid && D.users.find(x => x.id === uid); return u && !u.blocked ? u : null; }
+function authUser(req) { const uid = readToken(cookies(req).cb_session); const u = uid && (D.users.find(x => x.id === uid) || D.demoUsers.find(x => x.id === uid)); return u && !u.blocked ? u : null; }
 
 // simple in-memory rate limit
 const hits = new Map();
@@ -121,7 +121,7 @@ function limit(key, max, windowMs) {
 }
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
-const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, balance: u.balance, refCode: u.refCode, created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
+const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role || 'user', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), balance: u.balance, refCode: u.refCode || '', created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
 const normEmail = v => str(v, 120).toLowerCase();
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
@@ -259,7 +259,7 @@ const routes = {
     if (name.length < 2) fail(400, 'Enter your name.');
     if (!emailOk(email)) fail(400, 'Enter a valid email.');
     if (pw.length < 8 || pw.length > 100) fail(400, 'Password must be 8–100 characters.');
-    if (D.users.some(u => u.email === email)) fail(409, 'This email is already registered.');
+    if (D.users.some(u => u.email === email) || D.demoUsers.some(u => u.email === email)) fail(409, 'This email is already registered.');
     const ref = str(b.ref, 20).toUpperCase(); let refBy = ref && D.users.find(u => u.refCode === ref);
     if (refBy && ((refBy.phone && refBy.phone === phone) || refBy.email === email)) refBy = null;   // no self-referral with the same phone
     const u = { id: nid(), name, email, phone, role: 'user', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
@@ -269,7 +269,7 @@ const routes = {
   },
   'POST /api/login': async (req, res, b) => {
     const email = normEmail(b.email); limit('login:' + req.ip, 20, 600e3); limit('loginu:' + email, 8, 600e3);
-    const u = D.users.find(x => x.email === email);
+    const u = D.users.find(x => x.email === email) || D.demoUsers.find(x => x.email === email);
     if (!u || !checkPw(String(b.password || ''), u.pass)) fail(401, 'Wrong email or password.');
     if (u.blocked) fail(403, 'This account is blocked. Contact support.');
     setCookie(res, makeToken(u.id), 7 * 86400);
@@ -283,8 +283,8 @@ const routes = {
       positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
-      referrals: D.users.filter(x => x.refBy === u.id).length,
-      trades: D.trades.filter(t => t.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50)
+      referrals: u.mode === 'demo' ? 0 : D.users.filter(x => x.refBy === u.id).length,
+      trades: (u.mode === 'demo' ? (u.trades || []) : D.trades.filter(t => t.uid === u.id)).sort((a, c) => c.ts - a.ts).slice(0, 50)
     };
   },
   'POST /api/password': async (req, res, b, u) => {
@@ -294,7 +294,7 @@ const routes = {
     u.pass = hashPw(pw); audit(u.email, 'password-change', ''); await save(); return { ok: true };
   },
   'POST /api/deposit': async (req, res, b, u) => {
-    needUser(u); limit('dep:' + u.id, 10, 3600e3);
+    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real deposits are disabled.'); limit('dep:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
     if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
     const utr = str(b.utr, 30).toUpperCase(); if (!/^[A-Z0-9]{8,30}$/.test(utr)) fail(400, 'Enter the UTR / transaction reference (8–30 letters/digits).');
@@ -304,7 +304,7 @@ const routes = {
     D.deposits.push(d); audit(u.email, 'deposit-request', `₹${amount} ${utr}`); await save(); return { deposit: d };
   },
   'POST /api/withdraw': async (req, res, b, u) => {
-    needUser(u); limit('wd:' + u.id, 10, 3600e3);
+    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real withdrawals are disabled.'); limit('wd:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
     if (amount < LIM().minWithdraw) fail(400, `Minimum withdrawal is ₹${LIM().minWithdraw}.`);
     if (amount > u.balance) fail(400, 'Amount is more than your available balance.');
@@ -355,12 +355,13 @@ const routes = {
     }
     const t = { id: nid(), uid: u.id, email: u.email, side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
     if (profit !== null) t.profit = profit; if (refPaid) { t.refPaid = refPaid; t.refUid = refUid; t.refPayments = tRefPayments; audit('system', 'trade-referral', `#${t.id} ${u.email} profit ₹${profit} -> ₹${refPaid} across ${tRefPayments.length} level(s)`); }
-    D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000);
+    if (u.mode === 'demo') { if (!Array.isArray(u.trades)) u.trades = []; u.trades.push(t); if (u.trades.length > 2000) u.trades.splice(0, u.trades.length - 2000); }
+    else { D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000); }
     await save(); return { trade: t, balance: u.balance, holdings: u.holdings };
   },
 
   'POST /api/bonus/trade': async (req, res, b, u) => {
-    needUser(u); limit('bonus:' + u.id, 30, 600e3);
+    needUser(u); if (u.mode === 'demo') fail(403, 'Bonus Coin positions are not available in demo mode yet. Use simulated spot buy/sell.'); limit('bonus:' + u.id, 30, 600e3);
     const sym = str(b.symbol || (D.settings.bonusCoins[0] || D.settings.bonusCoin).symbol, 8).toUpperCase(); const c = D.settings.bonusCoins.find(x => x.symbol === sym); if (!c || !c.enabled) fail(403, sym + ' is not open right now.');
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid whole-rupee amount.');
     if (amount < c.minAmount) fail(400, `Minimum is ₹${c.minAmount}.`); if (amount > c.maxAmount) fail(400, `Maximum per trade is ₹${c.maxAmount}.`);
