@@ -194,7 +194,33 @@ async function getFx() {
 const KL_LIMIT = { '1m': 130, '3m': 130, '5m': 130, '15m': 130, '1h': 130, '4h': 130, '1d': 130 };
 const KL_API = E.BINANCE_KLINES_URL || 'https://data-api.binance.vision/api/v3/klines';
 const klCache = new Map();
+function getAdminCoinKlines(coin, iv) {
+  const durations = { '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 };
+  const step = durations[iv] || 3600000, count = 100, nowTs = Math.floor(now() / step) * step;
+  const base = Math.max(0.00000001, Number(coin.startPrice) || 1);
+  const pct = Math.max(-95, Math.min(500, Number(coin.chartPercent ?? 0)));
+  // Admin coin candles are generated server-side, with a configurable 24-hour target move.
+  // 'graph' mode adds bounded candle-to-candle volatility; these are simulated, not exchange data.
+  const seedText = String(coin.symbol || 'COIN'); let seed = 0;
+  for (let i = 0; i < seedText.length; i++) seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
+  const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const drift = Math.pow(Math.max(0.05, 1 + pct / 100), step / 86400000);
+  let close = base / Math.pow(drift, count - 1), out = [];
+  for (let i = 0; i < count; i++) {
+    const open = close;
+    const wave = coin.chartMode === 'graph' ? (rand() - 0.5) * 0.035 : (rand() - 0.5) * 0.004;
+    close = Math.max(0.00000001, open * drift * (1 + wave));
+    const high = Math.max(open, close) * (1 + rand() * (coin.chartMode === 'graph' ? 0.018 : 0.003));
+    const low = Math.max(0.00000001, Math.min(open, close) * (1 - rand() * (coin.chartMode === 'graph' ? 0.018 : 0.003)));
+    out.push([nowTs - (count - 1 - i) * step, open, high, low, close, Math.round(rand() * 1000)]);
+  }
+  // Keep the latest candle anchored to the admin's current configured display price.
+  const target = Math.max(0.00000001, Number(coin.startPrice) || close), scale = target / out[out.length - 1][4];
+  return out.map(k => [k[0], k[1] * scale, k[2] * scale, k[3] * scale, k[4] * scale, k[5]]);
+}
 async function getKlines(sym, iv) {
+  const adminCoin = (D.settings.bonusCoins || []).find(x => x.symbol === sym);
+  if (adminCoin) return getAdminCoinKlines(adminCoin, iv);
   const key = sym + ':' + iv, c = klCache.get(key);
   if (c && now() - c.ts < 30e3) return c.candles;
   try {
@@ -293,7 +319,7 @@ const routes = {
   'GET /api/klines': async (req) => {
     limit('kl:' + req.ip, 120, 60e3);
     const q = new URL(req.url, 'http://x').searchParams, sym = str(q.get('symbol'), 10).toUpperCase(), iv = q.get('interval') || '1h';
-    if (!COINS.some(c => c[0] === sym)) fail(400, 'Unknown coin.'); if (!KL_LIMIT[iv]) fail(400, 'Bad interval.');
+    if (!COINS.some(c => c[0] === sym) && !(D.settings.bonusCoins || []).some(c => c.symbol === sym)) fail(400, 'Unknown coin.'); if (!KL_LIMIT[iv]) fail(400, 'Bad interval.');
     return { symbol: sym, interval: iv, candles: await getKlines(sym, iv) };
   },
 
@@ -501,7 +527,7 @@ const routes = {
       D.settings.bonusCoins = D.settings.bonusCoins.filter(x => x.symbol !== sym); D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
       audit(u.email, 'bonuscoin-delete', sym); await save(); return { ok: true, coins: D.settings.bonusCoins };
     }
-    const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1);
+    const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1), chartPercent = Number(b.chartPercent ?? 0), chartMode = b.chartMode === 'graph' ? 'graph' : 'percent';
     if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.');
     if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
     if (name.length < 2) fail(400, 'Enter a coin name.');
@@ -510,11 +536,12 @@ const routes = {
     if (!Number.isInteger(lock) || lock < 0 || lock > 604800) fail(400, 'Countdown must be 0–604800 seconds.');
     if (!Number.isInteger(mn) || mn < 1 || !Number.isInteger(mx) || mx < mn || mx > MAX_AMOUNT) fail(400, 'Check min / max amounts.');
     if (!Number.isFinite(startPrice) || startPrice <= 0 || startPrice > MAX_AMOUNT) fail(400, 'Starting price must be positive.');
+    if (!Number.isFinite(chartPercent) || chartPercent < -95 || chartPercent > 500) fail(400, 'Chart 24h change must be between -95% and 500%.');
     let coin = D.settings.bonusCoins.find(x => x.symbol === sym);
     if (action === 'add' && coin) fail(409, 'Bonus coin already exists.');
     if (action !== 'add' && !coin && action !== 'save') fail(404, 'Bonus coin not found.');
     const old = coin || {};
-    coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), priceMode: 'admin-simulated' };
+    coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), priceMode: 'admin-simulated', chartMode, chartPercent };
     if (!old.id) D.settings.bonusCoins.push(coin); else D.settings.bonusCoins = D.settings.bonusCoins.map(x => x.symbol === sym ? coin : x);
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     audit(u.email, 'bonuscoin-' + action, JSON.stringify(coin)); await save(); return { ok: true, coin, coins: D.settings.bonusCoins };
