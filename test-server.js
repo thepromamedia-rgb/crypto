@@ -242,7 +242,10 @@ const stub = http.createServer((q, r) => {
   assert.equal((await mk('panel-one-renamed')('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 401);
   assert.equal((await mk('panel-one-renamed')('POST', '/api/login', { email: 'paneladmin@x.io', password: 'ResetPass123' })).s, 200); ok('Head Admin can reset panel admin login and new password works');
   const panelUser = mk('panel-one');
-  assert.equal((await panelUser('POST', '/api/register', { name: 'Panel User', email: 'paneluser@x.io', password: 'password1' })).s, 200);
+  const panelRegister = await panelUser('POST', '/api/register', { name: 'Panel User', email: 'paneluser@x.io', password: 'password1' });
+  assert.equal(panelRegister.s, 200); assert.ok(panelRegister.j.user.id != null);
+  const panelListed = await panelAdmin('GET', '/api/admin/users'); assert.equal(panelListed.s, 200); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').panelId, 'panel-one-renamed');
+  const headListed = await a('GET', '/api/admin/users'); assert.equal(headListed.s, 200); assert.equal(headListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(headListed.j.scope, 'all-panels'); ok('registered user UID appears in both panel admin and Head Admin user lists');
   const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345' });
   assert.equal(panelDep.s, 200); assert.equal((await panelAdmin('GET', '/api/admin/deposits')).j.items.length, 1);
   assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'panel-one-renamed').users, 1); ok('panel user and deposit are scoped');

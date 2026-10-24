@@ -595,7 +595,7 @@ const routes = {
       storage: UP_URL ? 'upstash' : 'file', settings: S(req), min: { deposit: S(req).limits.minDeposit, withdraw: S(req).limits.minWithdraw, trade: S(req).limits.minTrade }
     };
   },
-  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: x.blocked, refBy: x.refBy })) }; },
+  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
   'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
   'POST /api/admin/demo-user': async (req, res, b, u) => {
     needAdmin(u); const action = str(b.action, 16);

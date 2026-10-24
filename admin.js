@@ -152,15 +152,24 @@ async function draw() {
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'cryptobridge-' + k + '-' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
     });
   } else if (tab === 'users') {
-    const { users } = await api('admin/users');
-    body.innerHTML = `<div class="tbl"><table><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th><th>Balance</th><th>Referred by</th><th>Ref earned</th><th>Joined</th><th>Actions</th></tr>${users.filter(u => !['admin','headAdmin','panelAdmin'].includes(u.role)).map(u => `<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td><td><b>${inr(u.balance)}</b></td><td>${esc((users.find(x => x.id === u.refBy) || {}).email || '')}</td><td>${inr(u.refEarned)}</td><td>${dt(u.created)}</td><td><button class="sm ${u.blocked ? 'ok' : 'no'}" data-u="${u.blocked ? 'unblock' : 'block'}" data-id="${u.id}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-u="password" data-id="${u.id}">Set password</button><button class="sm" data-u="adjust" data-id="${u.id}">Adjust</button><button class="sm no" data-u="delete" data-id="${u.id}">Delete</button></td></tr>`).join('')}</table></div>`;
-    body.querySelectorAll('[data-u]').forEach(b => b.onclick = async () => {
-      const a = b.dataset.u, id = Number(b.dataset.id); let p = { id, action: a };
-      if (a === 'password') { p.password = prompt('New password (min 8):'); if (!p.password) return; }
-      else if (a === 'adjust') { p.amount = Number(prompt('Amount to add (negative to deduct), whole ₹:')); if (!p.amount) return; p.reason = prompt('Reason (required, logged):'); if (!p.reason) return; }
-      else if (!confirm(a === 'delete' ? 'Permanently delete user #' + id + '? Historical financial records will be retained for audit.' : a + ' user #' + id + '?')) return;
-      try { await api('admin/user', p); toast('Done'); } catch (x) { toast(x.message); } draw();
-    });
+    const { users = [], totalUsers } = await api('admin/users');
+    const realUsers = users.filter(u => !['admin','headAdmin','panelAdmin'].includes(u.role)).sort((a, b) => Number(b.created || 0) - Number(a.created || 0));
+    const renderUsers = (term = '') => {
+      const needle = term.trim().toLowerCase();
+      const shown = realUsers.filter(u => !needle || [u.id, u.name, u.email, u.phone, u.panelId, u.refCode].some(v => String(v == null ? '' : v).toLowerCase().includes(needle)));
+      const panelCol = ov.role === 'headAdmin' ? '<th>Panel</th>' : '';
+      body.innerHTML = `<div class="box" style="margin-bottom:12px"><div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><b>Registered users: ${realUsers.length}</b><small style="display:block">${ov.role === 'headAdmin' ? 'All panels · newest first' : 'Current panel only · newest first'} · Every user has a unique UID</small></div><button class="sm" id="refreshUsers">Refresh</button></div><label for="userSearch">Search by UID, name, email, phone${ov.role === 'headAdmin' ? ' or panel' : ''}</label><input id="userSearch" value="${esc(term)}" placeholder="Enter UID or search user details"></div><div class="tbl"><table><tr><th>UID</th><th>Name</th><th>Email</th><th>Phone</th>${panelCol}<th>Balance</th><th>Referred by</th><th>Ref earned</th><th>Joined</th><th>Actions</th></tr>${shown.map(u => `<tr><td><code>${esc(u.id)}</code></td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td>${ov.role === 'headAdmin' ? `<td>${esc(u.panelId || 'main')}</td>` : ''}<td><b>${inr(u.balance)}</b></td><td>${esc((users.find(x => x.id === u.refBy) || {}).email || '')}</td><td>${inr(u.refEarned)}</td><td>${dt(u.created)}</td><td><button class="sm ${u.blocked ? 'ok' : 'no'}" data-u="${u.blocked ? 'unblock' : 'block'}" data-id="${esc(u.id)}">${u.blocked ? 'Unblock' : 'Block'}</button><button class="sm" data-u="password" data-id="${esc(u.id)}">Set password</button><button class="sm" data-u="adjust" data-id="${esc(u.id)}">Adjust</button><button class="sm no" data-u="delete" data-id="${esc(u.id)}">Delete</button></td></tr>`).join('') || `<tr><td colspan="${ov.role === 'headAdmin' ? 10 : 9}">${needle ? 'No users match this search.' : 'No registered users found in this scope. Check the user registered on the correct panel link.'}</td></tr>`}</table></div>`;
+      $('#userSearch').oninput = e => { const v = e.target.value; const pos = e.target.selectionStart; renderUsers(v); const next = $('#userSearch'); next.focus(); next.setSelectionRange(pos, pos); };
+      $('#refreshUsers').onclick = () => draw();
+      body.querySelectorAll('[data-u]').forEach(b => b.onclick = async () => {
+        const a = b.dataset.u, id = Number(b.dataset.id); let p = { id, action: a };
+        if (a === 'password') { p.password = prompt('New password (min 8):'); if (!p.password) return; }
+        else if (a === 'adjust') { p.amount = Number(prompt('Amount to add (negative to deduct), whole ₹:')); if (!p.amount) return; p.reason = prompt('Reason (required, logged):'); if (!p.reason) return; }
+        else if (!confirm(a === 'delete' ? 'Permanently delete user #' + id + '? Historical financial records will be retained for audit.' : a + ' user #' + id + '?')) return;
+        try { await api('admin/user', p); toast('Done'); } catch (x) { toast(x.message); } draw();
+      });
+    };
+    renderUsers();
   } else if (tab === 'demo') {
     const { users = [] } = await api('admin/demo-users');
     const demoWallet = users.reduce((n, u) => n + Number(u.balance || 0), 0);
