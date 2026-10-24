@@ -86,15 +86,17 @@
 #flipGameCard.flip-closing button[data-side]{cursor:not-allowed}
 
 /* Full-screen professional coin reveal: five-second spin, then result */
-#flipReveal{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(circle at 50% 42%,#1e2b46 0,#0b1220 68%,#05080f 100%);color:#fff;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
+#flipGameCard{position:relative;overflow:hidden}
+#flipReveal{position:absolute;inset:12px;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border-radius:18px;background:radial-gradient(circle at 50% 42%,#253653ed 0,#101a2bed 68%,#090f1bed 100%);color:#fff;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .42s cubic-bezier(.2,.75,.2,1),visibility .42s ease;backdrop-filter:blur(3px)}
 #flipReveal.is-active{opacity:1;visibility:visible;pointer-events:auto}
-#flipRevealCoin{width:min(44vw,240px);height:min(44vw,240px);min-width:150px;min-height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 32% 24%,#fff8d2 0,#f9d66a 17%,#e8ad25 48%,#9b5b09 78%,#f5c94c 100%);border:9px solid #f6d77d;box-shadow:inset 0 0 0 5px #fff1b3,inset 0 0 0 12px #b57a12,0 0 60px #f4c54d80,0 25px 80px #0009;color:#563600;font-size:clamp(22px,5vw,40px);font-weight:1000;letter-spacing:2px;transform:scale(.35);backface-visibility:hidden;will-change:transform}
+#flipRevealCoin{width:clamp(120px,26vw,190px);height:clamp(120px,26vw,190px);min-width:120px;min-height:120px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 32% 24%,#fff8d2 0,#f9d66a 17%,#e8ad25 48%,#9b5b09 78%,#f5c94c 100%);border:9px solid #f6d77d;box-shadow:inset 0 0 0 5px #fff1b3,inset 0 0 0 12px #b57a12,0 0 28px #f4c54d55,0 12px 28px #0007;color:#563600;font-size:clamp(22px,5vw,40px);font-weight:1000;letter-spacing:2px;transform:scale(.35);backface-visibility:hidden;will-change:transform}
 #flipRevealCoin span{display:flex;align-items:center;justify-content:center;width:78%;height:78%;border:4px dashed #a96c09;border-radius:50%;text-shadow:0 2px 0 #fff3bd}
-#flipReveal.is-spinning #flipRevealCoin{animation:flipFullScreenSpin 5s cubic-bezier(.16,.7,.24,1) both}
+#flipReveal.is-spinning #flipRevealCoin{animation:flipContainedSpin 5s cubic-bezier(.16,.7,.24,1) both}
 #flipRevealText{font-size:clamp(30px,7vw,68px);font-weight:1000;letter-spacing:.14em;text-shadow:0 5px 24px #0009;opacity:.9}
 #flipRevealText.result-text{animation:flipResultPop .5s cubic-bezier(.2,.85,.2,1) both;color:#ffe082}
 #flipRevealCoin.reveal-result{animation:flipRevealSettle .65s cubic-bezier(.2,.85,.2,1) both}
 @keyframes flipFullScreenSpin{0%{transform:scale(.35) rotateY(0) rotateZ(0)}12%{transform:scale(.7) rotateY(900deg) rotateZ(18deg)}30%{transform:scale(1.3) rotateY(2160deg) rotateZ(-15deg)}48%{transform:scale(2.3) rotateY(3600deg) rotateZ(10deg)}62%{transform:scale(3.8) rotateY(4680deg) rotateZ(-7deg)}76%{transform:scale(5.5) rotateY(5760deg) rotateZ(4deg)}88%{transform:scale(2.2) rotateY(6480deg) rotateZ(-2deg)}100%{transform:scale(1.15) rotateY(7200deg) rotateZ(0)}}
 @keyframes flipRevealSettle{0%{transform:scale(1.1) rotateY(0)}55%{transform:scale(1.28) rotateY(180deg)}100%{transform:scale(1) rotateY(360deg)}}
 @keyframes flipResultPop{0%{opacity:0;transform:translateY(16px) scale(.8)}70%{opacity:1;transform:translateY(-3px) scale(1.08)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:600px){#flipReveal{inset:8px;gap:10px}#flipRevealCoin{width:clamp(116px,34vw,160px);height:clamp(116px,34vw,160px);min-width:116px;min-height:116px}}
 @media(prefers-reduced-motion:reduce){#flipReveal,#flipRevealCoin,#flipRevealText{animation-duration:.01ms!important;transition:none!important}}
