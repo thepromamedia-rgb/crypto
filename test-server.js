@@ -224,7 +224,10 @@ const stub = http.createServer((q, r) => {
   const panelCreate = await a('POST', '/api/admin/panels', { action: 'create', name: 'Panel One', slug: 'panel-one', email: 'paneladmin@x.io', password: 'PanelPass123' });
   assert.equal(panelCreate.s, 200); assert.equal(panelCreate.j.panel.link, '/p/panel-one');
   const panelAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 1500, reason: 'panel test allocation' }); assert.equal(panelAllocation.s, 200); assert.equal(panelAllocation.j.panel.creditBalance, 1500); ok('Head Admin allocates isolated panel credits');
+  assert.equal(panelCreate.j.panel.adminLink, '/p/panel-one/admin');
   assert.equal((await fetch(base + '/p/panel-one')).status, 200); assert.equal((await fetch(base + '/p/panel-one/admin')).status, 200); ok('single-domain panel routes serve site and admin pages');
+  const wrongPanelLogin = await mk()('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' });
+  assert.equal(wrongPanelLogin.s, 403); assert.match(wrongPanelLogin.j.error, /\/p\/panel-one\/admin/); ok('wrong main-admin URL gives correct panel login link');
   const panelAdmin = mk('panel-one');
   assert.equal((await panelAdmin('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 200);
   assert.equal((await panelAdmin('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 100 })).s, 403); ok('panel admins cannot allocate or expand their own credit pool');

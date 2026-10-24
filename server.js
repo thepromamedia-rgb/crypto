@@ -438,6 +438,12 @@ const routes = {
     const email = normEmail(b.email); limit('login:' + req.ip, 20, 600e3); limit('loginu:' + email, 8, 600e3);
     const u = D.users.find(x => x.email === email) || D.demoUsers.find(x => x.email === email);
     if (!u || !checkPw(String(b.password || ''), u.pass)) fail(401, 'Wrong email or password.');
+    // Once credentials are verified, give panel admins a useful redirect hint instead of
+    // disguising a correct password as a password error when they use /admin by mistake.
+    if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
+      const slug = String(u.panelId || '');
+      fail(403, `This admin belongs to another panel. Open /p/${slug}/admin to log in.`);
+    }
     if (u.role !== 'headAdmin' && String(u.panelId || 'main') !== String(req.panelId || 'main')) fail(401, 'Wrong email or password.');
     if (u.blocked) fail(403, 'This account is blocked. Contact support.');
     setCookie(res, makeToken(u.id), 7 * 86400);
@@ -805,7 +811,7 @@ const routes = {
       const admin = { id: nid(), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
       panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);
       audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`); await save();
-      return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminEmail: email } };
+      return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminLink: '/p/' + panel.slug + '/admin', adminEmail: email } };
     }
     if (action === 'allocate') {
       const panel = D.panels.find(p => p.id === b.id && !p.deleted);
