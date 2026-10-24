@@ -80,3 +80,7 @@
 .flip-history-pages .secondary-btn{width:auto;flex:1;margin:0;padding:10px 8px;font-size:12px}
 .flip-history-pages .secondary-btn:disabled{opacity:.4;cursor:not-allowed}
 #flipHistoryPageLabel{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
+
+/* Flip Coin closing window grayscale */
+#flipGameCard.flip-closing{filter:grayscale(1);opacity:.78;transition:filter .2s,opacity .2s}
+#flipGameCard.flip-closing button[data-side]{cursor:not-allowed}

@@ -625,8 +625,16 @@ const routes = {
     const panelId = req.panelId || 'main', ts = now();
     // Global 30-second rounds: one server-generated outcome is shared by all users in a panel.
     const roundNo = Math.floor(ts / 30000), startTs = roundNo * 30000, endTs = startTs + 30000;
+    // Create round records independently of bets, backfilling recent rounds on every poll.
+    let roundsChanged = false;
+    for (let n = Math.max(0, roundNo - 10); n <= roundNo; n++) {
+      if (!D.flipCoinRounds.some(x => Number(x.roundNo) === n && String(x.panelId || 'main') === String(panelId))) {
+        D.flipCoinRounds.push({ roundNo:n, panelId, startTs:n*30000, endTs:(n+1)*30000, result:crypto.randomInt(0,2)?'tails':'heads', settled:false, createdTs:ts }); roundsChanged = true;
+      }
+    }
+    if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000);
     let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
-    if (!round) { round = { roundNo, panelId, startTs, endTs, result: crypto.randomInt(0, 2) ? 'tails' : 'heads', settled: false, createdTs: ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); await save(); }
+    if (roundsChanged) await save();
     // Settle bets from completed rounds once, using the stored shared result.
     let changed = false;
     for (const bet of (D.flipCoinBets || [])) {
@@ -648,7 +656,9 @@ const routes = {
     } else { gameSession.lastActivityTs = ts; }
     return { config: { enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, feePct: Number(cfg.feePct || 0) },
       round: { number: roundNo, startTs, endTs, remainingMs: Math.max(0, endTs-ts), bettingOpen: endTs-ts > 5000 },
-      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && x.status === 'Settled').slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,1000) };
+      resultsHistory: D.flipCoinRounds.filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) < roundNo).slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,10).map(x=>({roundNo:x.roundNo,result:x.result,endTs:x.endTs})),
+      currentBets: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo).map(x=>({id:x.id,side:x.side,amount:x.amount,status:x.status})),
+      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId)).slice().sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,1000) };
   },
   'POST /api/games/flip-coin': async (req, res, b, u) => {
     needUser(u); if (u.role !== 'user') fail(403, 'Only user accounts can play this game.');
@@ -662,6 +672,8 @@ const routes = {
     const panelId = req.panelId || 'main';
     let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
     if (!round) { round = { roundNo, panelId, startTs, endTs, result: crypto.randomInt(0,2) ? 'tails':'heads', settled:false, createdTs:ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); }
+    const existingRoundBets = (D.flipCoinBets || []).filter(x => String(x.userId) === String(u.id) && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo);
+    if (existingRoundBets.some(x => String(x.side).toLowerCase() !== side)) fail(400, 'Is round mein aap pehle hi doosri side choose kar chuke ho. Isi side par hi bet laga sakte ho.');
     const feePct = Number(cfg.feePct || 0), fee = r2(amount*feePct/100), debit = r2(amount+fee), before = r2(Number(u.balance||0));
     if (debit > before) fail(400, 'Not enough wallet credits for this bet and fee.');
     u.balance = r2(before-debit);
