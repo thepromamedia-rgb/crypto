@@ -980,8 +980,12 @@ async function handleApi(req, res, pathname) {
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
     const user = authUser(req); req.user = user;
-    if (user && user.role !== 'headAdmin' && String(user.panelId || 'main') !== String(req.panelId || 'main')) fail(403, 'This account belongs to a different panel.');
-    if (user && user.role === 'panelAdmin' && String(user.panelId || '') !== String(req.panelId || '')) fail(403, 'Admin panel access denied.');
+    // Login must be allowed to replace a stale cookie from another panel. Without
+    // this exception, a browser previously used for Main/another panel can block
+    // the new panel-admin login before the submitted credentials are checked.
+    const isLoginRequest = req.method === 'POST' && pathname === '/api/login';
+    if (!isLoginRequest && user && user.role !== 'headAdmin' && String(user.panelId || 'main') !== String(req.panelId || 'main')) fail(403, 'This account belongs to a different panel.');
+    if (!isLoginRequest && user && user.role === 'panelAdmin' && String(user.panelId || '') !== String(req.panelId || '')) fail(403, 'Admin panel access denied.');
     const out = await h(req, res, body, user);
     if (out && out.__download) { res.setHeader('Content-Disposition', `attachment; filename="${out.__download}"`); return json(res, 200, out.data); }
     json(res, 200, out);
