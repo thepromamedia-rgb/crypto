@@ -647,8 +647,9 @@ const routes = {
     const desiredPayout = r2(amount * multiplier);
     const walletProfitCap = r2(amount + before * walletProfitPct / 100);
     const payout = won ? Math.min(desiredPayout, walletProfitCap) : 0;
-    const lossAmount = won ? 0 : r2(Math.min(Math.max(0, before - fee), before * lossPct / 100));
-    u.balance = won ? r2(before - debit + payout) : r2(before - fee - lossAmount);
+    const lossAmount = won ? 0 : r2(amount);
+    // A losing round can only lose this bet (plus the clearly disclosed fee), never a percentage of the whole wallet.
+    u.balance = won ? r2(before - debit + payout) : r2(before - debit);
     if (u.balance < 0) { u.balance = before; fail(400, 'Insufficient wallet balance.'); }
 
     // Session thresholds are evaluated on the server. Percentages always use the
@@ -667,28 +668,15 @@ const routes = {
     const sessionBase = Math.max(0, Number(session.startBalance ?? before));
     session.betProfitCount = Number(session.betProfitCount || 0) + 1;
     session.betLossCount = Number(session.betLossCount || 0) + 1;
-    const adjustments = [];
-    const applyWalletRule = (kind, pct) => {
-      const raw = r2(sessionBase * Number(pct || 0) / 100);
-      if (!raw) return 0;
-      if (kind === 'profit') { u.balance = r2(u.balance + raw); adjustments.push({ type: kind, amount: raw }); return raw; }
-      const actual = r2(Math.min(Math.max(0, u.balance), raw));
-      u.balance = r2(u.balance - actual); adjustments.push({ type: kind, amount: -actual }); return actual;
-    };
+    // Thresholds are tracked for admin reporting only. They must not override fair
+    // random outcomes or apply hidden wallet credits/debits.
     const tpMin = Number(cfg.timeProfitMinutes || 0), tlMin = Number(cfg.timeLossMinutes || 0);
-    if (tpMin > 0 && ts - Number(session.timeProfitResetTs || session.startTs) >= tpMin * 60000) {
-      applyWalletRule('profit', cfg.timeProfitPct); session.timeProfitResetTs = ts;
-    }
-    if (tlMin > 0 && ts - Number(session.timeLossResetTs || session.startTs) >= tlMin * 60000) {
-      applyWalletRule('loss', cfg.timeLossPct); session.timeLossResetTs = ts;
-    }
+    if (tpMin > 0 && ts - Number(session.timeProfitResetTs || session.startTs) >= tpMin * 60000) session.timeProfitResetTs = ts;
+    if (tlMin > 0 && ts - Number(session.timeLossResetTs || session.startTs) >= tlMin * 60000) session.timeLossResetTs = ts;
     const bpCount = Number(cfg.betProfitCount || 0), blCount = Number(cfg.betLossCount || 0);
-    if (bpCount > 0 && session.betProfitCount >= bpCount) {
-      applyWalletRule('profit', cfg.betProfitPct); session.betProfitCount = 0;
-    }
-    if (blCount > 0 && session.betLossCount >= blCount) {
-      applyWalletRule('loss', cfg.betLossPct); session.betLossCount = 0;
-    }
+    if (bpCount > 0 && session.betProfitCount >= bpCount) session.betProfitCount = 0;
+    if (blCount > 0 && session.betLossCount >= blCount) session.betLossCount = 0;
+    const adjustments = [];
     if (u.balance < 0) { u.balance = before; fail(400, 'Insufficient wallet balance.'); }
     const lossShare = r2(lossAmount * lossSharePct / 100);
     const ruleProfit = r2(adjustments.filter(x => x.type === 'profit').reduce((n,x)=>n+x.amount,0));
