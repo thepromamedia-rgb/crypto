@@ -28,6 +28,11 @@ const UP_URL = UP_RAW && (/^https?:\/\//.test(UP_RAW) ? UP_RAW : 'https://' + UP
 const KEY = E.CB_DB_KEY || 'cryptobridge_data';
 const DATA_DIR = E.DATA_DIR || path.join(ROOT, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+// Render's ordinary service filesystem is ephemeral. A custom DATA_DIR is not
+// evidence of durability unless it is mounted to a Render persistent disk.
+const RENDER_DURABLE = !!(UP_URL && UP_TOKEN) || !!(E.DATA_DIR && E.CB_PERSISTENT_DISK === 'true');
+const STORAGE_WARNING = !!E.RENDER && !RENDER_DURABLE;
+
 
 async function up(cmd) {
   const r = await fetch(UP_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + UP_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify(cmd) });
@@ -85,6 +90,8 @@ function assertPanelAccess(req, row) { if (!isHead(req.user) && !panelValueMatch
 
 async function loadDB() {
   let raw = null;
+  if (UP_URL && !UP_TOKEN) throw new Error('UPSTASH_REDIS_REST_TOKEN is missing');
+  if (UP_TOKEN && !UP_URL) throw new Error('UPSTASH_REDIS_REST_URL is missing');
   if (UP_URL) { raw = await up(['GET', KEY]); console.log('Storage: Upstash Redis'); }
   else {
     try { raw = fs.readFileSync(DB_FILE, 'utf8'); } catch {}
@@ -979,13 +986,14 @@ const routes = {
         blocked:!!admin?.blocked, panelIdMatches:!!(admin && panelValueMatches(p,admin.panelId)),
         loginUrl:'/p/'+p.slug+'/admin' };
     });
-    return { storage:UP_URL?'upstash':'local-file', persistentStorageConfigured:!!UP_URL || !!E.DATA_DIR,
-      warning:(!UP_URL && !E.DATA_DIR && PROD)?'Local storage may be erased on redeploy or restart. Configure Upstash or durable DATA_DIR.':null, panels };
+    return { storage:UP_URL?'upstash':'local-file', persistentStorageConfigured:RENDER_DURABLE,
+      warning:STORAGE_WARNING?'Render filesystem is ephemeral. Configure Upstash or a mounted disk (DATA_DIR and CB_PERSISTENT_DISK=true).':null, panels };
   },
   'POST /api/admin/panels': async (req, res, b, u) => {
     needHead(u);
     const action = str(b.action, 16);
     if (action === 'create') {
+      if (STORAGE_WARNING) fail(503, 'Panel creation requires persistent storage on Render. Configure Upstash Redis or a mounted persistent disk first.');
       const name = str(b.name, 60), slug = str(b.slug, 48).toLowerCase().replace(/^\/+|\/+$/g, ''), email = normEmail(b.email), password = String(b.password || '');
       if (name.length < 2) fail(400, 'Panel name must have at least 2 characters.');
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug === 'main' || slug === 'admin') fail(400, 'Link ID must use lowercase letters, numbers and hyphens; main/admin are reserved.');
@@ -1057,6 +1065,7 @@ const routes = {
     const panel = D.panels.find(p => p.id === b.id && p.slug !== 'main' && !p.deleted);
     if (!panel) fail(404, 'Panel not found.');
     if (action === 'edit') {
+      if (STORAGE_WARNING) fail(503, 'Panel creation requires persistent storage on Render. Configure Upstash Redis or a mounted persistent disk first.');
       const name = str(b.name, 60), slug = str(b.slug, 48).toLowerCase().replace(/^\/+|\/+$/g, '');
       const admin = D.users.find(x => x.id === panel.adminUserId);
       const email = b.email !== undefined ? normEmail(b.email) : (admin && admin.email);
