@@ -66,3 +66,11 @@
 @keyframes coinLoss{0%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}100%{transform:translateX(0)}}
 @keyframes outcomePop{0%{transform:scale(.92);opacity:.3}100%{transform:scale(1);opacity:1}}
 @media(prefers-reduced-motion:reduce){.flip-coin-visual,.flip-outcome{animation:none!important}}
+/* Flip Coin mobile layout */
+#flipForm .balance-actions{display:flex;gap:12px;margin-top:8px;flex-wrap:nowrap}
+#flipForm .balance-actions button{min-height:78px;border:0;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;font-size:15px;background:#16805a;color:#fff}
+#flipForm .balance-actions button[data-side="tails"]{background:#245ce8}
+#flipForm .balance-actions button small{font-size:13px;font-weight:500;color:#fff}
+#flipForm label{font-weight:700}
+#flipForm input#flipBet{font-size:18px;font-weight:700}
+.flip-amount-hint{font-size:12px;color:var(--muted);margin:12px 0 0}
