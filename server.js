@@ -969,6 +969,19 @@ const routes = {
     });
     return { panels, totalPanels: panels.length, totalUsers: D.users.filter(x => x.role === 'user').length, totalDemoUsers: D.demoUsers.length, totalWallets: r2(D.users.filter(x => x.role === 'user').reduce((n, x) => n + Number(x.balance || 0), 0)), totalCreditsAvailable: r2(panels.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), totalCreditsAllocated: r2(panels.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), totalCreditsUsed: r2(panels.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) };
   },
+  'GET /api/admin/panel-login-diagnostics': async (req, res, b, u) => {
+    needHead(u);
+    const panels = D.panels.filter(p => p.slug !== 'main' && !p.deleted).map(p => {
+      const admin = D.users.find(x => x.id === p.adminUserId && x.role === 'panelAdmin')
+        || D.users.find(x => x.role === 'panelAdmin' && panelValueMatches(p, x.panelId));
+      return { panel:p.slug, active:p.active !== false, adminFound:!!admin,
+        email:admin?.email || null, passwordHashValid:!!(admin && /^[a-f0-9]{32}:[a-f0-9]{128}$/i.test(String(admin.pass||''))),
+        blocked:!!admin?.blocked, panelIdMatches:!!(admin && panelValueMatches(p,admin.panelId)),
+        loginUrl:'/p/'+p.slug+'/admin' };
+    });
+    return { storage:UP_URL?'upstash':'local-file', persistentStorageConfigured:!!UP_URL || !!E.DATA_DIR,
+      warning:(!UP_URL && !E.DATA_DIR && PROD)?'Local storage may be erased on redeploy or restart. Configure Upstash or durable DATA_DIR.':null, panels };
+  },
   'POST /api/admin/panels': async (req, res, b, u) => {
     needHead(u);
     const action = str(b.action, 16);
@@ -983,8 +996,16 @@ const routes = {
       const panel = { id: 'panel-' + crypto.randomBytes(6).toString('hex'), slug, aliases: [], name, active: true, deleted: false, created: now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(S(req)) };
       panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
       const admin = { id: nid(), uid: nextAccountUid('PAD'), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
+      if (!checkPw(password, admin.pass)) fail(500, 'Panel admin credential validation failed.');
       panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);
-      audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`); await save();
+      try {
+        await save();
+      } catch (err) {
+        D.panels = D.panels.filter(x => x.id !== panel.id);
+        D.users = D.users.filter(x => x.id !== admin.id);
+        throw new HttpError(503, 'Panel account could not be saved to persistent storage. Check database configuration before retrying.');
+      }
+      audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`);
       return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminLink: '/p/' + panel.slug + '/admin', adminEmail: email } };
     }
     if (action === 'allocate') {
