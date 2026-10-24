@@ -244,7 +244,7 @@ const stub = http.createServer((q, r) => {
   const panelUser = mk('panel-one');
   const panelRegister = await panelUser('POST', '/api/register', { name: 'Panel User', email: 'paneluser@x.io', password: 'password1' });
   assert.equal(panelRegister.s, 200); assert.ok(panelRegister.j.user.id != null);
-  const panelListed = await panelAdmin('GET', '/api/admin/users'); assert.equal(panelListed.s, 200); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').panelId, 'panel-one-renamed');
+  const panelListed = await panelAdmin('GET', '/api/admin/users'); assert.equal(panelListed.s, 200); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').uid, String(panelRegister.j.user.id)); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').panelId, 'panel-one-renamed');
   const headListed = await a('GET', '/api/admin/users'); assert.equal(headListed.s, 200); assert.equal(headListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(headListed.j.scope, 'all-panels'); ok('registered user UID appears in both panel admin and Head Admin user lists');
   const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345' });
   assert.equal(panelDep.s, 200); assert.equal((await panelAdmin('GET', '/api/admin/deposits')).j.items.length, 1);
@@ -258,7 +258,7 @@ const stub = http.createServer((q, r) => {
   const tooMuch = await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'approve', credits: 400 }); assert.equal(tooMuch.s, 409); assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1200); ok('insufficient panel credits block deposit approval without mutation');
   assert.equal((await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'reject' })).s, 200);
   const panelUserId = (await panelUser('GET', '/api/me')).j.user.id;
-  const manualCredit = await panelAdmin('POST', '/api/admin/user', { id: panelUserId, action: 'adjust', amount: 200, reason: 'test manual wallet credit' }); assert.equal(manualCredit.s, 200);
+  const manualCredit = await panelAdmin('POST', '/api/admin/user', { id: panelUserId, action: 'adjust', amount: 200, reason: 'test manual wallet credit' }); assert.equal(manualCredit.s, 200); assert.equal(manualCredit.j.uid, String(panelUserId)); assert.equal(manualCredit.j.balance, 1400);
   assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400); assert.equal((await panelAdmin('GET', '/api/admin/overview')).j.creditBalance, 100); ok('manual positive wallet adjustment debits panel credits');
   const panelId = panelCreate.j.panel.id;
   const reclaim = await a('POST', '/api/admin/panels', { action: 'reclaim', id: panelId, amount: 50, reason: 'test reclaim unused credits' });

@@ -494,4 +494,13 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
     if (allowedPages.has(page) && page !== state.page) { await loadMe(); renderPage(page); }
   });
   pullPrices(); setInterval(pullPrices, 20000);
+  // Refresh a signed-in user's wallet when an admin changes their balance in another session.
+  const syncWallet = async () => {
+    if (!state.me) return;
+    const previous = Number(state.me.balance || 0);
+    await loadMe();
+    if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
+  };
+  window.addEventListener('focus', syncWallet);
+  setInterval(syncWallet, 15000);
 })();

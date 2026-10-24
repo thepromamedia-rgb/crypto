@@ -63,8 +63,13 @@ function getPanel(slug) {
 const S = req => (req && req.panel && req.panel.settings) || D.settings;
 const isHead = u => !!u && u.role === 'headAdmin';
 const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
-const panelRows = (req, rows) => isHead(req.user) ? rows : rows.filter(x => String(x.panelId || 'main') === String(req.panelId || 'main'));
-function assertPanelAccess(req, row) { if (!isHead(req.user) && String(row && row.panelId || 'main') !== String(req.panelId || 'main')) fail(404, 'Not found'); }
+function panelValueMatches(panel, value) {
+  const v = String(value || 'main');
+  if (!panel) return v === 'main';
+  return v === String(panel.slug) || v === String(panel.id) || (Array.isArray(panel.aliases) && panel.aliases.includes(v));
+}
+const panelRows = (req, rows) => isHead(req.user) ? rows : rows.filter(x => panelValueMatches(req.panel, x.panelId || 'main'));
+function assertPanelAccess(req, row) { if (!isHead(req.user) && !panelValueMatches(req.panel, row && row.panelId || 'main')) fail(404, 'Not found'); }
 
 async function loadDB() {
   let raw = null;
@@ -96,8 +101,13 @@ async function loadDB() {
     if (!p.settings) p.settings = clone(D.settings);
     if (p.slug !== 'main' && !p.deleted && !p.active) p.active = true;
   }
-  // Backfill old records into the existing main panel without discarding data.
-  for (const x of [...D.users, ...D.demoUsers, ...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (!x.panelId) x.panelId = 'main';
+  // Normalize historical panel references (slug, alias or internal panel ID) without dropping records.
+  const panelScopedRows = [...D.users, ...D.demoUsers, ...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions, ...D.creditLedger];
+  for (const x of panelScopedRows) {
+    if (!x.panelId) { x.panelId = 'main'; continue; }
+    const owner = D.panels.find(p => !p.deleted && panelValueMatches(p, x.panelId));
+    if (owner) x.panelId = owner.slug;
+  }
 }
 let saveChain = Promise.resolve();
 function save() {
@@ -181,7 +191,7 @@ function limit(key, max, windowMs) {
 }
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
-const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role || 'user', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), balance: u.balance, refCode: u.refCode || '', created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
+const pubUser = u => ({ id: u.id, uid: String(u.id), name: u.name, email: u.email, phone: u.phone, role: u.role || 'user', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), balance: Number(u.balance || 0), refCode: u.refCode || '', created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
 const normEmail = v => str(v, 120).toLowerCase();
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
@@ -761,7 +771,7 @@ const routes = {
       if (!Number.isInteger(amt) || amt === 0 || Math.abs(amt) > MAX_AMOUNT) fail(400, 'Enter a non-zero whole amount.');
       if (!reason) fail(400, 'A reason is required.'); if (t.balance + amt < 0) fail(400, 'Balance cannot go below zero.');
       if (amt > 0) consumePanelCredits(String(t.panelId || req.panelId || 'main'), amt, u.email, 'wallet-adjustment', `user #${t.id} ${t.email}; ${reason}`);
-      t.balance = r2(t.balance + amt); audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true, creditBalance: r2(req.panel.creditBalance || 0) };
+      t.balance = r2(t.balance + amt); audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true, uid: String(t.id), balance: r2(t.balance), creditBalance: r2(req.panel.creditBalance || 0) };
     } else fail(400, 'Bad action');
     audit(u.email, 'user-' + b.action, `#${t.id} ${t.email}`); await save(); return { ok: true };
   },
