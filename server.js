@@ -196,30 +196,41 @@ const KL_API = E.BINANCE_KLINES_URL || 'https://data-api.binance.vision/api/v3/k
 const klCache = new Map();
 function getAdminCoinKlines(coin, iv) {
   const durations = { '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000, '1h': 3600000, '4h': 14400000, '1d': 86400000 };
-  const step = durations[iv] || 3600000, count = 100, nowTs = Math.floor(now() / step) * step;
+  const step = durations[iv] || 3600000, nowMs = now(), latestTs = Math.floor(nowMs / step) * step;
   const base = Math.max(0.00000001, Number(coin.startPrice) || 1);
   const pct = Math.max(-95, Math.min(500, Number(coin.chartPercent ?? 0)));
-  // Admin coin candles are generated server-side, with a configurable 24-hour target move.
-  // 'graph' mode adds bounded candle-to-candle volatility; these are simulated, not exchange data.
-  const elapsedMs = Math.max(0, now() - Number(coin.updatedAt || now()));
-  const targetPrice = Math.max(0.00000001, base * Math.pow(Math.max(0.05, 1 + pct / 100), elapsedMs / 86400000));
-  // Vary simulated candle shape on a short time bucket so refreshes visibly move.
-  const seedText = String(coin.symbol || 'COIN') + ':' + Math.floor(now() / 5000); let seed = 0;
-  for (let i = 0; i < seedText.length; i++) seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
-  const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-  const drift = Math.pow(Math.max(0.05, 1 + pct / 100), step / 86400000);
-  let close = base / Math.pow(drift, count - 1), out = [];
-  for (let i = 0; i < count; i++) {
-    const open = close;
-    const wave = coin.chartMode === 'graph' ? (rand() - 0.5) * 0.035 : (rand() - 0.5) * 0.004;
-    close = Math.max(0.00000001, open * drift * (1 + wave));
-    const high = Math.max(open, close) * (1 + rand() * (coin.chartMode === 'graph' ? 0.018 : 0.003));
-    const low = Math.max(0.00000001, Math.min(open, close) * (1 - rand() * (coin.chartMode === 'graph' ? 0.018 : 0.003)));
-    out.push([nowTs - (count - 1 - i) * step, open, high, low, close, Math.round(rand() * 1000)]);
+  const trendHours = Math.max(1, Math.min(8760, Number(coin.chartHours) || 24));
+  const ageHours = Math.max(1, Math.min(8760, Number(coin.chartAgeHours) || 24));
+  const chartStartedAt = Number(coin.chartStartedAt) || (nowMs - ageHours * 3600000);
+  const firstTs = Math.floor(chartStartedAt / step) * step;
+  const count = Math.max(2, Math.min(2000, Math.floor((latestTs - firstTs) / step) + 1));
+  const volatility = Math.max(0, Math.min(20, Number(coin.candleVolatilityPct ?? 2))) / 100;
+  // Stable synthetic OHLC candles. Historical candles are deterministic per time bucket;
+  // only the currently-forming candle changes between polls. Not exchange-sourced data.
+  const elapsedHours = Math.max(0, (latestTs - chartStartedAt) / 3600000);
+  const target = Math.max(0.00000001, base * Math.pow(Math.max(0.05, 1 + pct / 100), elapsedHours / trendHours));
+  const drift = Math.pow(Math.max(0.05, 1 + pct / 100), step / (trendHours * 3600000));
+  const randomFor = ts => {
+    const text = `${coin.symbol || 'COIN'}:${ts}`; let seed = 2166136261;
+    for (let i = 0; i < text.length; i++) seed = Math.imul(seed ^ text.charCodeAt(i), 16777619) >>> 0;
+    return () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  };
+  const out = new Array(count); let close = target;
+  for (let i = count - 1; i >= 0; i--) {
+    const ts = latestTs - (count - 1 - i) * step, rand = randomFor(ts);
+    const candleMove = (rand() * 2 - 1) * volatility;
+    const open = Math.max(0.00000001, close / Math.max(0.00000001, drift * (1 + candleMove)));
+    const isCurrent = i === count - 1;
+    const phase = Math.max(0, Math.min(1, (nowMs - latestTs) / step));
+    const wobble = isCurrent ? Math.sin(phase * Math.PI * 2 + (ts % 17)) * volatility * phase : 0;
+    const candleClose = Math.max(0.00000001, isCurrent ? target * (1 + wobble) : close);
+    const high = Math.max(open, candleClose) * (1 + rand() * volatility * 0.7);
+    const low = Math.max(0.00000001, Math.min(open, candleClose) * (1 - rand() * volatility * 0.7));
+    out[i] = [ts, open, high, low, candleClose, Math.round(100 + rand() * 900)];
+    close = open;
   }
-  // Keep the latest candle anchored to the admin's current configured display price.
-  const target = targetPrice, scale = target / out[out.length - 1][4];
-  return out.map(k => [k[0], k[1] * scale, k[2] * scale, k[3] * scale, k[4] * scale, k[5]]);
+  // Keep all completed candles unchanged during the current interval; only last candle wobbles.
+  return out;
 }
 async function getKlines(sym, iv) {
   const adminCoin = (D.settings.bonusCoins || []).find(x => x.symbol === sym);
@@ -530,7 +541,7 @@ const routes = {
       D.settings.bonusCoins = D.settings.bonusCoins.filter(x => x.symbol !== sym); D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
       audit(u.email, 'bonuscoin-delete', sym); await save(); return { ok: true, coins: D.settings.bonusCoins };
     }
-    const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1), chartPercent = Number(b.chartPercent ?? 0), chartMode = b.chartMode === 'graph' ? 'graph' : 'percent';
+    const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1), chartPercent = Number(b.chartPercent ?? 0), chartMode = b.chartMode === 'graph' ? 'graph' : 'percent', chartHours = Number(b.chartHours ?? 24), chartAgeHours = Number(b.chartAgeHours ?? 24), candleVolatilityPct = Number(b.candleVolatilityPct ?? 2);
     if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.');
     if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
     if (name.length < 2) fail(400, 'Enter a coin name.');
@@ -539,12 +550,17 @@ const routes = {
     if (!Number.isInteger(lock) || lock < 0 || lock > 604800) fail(400, 'Countdown must be 0–604800 seconds.');
     if (!Number.isInteger(mn) || mn < 1 || !Number.isInteger(mx) || mx < mn || mx > MAX_AMOUNT) fail(400, 'Check min / max amounts.');
     if (!Number.isFinite(startPrice) || startPrice <= 0 || startPrice > MAX_AMOUNT) fail(400, 'Starting price must be positive.');
-    if (!Number.isFinite(chartPercent) || chartPercent < -95 || chartPercent > 500) fail(400, 'Chart 24h change must be between -95% and 500%.');
+    if (!Number.isFinite(chartPercent) || chartPercent < -95 || chartPercent > 500) fail(400, 'Chart target change must be between -95% and 500%.');
+    if (!Number.isFinite(chartHours) || chartHours < 1 || chartHours > 8760) fail(400, 'Trend duration must be 1–8760 hours.');
+    if (!Number.isFinite(chartAgeHours) || chartAgeHours < 1 || chartAgeHours > 8760) fail(400, 'Coin chart age must be 1–8760 hours.');
+    if (!Number.isFinite(candleVolatilityPct) || candleVolatilityPct < 0 || candleVolatilityPct > 20) fail(400, 'Candle volatility must be 0–20%.');
     let coin = D.settings.bonusCoins.find(x => x.symbol === sym);
     if (action === 'add' && coin) fail(409, 'Bonus coin already exists.');
     if (action !== 'add' && !coin && action !== 'save') fail(404, 'Bonus coin not found.');
     const old = coin || {};
-    coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), priceMode: 'admin-simulated', chartMode, chartPercent };
+    const chartAgeChanged = !old.id || Number(old.chartAgeHours || 24) !== chartAgeHours;
+    const chartStartedAt = chartAgeChanged ? now() - chartAgeHours * 3600000 : (Number(old.chartStartedAt) || now() - chartAgeHours * 3600000);
+    coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), chartStartedAt, chartAgeHours, priceMode: 'admin-simulated', chartMode, chartPercent, chartHours, candleVolatilityPct };
     if (!old.id) D.settings.bonusCoins.push(coin); else D.settings.bonusCoins = D.settings.bonusCoins.map(x => x.symbol === sym ? coin : x);
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     audit(u.email, 'bonuscoin-' + action, JSON.stringify(coin)); await save(); return { ok: true, coin, coins: D.settings.bonusCoins };
