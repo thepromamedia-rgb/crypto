@@ -63,6 +63,18 @@ function getPanel(slug) {
 const S = req => (req && req.panel && req.panel.settings) || D.settings;
 const isHead = u => !!u && u.role === 'headAdmin';
 const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
+const FLIP_MODES = ['heads','tails','lower','random'];
+const flipMode = panelId => {
+  const panel = (D.panels || []).find(p=>p.slug===panelId);
+  const cfg = panel?.settings?.flipCoin || (panelId==='main' ? D.settings.flipCoin : {});
+  return FLIP_MODES.includes(cfg?.winningMode) ? cfg.winningMode : 'lower';
+};
+const flipTotals = (panelId, roundNo) => {
+  const bets=(D.flipCoinBets||[]).filter(x=>String(x.panelId||'main')===String(panelId)&&Number(x.roundNo)===Number(roundNo));
+  return {heads:r2(bets.filter(x=>x.side==='heads').reduce((n,x)=>n+Number(x.amount||0),0)),tails:r2(bets.filter(x=>x.side==='tails').reduce((n,x)=>n+Number(x.amount||0),0)),headsCount:bets.filter(x=>x.side==='heads').length,tailsCount:bets.filter(x=>x.side==='tails').length};
+};
+const chooseFlipResult = (mode,t) => mode==='heads'?'heads':mode==='tails'?'tails':mode==='lower'?(t.heads<t.tails?'heads':t.tails<t.heads?'tails':crypto.randomInt(0,2)?'heads':'tails'):(crypto.randomInt(0,2)?'heads':'tails');
+
 function panelValueMatches(panel, value) {
   const v = String(value || 'main');
   if (!panel) return v === 'main';
@@ -385,7 +397,7 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
+const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (!['admin', 'headAdmin', 'panelAdmin'].includes(u.role)) fail(403, 'Forbidden'); };
 const needHead = u => { needUser(u); if (!isHead(u)) fail(403, 'Head Admin only.'); };
@@ -629,7 +641,7 @@ const routes = {
     let roundsChanged = false;
     for (let n = Math.max(0, roundNo - 10); n <= roundNo; n++) {
       if (!D.flipCoinRounds.some(x => Number(x.roundNo) === n && String(x.panelId || 'main') === String(panelId))) {
-        D.flipCoinRounds.push({ roundNo:n, panelId, startTs:n*30000, endTs:(n+1)*30000, result:crypto.randomInt(0,2)?'tails':'heads', settled:false, createdTs:ts }); roundsChanged = true;
+        D.flipCoinRounds.push({ roundNo:n, panelId, startTs:n*30000, endTs:(n+1)*30000, result:null, winningMode:flipMode(panelId), settled:false, createdTs:ts }); roundsChanged = true;
       }
     }
     if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000);
@@ -642,7 +654,8 @@ const routes = {
       const bets = (D.flipCoinBets || []).filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === Number(r.roundNo));
       const heads = r2(bets.filter(x => x.side === 'heads').reduce((n,x)=>n+Number(x.amount||0),0));
       const tails = r2(bets.filter(x => x.side === 'tails').reduce((n,x)=>n+Number(x.amount||0),0));
-      r.result = heads < tails ? 'heads' : tails < heads ? 'tails' : crypto.randomInt(0,2) ? 'heads' : 'tails';
+      r.winningMode = r.winningMode || flipMode(panelId);
+      r.result = chooseFlipResult(r.winningMode,{heads,tails});
       r.headsTotal = heads; r.tailsTotal = tails; r.outcomeLocked = true;
       roundsChanged = true;
     }
@@ -666,9 +679,9 @@ const routes = {
       gameSession = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: ts, startBalance: r2(Number(u.balance || 0)), timeProfitResetTs: ts, timeLossResetTs: ts, betProfitCount: 0, betLossCount: 0, lastActivityTs: ts };
       D.flipCoinSessions = D.flipCoinSessions.filter(x => !(x.userId === u.id && String(x.panelId || 'main') === String(panelId))); D.flipCoinSessions.push(gameSession); await save();
     } else { gameSession.lastActivityTs = ts; }
-    return { config: { enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, feePct: Number(cfg.feePct || 0) },
+    return { config: { winningMode:flipMode(panelId), enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, feePct: Number(cfg.feePct || 0) },
       round: { number: roundNo, startTs, endTs, remainingMs: Math.max(0, endTs-ts), bettingOpen: endTs-ts > 5000 },
-      resultsHistory: D.flipCoinRounds.filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) < roundNo).slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,10).map(x=>({roundNo:x.roundNo,result:x.result,endTs:x.endTs})),
+      resultsHistory: D.flipCoinRounds.filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) < roundNo && x.outcomeLocked).slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,10).map(x=>({roundNo:x.roundNo,result:x.result,endTs:x.endTs})),
       currentBets: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo).map(x=>({id:x.id,side:x.side,amount:x.amount,status:x.status})),
       history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId)).slice().sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,1000) };
   },
@@ -683,7 +696,7 @@ const routes = {
     if (remainingMs <= 5000) fail(400, 'Betting closed for this round. Wait for the next round.');
     const panelId = req.panelId || 'main';
     let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
-    if (!round) { round = { roundNo, panelId, startTs, endTs, result: crypto.randomInt(0,2) ? 'tails':'heads', settled:false, createdTs:ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); }
+    if (!round) { round = { roundNo, panelId, startTs, endTs, result:null, winningMode:flipMode(panelId), settled:false, createdTs:ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); }
     const existingRoundBets = (D.flipCoinBets || []).filter(x => String(x.userId) === String(u.id) && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo);
     if (existingRoundBets.some(x => String(x.side).toLowerCase() !== side)) fail(400, 'Is round mein aap pehle hi doosri side choose kar chuke ho. Isi side par hi bet laga sakte ho.');
     const feePct = Number(cfg.feePct || 0), fee = r2(amount*feePct/100), debit = r2(amount+fee), before = r2(Number(u.balance||0));
@@ -697,11 +710,26 @@ const routes = {
   // ----- admin -----
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const rows = (D.flipCoinBets || []).filter(x => isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')).slice().sort((a,b) => b.ts-a.ts).slice(0,1000);
-    const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>x.status==='Settled' && !x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); return { config: { ...(S(req).flipCoin||{}), enabled:true, multiplier:2 }, items: rows, totalBets: rows.length, totalWager, totalPayout, fees, lossShare: r2(rows.reduce((n,x)=>n+Number(x.lossShare||0),0)), platformNet };
+    const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>x.status==='Settled' && !x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); const currentRound=Math.floor(now()/30000);
+    const allowedPanels=isHead(u)?(D.panels||[]).filter(p=>!p.deleted).map(p=>p.slug):[req.panelId||'main'];
+    if(!allowedPanels.includes('main')&&isHead(u))allowedPanels.unshift('main');
+    const livePanels=allowedPanels.map(pid=>{
+      const totals=flipTotals(pid,currentRound);
+      const mode=flipMode(pid);
+      const higher=totals.heads>totals.tails?'heads':totals.tails>totals.heads?'tails':'equal';
+      const round=(D.flipCoinRounds||[]).find(x=>x.panelId===pid&&Number(x.roundNo)===currentRound);
+      const provisional=mode==='heads'||mode==='tails'?mode:mode==='lower'&&higher!=='equal'?(higher==='heads'?'tails':'heads'):null;
+      return {panelId:pid,...totals,higher,winningMode:mode,provisional,confirmed:round?.outcomeLocked?round.result:null,roundNo:currentRound};
+    });
+    return { livePanels, config: { ...(S(req).flipCoin||{}), winningMode:flipMode(req.panelId||'main'), enabled:true, multiplier:2 }, items: rows, totalBets: rows.length, totalWager, totalPayout, fees, lossShare: r2(rows.reduce((n,x)=>n+Number(x.lossShare||0),0)), platformNet };
   },
   'POST /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const old = S(req).flipCoin || {}; const next = { ...old };
     next.enabled = true; next.multiplier = 2;
+    if (b.winningMode !== undefined) {
+      if (!FLIP_MODES.includes(b.winningMode)) fail(400,'Invalid winning rule');
+      next.winningMode=b.winningMode;
+    }
     for (const [key,label,min,max] of [['minBet','Minimum bet',1,MAX_AMOUNT],['maxBet','Maximum bet',1,MAX_AMOUNT],['lossSharePct','Platform share of bet losses',0,100],['feePct','Per-bet platform fee percentage',0,10]]) {
       if (b[key] !== undefined) { const n = Number(b[key]); if (!Number.isFinite(n) || n < min || n > max) fail(400, `${label} must be between ${min} and ${max}.`); next[key] = n; }
     }
