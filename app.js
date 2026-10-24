@@ -2,7 +2,7 @@
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null };
+const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -182,7 +182,7 @@ async function loadChart(initial) {
   if (initial) drawChart();
   if (c && Date.now() - c.ts < 5e3) return;
   try { state.kl[key] = { ts: Date.now(), candles: await fetchKlines(sym, iv) }; state.klErr = ''; } catch { if (!c) state.klErr = 'Chart data is not available right now.'; }
-  if (state.page === 'Coin' && state.coin === sym && state.interval === iv) drawChart();
+  if (state.page === 'Coin' && state.coin === sym && state.interval === iv) { if (state.chartGestureActive) state.chartPendingRedraw = true; else drawChart(); }
 }
 const pFmt = v => v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v.toFixed(4);
 function maSeries(d, p) { const o = []; let s = 0; d.forEach((x, i) => { s += x[4]; if (i >= p) s -= d[i - p][4]; o.push(i >= p - 1 ? s / p : null); }); return o; }
@@ -216,10 +216,90 @@ function drawChart() {
   const info = i => { const x = d[i], ch = (x[4] - x[1]) / (x[1] || 1) * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span><span>Vol <b>${vf(x[5] || 0)}</b></span>` + (candle ? '<span class="ma-row">' + MAS.map(m => m.v[i] == null ? '' : `<span style="color:${m.col}">MA${m.p} <b style="color:${m.col}">${pFmt(m.v[i])}</b></span>`).join('') + '</span>' : ''); };
   info(n - 1); const xh = $('#xh'), ov = $('#ov'), svg = box.querySelector('svg'); if (svg) { svg.style.transformOrigin = 'center center'; svg.style.willChange = 'transform'; } let drag = null;
   const point = e => { const r = ov.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H; return { i: Math.max(0, Math.min(n - 1, Math.floor((px - L) / pw * n))), price: hi - (py - T) / PH * (hi - lo) }; };
-  const activePointers = new Map(); let pinchStart = null;
-  ov.addEventListener('pointerdown', e => { ov.setPointerCapture(e.pointerId); activePointers.set(e.pointerId, {x:e.clientX,y:e.clientY}); if (activePointers.size === 2) { drag = null; const pts = [...activePointers.values()]; pinchStart = { distance: Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y) || 1, count: view.count, changed:false }; return; } if (state.drawMode) { const q = point(e), candlePoint = d[q.i]; if (state.drawMode === 'horizontal') { (state.chartDrawings[key] ||= []).push({ horizontal:true, p1:Math.max(lo,Math.min(hi,q.price)) }); state.drawMode = false; state.drawDraft = null; $$('[data-draw-line],[data-draw-horizontal]').forEach(b=>b.classList.remove('on')); $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles'; drawChart(); return; } if (!state.drawDraft) { state.drawDraft = { t: candlePoint[0], p: Math.max(lo, Math.min(hi, q.price)) }; $('#chartHint').textContent = 'Tap/click a second point to finish the trend line.'; } else { (state.chartDrawings[key] ||= []).push({ t1: state.drawDraft.t, p1: state.drawDraft.p, t2: candlePoint[0], p2: Math.max(lo, Math.min(hi, q.price)) }); state.drawDraft = null; state.drawMode = false; $$('[data-draw-line],[data-draw-horizontal]').forEach(b => b.classList.remove('on')); $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles'; drawChart(); } return; } drag = { x: e.clientX, offset: view.offset, moved: false }; ov.style.cursor = 'grabbing'; });
-  ov.addEventListener('pointermove', e => { if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId,{x:e.clientX,y:e.clientY}); if (activePointers.size >= 2 && pinchStart) { const pts=[...activePointers.values()], dist=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y)||1; view.count=Math.max(12,Math.min(total,Math.round(pinchStart.count*pinchStart.distance/dist))); view.offset=Math.min(view.offset,total-view.count); pinchStart.changed=true; if (svg) svg.style.transform = `scaleX(${Math.max(.65, Math.min(1.8, dist / pinchStart.distance))})`; return; } const q = point(e); xh.setAttribute('x1', X(q.i)); xh.setAttribute('x2', X(q.i)); xh.setAttribute('visibility', 'visible'); info(q.i); if (drag && !state.drawMode) { const dx = e.clientX - drag.x; if (Math.abs(dx) > 3) drag.moved = true; if (drag.moved) { view.offset = Math.max(0, Math.min(total - view.count, drag.offset + Math.round(dx / Math.max(1, pw) * view.count * -1))); if (svg) svg.style.transform = `translateX(${dx}px)`; } } });
-  const endPointer = e => { const wasPinching = !!pinchStart, pinchChanged = !!(pinchStart && pinchStart.changed); activePointers.delete(e.pointerId); if (activePointers.size < 2) pinchStart=null; const moved = !!(drag && drag.moved); drag = null; if (moved || (wasPinching && activePointers.size < 2 && pinchChanged)) drawChart(); else if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }; ov.addEventListener('pointerup', endPointer); ov.addEventListener('pointercancel', endPointer);
+  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false;
+  const finishGesture = () => {
+    state.chartGestureActive = false;
+    if (svg) svg.style.transform = '';
+    drawChart();
+    state.chartPendingRedraw = false;
+  };
+  ov.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { ov.setPointerCapture(e.pointerId); } catch (_) {}
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 1) gestureChanged = false;
+    state.chartGestureActive = true;
+    if (activePointers.size === 2) {
+      drag = null;
+      const pts = [...activePointers.values()];
+      pinchStart = { distance: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1, count: view.count, changed: false };
+      return;
+    }
+    if (state.drawMode) {
+      const q = point(e), candlePoint = d[q.i];
+      if (state.drawMode === 'horizontal') {
+        (state.chartDrawings[key] ||= []).push({ horizontal: true, p1: Math.max(lo, Math.min(hi, q.price)) });
+        state.drawMode = false; state.drawDraft = null;
+        $$('[data-draw-line],[data-draw-horizontal]').forEach(b => b.classList.remove('on'));
+        $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles';
+        state.chartGestureActive = false; drawChart(); return;
+      }
+      if (!state.drawDraft) {
+        state.drawDraft = { t: candlePoint[0], p: Math.max(lo, Math.min(hi, q.price)) };
+        $('#chartHint').textContent = 'Tap/click a second point to finish the trend line.';
+      } else {
+        (state.chartDrawings[key] ||= []).push({ t1: state.drawDraft.t, p1: state.drawDraft.p, t2: candlePoint[0], p2: Math.max(lo, Math.min(hi, q.price)) });
+        state.drawDraft = null; state.drawMode = false;
+        $$('[data-draw-line],[data-draw-horizontal]').forEach(b => b.classList.remove('on'));
+        $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles';
+        state.chartGestureActive = false; drawChart();
+      }
+      return;
+    }
+    drag = { x: e.clientX, offset: view.offset, moved: false };
+    ov.style.cursor = 'grabbing';
+  });
+  ov.addEventListener('pointermove', e => {
+    if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size >= 2 && pinchStart) {
+      e.preventDefault();
+      const pts = [...activePointers.values()], dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      view.count = Math.max(12, Math.min(total, Math.round(pinchStart.count * pinchStart.distance / dist)));
+      view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+      pinchStart.changed = true; gestureChanged = true;
+      return;
+    }
+    if (drag && !state.drawMode) {
+      e.preventDefault();
+      const dx = e.clientX - drag.x;
+      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
+      if (drag.moved) {
+        // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
+        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + Math.round(dx / Math.max(1, pw) * view.count * -1)));
+        if (svg) svg.style.transform = `translate3d(${dx}px,0,0)`;
+      }
+      return;
+    }
+    const q = point(e);
+    xh.setAttribute('x1', X(q.i)); xh.setAttribute('x2', X(q.i)); xh.setAttribute('visibility', 'visible'); info(q.i);
+  });
+  const endPointer = e => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.delete(e.pointerId);
+    const wasPinching = !!pinchStart;
+    const pinchChanged = !!(pinchStart && pinchStart.changed);
+    if (activePointers.size < 2) pinchStart = null;
+    const moved = !!(drag && drag.moved);
+    drag = null;
+    if (activePointers.size === 0) {
+      if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
+      else { state.chartGestureActive = false; if (svg) svg.style.transform = ''; if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }
+      gestureChanged = false;
+    }
+  };
+  ov.addEventListener('pointerup', endPointer);
+  ov.addEventListener('pointercancel', endPointer);
+  ov.addEventListener('lostpointercapture', endPointer);
   ov.addEventListener('pointerleave', () => { if (!drag) { xh.setAttribute('visibility', 'hidden'); info(n - 1); } });
   ov.addEventListener('wheel', e => { e.preventDefault(); view.count = Math.max(12, Math.min(total, view.count + (e.deltaY < 0 ? -Math.max(3, Math.round(view.count * .18)) : Math.max(3, Math.round(view.count * .18))))); view.offset = Math.min(view.offset, total - view.count); drawChart(); }, { passive: false });
 }
