@@ -201,7 +201,10 @@ function getAdminCoinKlines(coin, iv) {
   const pct = Math.max(-95, Math.min(500, Number(coin.chartPercent ?? 0)));
   // Admin coin candles are generated server-side, with a configurable 24-hour target move.
   // 'graph' mode adds bounded candle-to-candle volatility; these are simulated, not exchange data.
-  const seedText = String(coin.symbol || 'COIN'); let seed = 0;
+  const elapsedMs = Math.max(0, now() - Number(coin.updatedAt || now()));
+  const targetPrice = Math.max(0.00000001, base * Math.pow(Math.max(0.05, 1 + pct / 100), elapsedMs / 86400000));
+  // Vary simulated candle shape on a short time bucket so refreshes visibly move.
+  const seedText = String(coin.symbol || 'COIN') + ':' + Math.floor(now() / 5000); let seed = 0;
   for (let i = 0; i < seedText.length; i++) seed = (seed * 31 + seedText.charCodeAt(i)) >>> 0;
   const rand = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
   const drift = Math.pow(Math.max(0.05, 1 + pct / 100), step / 86400000);
@@ -215,7 +218,7 @@ function getAdminCoinKlines(coin, iv) {
     out.push([nowTs - (count - 1 - i) * step, open, high, low, close, Math.round(rand() * 1000)]);
   }
   // Keep the latest candle anchored to the admin's current configured display price.
-  const target = Math.max(0.00000001, Number(coin.startPrice) || close), scale = target / out[out.length - 1][4];
+  const target = targetPrice, scale = target / out[out.length - 1][4];
   return out.map(k => [k[0], k[1] * scale, k[2] * scale, k[3] * scale, k[4] * scale, k[5]]);
 }
 async function getKlines(sym, iv) {

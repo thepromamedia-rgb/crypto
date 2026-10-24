@@ -180,7 +180,7 @@ async function fetchKlines(sym, iv) {
 async function loadChart(initial) {
   const sym = state.coin, iv = state.interval, key = sym + ':' + iv, c = state.kl[key];
   if (initial) drawChart();
-  if (c && Date.now() - c.ts < 30e3) return;
+  if (c && Date.now() - c.ts < 5e3) return;
   try { state.kl[key] = { ts: Date.now(), candles: await fetchKlines(sym, iv) }; state.klErr = ''; } catch { if (!c) state.klErr = 'Chart data is not available right now.'; }
   if (state.page === 'Coin' && state.coin === sym && state.interval === iv) drawChart();
 }
@@ -362,6 +362,8 @@ function updateDepositCountdowns() {
   });
 }
 setInterval(updateDepositCountdowns, 1000);
+// Refresh the open chart so admin-simulated coins visibly update while the page is open.
+setInterval(() => { if (state.page === 'Coin') { const key = state.coin + ':' + state.interval; if (state.kl[key]) state.kl[key].ts = 0; loadChart(false); } }, 5000);
 function hideModal() { $('#modal').hidden = true; }
 function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
 
