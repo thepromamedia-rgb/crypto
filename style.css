@@ -82,7 +82,7 @@
 #flipHistoryPageLabel{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}
 
 /* Flip Coin closing window grayscale */
-#flipGameCard.flip-closing{filter:grayscale(1);opacity:.78;transition:filter .2s,opacity .2s}
+#flipGameCard.flip-closing{box-shadow:0 0 0 2px #e4b64b44}
 #flipGameCard.flip-closing button[data-side]{cursor:not-allowed}
 
 /* Full-screen professional coin reveal: five-second spin, then result */
@@ -100,3 +100,12 @@
 @keyframes flipResultPop{0%{opacity:0;transform:translateY(16px) scale(.8)}70%{opacity:1;transform:translateY(-3px) scale(1.08)}100%{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:600px){#flipReveal{inset:8px;gap:10px}#flipRevealCoin{width:clamp(116px,34vw,160px);height:clamp(116px,34vw,160px);min-width:116px;min-height:116px}}
 @media(prefers-reduced-motion:reduce){#flipReveal,#flipRevealCoin,#flipRevealText{animation-duration:.01ms!important;transition:none!important}}
+
+/* Coin animation strictly contained within existing game card */
+#flipGameCard{position:relative;isolation:isolate;overflow:hidden}
+#flipReveal{inset:8px;max-width:calc(100% - 16px);overflow:hidden;border:1px solid #e9c46a55}
+#flipRevealCoin{width:min(42vw,154px);height:min(42vw,154px);min-width:96px;min-height:96px;flex-shrink:0}
+#flipRevealText{font-size:clamp(18px,4vw,30px);text-align:center;overflow-wrap:anywhere}
+#flipReveal.is-spinning #flipRevealCoin{animation:flipContainedSpin 5s linear both}
+@keyframes flipContainedSpin{0%{transform:translateY(18px) scale(.76) rotateY(0deg)}16%{transform:translateY(-15px) scale(.95) rotateY(1080deg)}42%{transform:translateY(-26px) scale(1.05) rotateY(2880deg)}68%{transform:translateY(-17px) scale(1.02) rotateY(4680deg)}85%{transform:translateY(-8px) scale(1) rotateY(5580deg)}100%{transform:translateY(0) scale(1) rotateY(5760deg)}}
+@media(max-width:600px){#flipRevealCoin{width:112px;height:112px}#flipReveal{gap:8px}}
