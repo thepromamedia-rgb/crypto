@@ -56,15 +56,11 @@
 /* Flip Coin inline round result and animations */
 .flip-coin-visual{width:112px;height:112px;margin:8px auto 12px;border-radius:50%;display:flex;align-items:center;justify-content:center;transform-origin:center;background:radial-gradient(circle at 32% 25%,#fff4b8 0,#f7cc4b 28%,#c58b17 72%,#8a5b0a 100%);border:7px solid #e8b83b;box-shadow:inset 0 0 0 3px #fff0a6,inset 0 0 0 7px #b77c10,0 8px 15px #172c5530;color:#704600;font-weight:900;letter-spacing:1px;font-size:22px;line-height:1;perspective:500px}.coin-face{display:flex;align-items:center;justify-content:center;width:78px;height:78px;border:2px dashed #9d6b0d;border-radius:50%;text-shadow:0 1px #fff3b0;backface-visibility:hidden}
 .flip-coin-visual.flip-spin{animation:coinFlip .85s ease-in-out}
-.flip-coin-visual.flip-round-spinning{animation:coinRoundSpin .72s cubic-bezier(.22,.61,.36,1) infinite;will-change:transform;box-shadow:inset 0 0 0 3px #fff0a6,inset 0 0 0 7px #b77c10,0 12px 26px #172c5540}
-.flip-coin-visual.flip-round-spinning .coin-face{animation:coinFacePulse .72s ease-in-out infinite;}
 .flip-coin-visual.flip-win{animation:coinWin .55s ease-out}
 .flip-coin-visual.flip-loss{animation:coinLoss .45s ease-out}
 .flip-outcome{min-height:52px;margin:10px auto 14px;padding:10px;border-radius:13px;background:#f3f6fc;color:#68738b;display:flex;flex-direction:column;justify-content:center;gap:4px;font-size:13px}
 .flip-outcome strong{font-size:17px;letter-spacing:.5px}.flip-outcome span{font-size:12px}
 .flip-outcome.is-win{background:#e4f8ee;color:#16805a;animation:outcomePop .35s ease-out}.flip-outcome.is-loss{background:#fde8ea;color:#c0392b;animation:outcomePop .35s ease-out}
-@keyframes coinRoundSpin{0%{transform:perspective(650px) rotateY(0deg) rotateZ(-2deg) scale(1)}45%{transform:perspective(650px) rotateY(900deg) rotateZ(2deg) scale(1.08)}100%{transform:perspective(650px) rotateY(1800deg) rotateZ(-2deg) scale(1)}}
-@keyframes coinFacePulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.22)}}
 @keyframes coinFlip{0%{transform:rotateY(0) scale(1)}25%{transform:rotateY(720deg) scale(1.15)}50%{transform:rotateY(1440deg) scale(.92)}75%{transform:rotateY(2160deg) scale(1.12)}100%{transform:rotateY(2880deg) scale(1)}}
 @keyframes coinWin{0%{transform:scale(.8)}60%{transform:scale(1.25) rotate(-8deg)}100%{transform:scale(1)}}
 @keyframes coinLoss{0%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}100%{transform:translateX(0)}}
@@ -88,3 +84,17 @@
 /* Flip Coin closing window grayscale */
 #flipGameCard.flip-closing{filter:grayscale(1);opacity:.78;transition:filter .2s,opacity .2s}
 #flipGameCard.flip-closing button[data-side]{cursor:not-allowed}
+
+/* Full-screen professional coin reveal: five-second spin, then result */
+#flipReveal{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:radial-gradient(circle at 50% 42%,#1e2b46 0,#0b1220 68%,#05080f 100%);color:#fff;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
+#flipReveal.is-active{opacity:1;visibility:visible;pointer-events:auto}
+#flipRevealCoin{width:min(44vw,240px);height:min(44vw,240px);min-width:150px;min-height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 32% 24%,#fff8d2 0,#f9d66a 17%,#e8ad25 48%,#9b5b09 78%,#f5c94c 100%);border:9px solid #f6d77d;box-shadow:inset 0 0 0 5px #fff1b3,inset 0 0 0 12px #b57a12,0 0 60px #f4c54d80,0 25px 80px #0009;color:#563600;font-size:clamp(22px,5vw,40px);font-weight:1000;letter-spacing:2px;transform:scale(.35);backface-visibility:hidden;will-change:transform}
+#flipRevealCoin span{display:flex;align-items:center;justify-content:center;width:78%;height:78%;border:4px dashed #a96c09;border-radius:50%;text-shadow:0 2px 0 #fff3bd}
+#flipReveal.is-spinning #flipRevealCoin{animation:flipFullScreenSpin 5s cubic-bezier(.16,.7,.24,1) both}
+#flipRevealText{font-size:clamp(30px,7vw,68px);font-weight:1000;letter-spacing:.14em;text-shadow:0 5px 24px #0009;opacity:.9}
+#flipRevealText.result-text{animation:flipResultPop .5s cubic-bezier(.2,.85,.2,1) both;color:#ffe082}
+#flipRevealCoin.reveal-result{animation:flipRevealSettle .65s cubic-bezier(.2,.85,.2,1) both}
+@keyframes flipFullScreenSpin{0%{transform:scale(.35) rotateY(0) rotateZ(0)}12%{transform:scale(.7) rotateY(900deg) rotateZ(18deg)}30%{transform:scale(1.3) rotateY(2160deg) rotateZ(-15deg)}48%{transform:scale(2.3) rotateY(3600deg) rotateZ(10deg)}62%{transform:scale(3.8) rotateY(4680deg) rotateZ(-7deg)}76%{transform:scale(5.5) rotateY(5760deg) rotateZ(4deg)}88%{transform:scale(2.2) rotateY(6480deg) rotateZ(-2deg)}100%{transform:scale(1.15) rotateY(7200deg) rotateZ(0)}}
+@keyframes flipRevealSettle{0%{transform:scale(1.1) rotateY(0)}55%{transform:scale(1.28) rotateY(180deg)}100%{transform:scale(1) rotateY(360deg)}}
+@keyframes flipResultPop{0%{opacity:0;transform:translateY(16px) scale(.8)}70%{opacity:1;transform:translateY(-3px) scale(1.08)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){#flipReveal,#flipRevealCoin,#flipRevealText{animation-duration:.01ms!important;transition:none!important}}
