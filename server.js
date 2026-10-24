@@ -629,7 +629,7 @@ const routes = {
       D.flipCoinSessions.push(gameSession); await save();
     } else { gameSession.lastActivityTs = sessionNow; }
     return { config: { enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, lossPct: Number(cfg.lossPct ?? 100), walletLossPct: Number(cfg.walletLossPct ?? cfg.lossPct ?? 100), walletProfitPct: Number(cfg.walletProfitPct ?? 100), feePct: Number(cfg.feePct || 0), timeProfitMinutes: Number(cfg.timeProfitMinutes || 0), timeProfitPct: Number(cfg.timeProfitPct || 0), timeLossMinutes: Number(cfg.timeLossMinutes || 0), timeLossPct: Number(cfg.timeLossPct || 0), betProfitCount: Number(cfg.betProfitCount || 0), betProfitPct: Number(cfg.betProfitPct || 0), betLossCount: Number(cfg.betLossCount || 0), betLossPct: Number(cfg.betLossPct || 0) },
-      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(req.panelId || 'main')).slice(-20).reverse() };
+      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(req.panelId || 'main')).slice(-1000).reverse() };
   },
   'POST /api/games/flip-coin': async (req, res, b, u) => {
     needUser(u); if (u.role !== 'user') fail(403, 'Only user accounts can play this game.');
