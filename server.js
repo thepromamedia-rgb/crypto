@@ -635,6 +635,18 @@ const routes = {
     if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000);
     let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
     if (roundsChanged) await save();
+    // Published rule: the side with the lower total stake wins. Ties use a fair coin toss.
+    // Lock results only after the betting deadline; never change a finalized round.
+    for (const r of D.flipCoinRounds) {
+      if (String(r.panelId || 'main') !== String(panelId) || Number(r.roundNo) >= roundNo || r.outcomeLocked) continue;
+      const bets = (D.flipCoinBets || []).filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === Number(r.roundNo));
+      const heads = r2(bets.filter(x => x.side === 'heads').reduce((n,x)=>n+Number(x.amount||0),0));
+      const tails = r2(bets.filter(x => x.side === 'tails').reduce((n,x)=>n+Number(x.amount||0),0));
+      r.result = heads < tails ? 'heads' : tails < heads ? 'tails' : crypto.randomInt(0,2) ? 'heads' : 'tails';
+      r.headsTotal = heads; r.tailsTotal = tails; r.outcomeLocked = true;
+      roundsChanged = true;
+    }
+    if (roundsChanged) await save();
     // Settle bets from completed rounds once, using the stored shared result.
     let changed = false;
     for (const bet of (D.flipCoinBets || [])) {
@@ -685,7 +697,7 @@ const routes = {
   // ----- admin -----
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const rows = (D.flipCoinBets || []).filter(x => isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')).slice().sort((a,b) => b.ts-a.ts).slice(0,1000);
-    const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>!x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); return { config: { ...(S(req).flipCoin||{}), enabled:true, multiplier:2 }, items: rows, totalBets: rows.length, totalWager, totalPayout, fees, lossShare: r2(rows.reduce((n,x)=>n+Number(x.lossShare||0),0)), platformNet };
+    const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>x.status==='Settled' && !x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); return { config: { ...(S(req).flipCoin||{}), enabled:true, multiplier:2 }, items: rows, totalBets: rows.length, totalWager, totalPayout, fees, lossShare: r2(rows.reduce((n,x)=>n+Number(x.lossShare||0),0)), platformNet };
   },
   'POST /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const old = S(req).flipCoin || {}; const next = { ...old };

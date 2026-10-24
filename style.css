@@ -109,3 +109,14 @@
 #flipReveal.is-spinning #flipRevealCoin{animation:flipContainedSpin 5s linear both}
 @keyframes flipContainedSpin{0%{transform:translateY(18px) scale(.76) rotateY(0deg)}16%{transform:translateY(-15px) scale(.95) rotateY(1080deg)}42%{transform:translateY(-26px) scale(1.05) rotateY(2880deg)}68%{transform:translateY(-17px) scale(1.02) rotateY(4680deg)}85%{transform:translateY(-8px) scale(1) rotateY(5580deg)}100%{transform:translateY(0) scale(1) rotateY(5760deg)}}
 @media(max-width:600px){#flipRevealCoin{width:112px;height:112px}#flipReveal{gap:8px}}
+
+/* Premium coin game details, scoped to existing card */
+#flipGameCard{border:1px solid #e2b95b55;box-shadow:0 14px 40px #0002, inset 0 1px #fff2}
+#flipGameCard #flipRoundTimer{display:inline-flex;align-items:center;justify-content:center;padding:9px 18px;border:1px solid #e2b95b66;border-radius:999px;background:linear-gradient(145deg,#192b47,#101b31);color:#f9d88c;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+#flipGameCard #flipRoundStatus{min-height:20px}
+#flipGameCard .balance-actions{display:flex;flex-wrap:wrap;gap:10px}
+#flipGameCard .balance-actions button{min-width:0;flex:1 1 145px!important;white-space:normal;overflow-wrap:anywhere;border-radius:14px;box-shadow:0 5px 15px #0002;transition:transform .15s,box-shadow .15s}
+#flipGameCard .balance-actions button:not(:disabled):hover{transform:translateY(-2px);box-shadow:0 9px 22px #0003}
+#flipGameCard .flip-outcome{max-width:100%;overflow-wrap:anywhere;line-height:1.45}
+#flipGameCard #flipReveal{box-sizing:border-box;max-width:calc(100% - 16px)}
+@media(max-width:390px){#flipGameCard .balance-actions{flex-direction:column}#flipGameCard .balance-actions button{flex-basis:auto!important;width:100%}}

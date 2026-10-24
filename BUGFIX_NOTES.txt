@@ -1,0 +1,1 @@
+Fixed overlapping game polls, prevented pending bets from displaying as settled, avoided coin sound starting after deadline, prevented duplicate round result reveals, and excluded pending bets from admin loss totals. Existing server-authoritative lower-stake-wins rule retained. Syntax and automated suite tested; live browser and payment testing still needed.
