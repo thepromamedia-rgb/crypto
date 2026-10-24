@@ -12,7 +12,7 @@ const EYE_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" str
 const pwField = (id, ac, extra = '') => `<div class="pw-wrap"><input id="${id}" type="password" autocomplete="${ac}" ${extra}><button type="button" class="eye" data-eye="${id}" aria-label="Show password">${EYE}</button></div>`;
 const usd = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 4 : 2, minimumFractionDigits: n < 1 ? 4 : 2 });
 const dt = ts => new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-const PROTECTED = new Set(['Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite']);
+const PROTECTED = new Set(['Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite', 'Games']);
 
 function activePanelSlug() { const m = location.pathname.match(/^\/p\/([a-z0-9-]+)/i); return m ? m[1] : 'main'; }
 async function api(path, body) {
@@ -360,7 +360,7 @@ function bindCoin() {
   };
 }
 
-function renderPage(page, quiet) {
+async function renderPage(page, quiet) {
   if (PROTECTED.has(page) && !state.me) return needLogin(page);
   state.page = page;
   const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
@@ -392,6 +392,17 @@ function renderPage(page, quiet) {
     const code = state.me.refCode, invitePanel = String(state.me.role === 'panelAdmin' ? (state.me.panelId || activePanelSlug()) : activePanelSlug()).toLowerCase(), inviteBase = invitePanel && invitePanel !== 'main' ? '/p/' + encodeURIComponent(invitePanel) + '/' : '/', link = location.origin + inviteBase + '?ref=' + encodeURIComponent(code);
     main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong>${state.cfg.tradeRef && state.cfg.tradeRef.enabled && state.cfg.tradeRef.pct ? `<div class="stat-grid"><div><small>Your commission</small><b>${state.cfg.tradeRef.pct}% of the profit your friends make on their market trades</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : ''}${bonusCfg().enabled && bonusCfg().refPct ? `<div class="stat-grid"><div><small>Your commission</small><b>${bonusCfg().refPct}% of ${bonusCfg().refBase === 'amount' ? 'their ' + esc(bonusCfg().symbol) + ' trade amount' : 'their ' + esc(bonusCfg().symbol) + ' trade return'}</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : `<div class="stat-grid"><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>`}</article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
     $('#copyCode').onclick = async () => { try { await navigator.clipboard.writeText(link); showToast('Invite link copied.'); } catch { showToast('Your invite code: ' + code); } };
+  } else if (page === 'Games') {
+    if (!state.me) return needLogin('Games');
+    let gameData = null;
+    try { gameData = await api('games/flip-coin'); } catch (e) { showToast(e.message); }
+    const fc = (gameData && gameData.config) || c.flipCoin || {};
+    const history = (gameData && gameData.history) || [];
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">PLAY ZONE</span><h1>Games</h1><p>Games are separate from Assets and crypto trading.</p></section>${fc.enabled ? `<article class="content-card" style="max-width:560px;margin:0 auto"><div style="text-align:center"><div id="flipCoinVisual" style="font-size:76px;line-height:1.3">🪙</div><h2 style="margin:6px 0">Flip Coin</h2><p class="fine-print">Choose Heads or Tails and place a wallet-credit bet.</p><p>Available wallet: <b id="gameBalance">${inr(state.me.balance)}</b></p></div><form id="flipForm" class="demo-form"><label for="flipBet">Bet amount (credits)</label><input id="flipBet" type="number" min="${fc.minBet}" max="${fc.maxBet}" step="0.01" required placeholder="${fc.minBet}"><div class="balance-actions"><button type="button" class="secondary-btn" data-side="heads" style="flex:1">👑 Heads</button><button type="button" class="secondary-btn" data-side="tails" style="flex:1">🦅 Tails</button></div><input type="hidden" id="flipSide" value="heads"><p class="fine-print">Win multiplier: ${Number(fc.multiplier).toFixed(2)}× · Min bet ${inr(fc.minBet)} · Max bet ${inr(fc.maxBet)}. A platform fee of ${Number(fc.feePct || 0)}% may apply to each bet.</p><p id="flipErr" class="msg-err" role="alert"></p><button class="primary-btn" id="flipPlay" type="submit">Flip coin</button></form></article>` : `<article class="content-card"><h2>Flip Coin</h2><p>The administrator has not enabled this game yet.</p></article>`}<section class="section-head"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>My game history</h2></div></section><div class="content-card">${history.length ? `<div class="tbl"><table><tr><th>Time</th><th>Bet</th><th>Pick</th><th>Result</th><th>Net</th></tr>${history.map(x=>`<tr><td>${dt(x.ts)}</td><td>${inr(x.amount)}</td><td>${esc(x.side)}</td><td>${esc(x.result)} · ${x.won?'Won':'Lost'}</td><td style="color:${Number(x.net)>=0?'#16805a':'#c0392b'}">${Number(x.net)>0?'+':''}${inr(x.net)}</td></tr>`).join('')}</table></div>`:'No game history yet.'}</div>`;
+    const form = $('#flipForm'); if (form) {
+      $$('#flipForm [data-side]').forEach(btn => btn.onclick = () => { $('#flipSide').value = btn.dataset.side; $$('#flipForm [data-side]').forEach(x=>x.classList.toggle('primary-btn', x===btn)); });
+      form.onsubmit = async e => { e.preventDefault(); const btn=$('#flipPlay'); btn.disabled=true; $('#flipErr').textContent=''; $('#flipCoinVisual').textContent='🪙'; try { const r=await api('games/flip-coin',{amount:Number($('#flipBet').value),side:$('#flipSide').value}); $('#flipCoinVisual').textContent='🪙'; await loadMe(); showModal(r.bet.won?'You won!':'Round complete', `Coin landed on ${r.bet.result.toUpperCase()}. ${r.bet.won?'Payout':'Returned'} ${inr(r.bet.payout)} · Net ${r.bet.net>=0?'+':''}${inr(r.bet.net)}. Wallet balance: ${inr(r.balance)}.`); renderPage('Games',true); } catch(x) { $('#flipErr').textContent=x.message; btn.disabled=false; } };
+    }
   } else if (page === 'Bonus') {
     main.innerHTML = `<section class="page-intro"><span class="eyebrow">OFFERS</span><h1>Bonus</h1><p>Announcements from Crypto Bridge.</p></section>${c.bonus ? `<article class="content-card"><p style="white-space:pre-wrap">${esc(c.bonus)}</p></article>` : '<div class="empty-state">No active offers right now.</div>'}`;
   } else if (page === 'Recharge') {
@@ -482,7 +493,7 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
   const route = decodeURIComponent(location.hash.slice(1) || 'Home');
   let initialPage = route.split(':')[0];
   if (route.startsWith('Coin:')) state.coin = route.slice(5);
-  const allowedPages = new Set(['Home','Quotes','Signal','Assets','Recharge','Withdrawal','Team','Invite','Bonus','Service','Guide','Coin','Auth','Profile']);
+  const allowedPages = new Set(['Home','Quotes','Signal','Assets','Recharge','Withdrawal','Team','Invite','Bonus','Games','Service','Guide','Coin','Auth','Profile']);
   if (!allowedPages.has(initialPage)) initialPage = 'Home';
   if (ref && !state.me) initialPage = 'Auth';
   renderPage(initialPage);
