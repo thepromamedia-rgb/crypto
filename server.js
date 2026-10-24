@@ -56,7 +56,7 @@ function getPanel(slug) {
   slug = String(slug || 'main').toLowerCase();
   const p = (D.panels || []).find(x => x.slug === slug || (Array.isArray(x.aliases) && x.aliases.includes(slug)));
   if (!p) return null;
-  // A deleted panel URL silently resolves to the Head Admin main panel so existing users keep working.
+  // Existing compatibility: migrated users from deleted panels still access main.
   if (p.deleted || !p.active) return D.panels.find(x => x.slug === 'main') || null;
   return p;
 }
@@ -484,8 +484,11 @@ const routes = {
   },
   'POST /api/login': async (req, res, b) => {
     const email = normEmail(b.email); limit('login:' + req.ip, 20, 600e3); limit('loginu:' + email, 8, 600e3);
-    const u = D.users.find(x => x.email === email) || D.demoUsers.find(x => x.email === email);
-    if (!u || !checkPw(String(b.password || ''), u.pass)) fail(401, 'Wrong email or password.');
+    // Verify against matching credentials rather than the first email match.
+    // Older imported databases can contain duplicate email records.
+    const candidates = [...D.users, ...D.demoUsers].filter(x => normEmail(x.email) === email);
+    const u = candidates.find(x => checkPw(String(b.password || ''), x.pass));
+    if (!u) fail(401, 'Wrong email or password.');
     // Once credentials are verified, give panel admins a useful redirect hint instead of
     // disguising a correct password as a password error when they use /admin by mistake.
     if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
@@ -1091,7 +1094,7 @@ function json(res, code, obj, extra = {}) { res.writeHead(code, { 'Content-Type'
 async function handleApi(req, res, pathname) {
   const requestedSlug = String(req.headers['x-panel-slug'] || 'main').toLowerCase();
   const panel = getPanel(requestedSlug);
-  if (!panel) return json(res, 404, { error: 'Panel link not found.' });
+  if (!panel) return json(res, 404, { error: 'Panel link unavailable. Ask Head Admin to verify its status and URL.' });
   req.panel = panel; req.panelId = panel.slug;
   const h = routes[req.method + ' ' + pathname];
   if (!h) return json(res, 404, { error: 'Not found' });

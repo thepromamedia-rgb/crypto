@@ -1,0 +1,7 @@
+Panel Admin login deep audit:
+1. Login now normalizes stored email and compares the submitted password with all matching account records instead of taking the first email match. This handles historical mixed-case and duplicate-email records.
+2. Login redirects from main admin URL to the panel-specific admin URL after credential verification; Head Admin redirects to main.
+3. Existing panel access isolation and blocked-account checks preserved.
+4. Panel creation warns when storage is local/ephemeral; restarting/deploying without persistent storage can erase panel accounts. Configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN or durable DATA_DIR on your hosting provider.
+5. Existing 65 automated tests passed; JS syntax checks passed. No production login test was possible without the hosted instance and its data.
+6. If a previously created admin account was lost during a deployment, create it again or use Head Admin > Admin Panels > Reset Admin login. Code cannot restore deleted database records.
