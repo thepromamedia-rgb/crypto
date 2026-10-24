@@ -490,12 +490,16 @@ const routes = {
     // disguising a correct password as a password error when they use /admin by mistake.
     if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
       const slug = String(u.panelId || '');
-      fail(403, `This admin belongs to another panel. Open /p/${slug}/admin to log in.`);
+      if (u.blocked) fail(403, 'This account is blocked. Contact support.');
+      const ownPanel = getPanel(slug);
+      if (!ownPanel || ownPanel.deleted || ownPanel.active === false) fail(403, 'This panel is unavailable. Contact Head Admin.');
+      setCookie(res, makeToken(u.id), 7 * 86400);
+      return { user: pubUser(u), adminRedirect: '/p/' + ownPanel.slug + '/admin' };
     }
     if (u.role !== 'headAdmin' && String(u.panelId || 'main') !== String(req.panelId || 'main')) fail(401, 'Wrong email or password.');
     if (u.blocked) fail(403, 'This account is blocked. Contact support.');
     setCookie(res, makeToken(u.id), 7 * 86400);
-    return { user: pubUser(u) };
+    return { user: pubUser(u), ...(u.role === 'headAdmin' && req.panelId !== 'main' ? {adminRedirect:'/admin'} : {}) };
   },
   'POST /api/logout': async (req, res) => { setCookie(res, '', 0); return { ok: true }; },
   'GET /api/me': async (req, res, b, u) => {

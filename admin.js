@@ -15,10 +15,21 @@ async function api(path, body) {
 function loginView(msg) {
   $('#root').innerHTML = `<form class="box login" id="lf"><h1 style="margin-top:0">Admin login</h1><label>Email</label><input id="e" type="email" autocomplete="username" required><label>Password</label><div class="pw-wrap"><input id="p" type="password" autocomplete="current-password" required><button type="button" class="eye" id="eye" aria-label="Show password">👁</button></div><p class="msg-err" id="err">${esc(msg || '')}</p><button class="primary-btn" type="submit">Login</button></form>`;
   $('#eye').onclick = () => { const i = $('#p'); i.type = i.type === 'password' ? 'text' : 'password'; };
-  $('#lf').onsubmit = async ev => { ev.preventDefault(); try { const j = await api('login', { email: $('#e').value, password: $('#p').value }); if (j.adminRedirect) { location.assign(j.adminRedirect); return; } if (!['admin', 'headAdmin', 'panelAdmin'].includes(j.user.role)) { await api('logout', {}); return loginView('Not an admin account.'); } start(); } catch (x) { $('#err').textContent = x.message; const m=String(x.message).match(/\/p\/([a-z0-9-]+)\/admin/); if(m){const link=document.createElement('a');link.href='/p/'+m[1]+'/admin';link.textContent='Open your Panel Admin login';link.style.display='block';$('#err').appendChild(link);} } };
+  $('#lf').onsubmit = async ev => { ev.preventDefault(); try { const j = await api('login', { email: $('#e').value, password: $('#p').value }); if (j.adminRedirect) { location.replace(j.adminRedirect); return; } if (!['admin', 'headAdmin', 'panelAdmin'].includes(j.user.role)) { await api('logout', {}); return loginView('Not an admin account.'); } start(); } catch (x) { $('#err').textContent = x.message; const m=String(x.message).match(/\/p\/([a-z0-9-]+)\/admin/); if(m){const link=document.createElement('a');link.href='/p/'+m[1]+'/admin';link.textContent='Open your Panel Admin login';link.style.display='block';$('#err').appendChild(link);} } };
 }
 async function start() {
-  try { ov = await api('admin/overview'); } catch (x) { return loginView(x.status === 403 ? 'Not an admin account.' : ''); }
+  try { ov = await api('admin/overview'); } catch (x) {
+    if (x.status === 403) {
+      try {
+        const j = await api('me');
+        if (j.user && j.user.role === 'panelAdmin' && j.user.panelId && j.user.panelId !== activePanelSlug()) {
+          location.replace('/p/' + encodeURIComponent(j.user.panelId) + '/admin'); return;
+        }
+      } catch (_) {}
+    }
+    return loginView(x.status === 403 ? 'This account cannot access this panel. Use your assigned Panel Admin URL.' : (x.message || 'Please log in.'));
+  }
+  if (ov.role === 'headAdmin' && activePanelSlug() !== 'main') { location.replace('/admin'); return; }
   draw();
 }
 async function draw() {
