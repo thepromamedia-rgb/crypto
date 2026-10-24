@@ -166,3 +166,9 @@ V3.1 HEAD ADMIN MULTI-PANEL SYSTEM
 - Added offline integration tests for panel settings isolation, panel-scoped records and deletion migration.
 
 IMPORTANT: This remains a demo application with JSON/Upstash single-key storage, not a production-grade transactional financial ledger. Before using real customer funds, move wallet/payment records to a durable transactional database and test concurrency, backups, payment reconciliation and recovery procedures.
+
+V3.2 PANEL ADMIN LOGIN + CREDIT RECLAIM FIX
+------------------------------------------------------------
+- Head Admin > Admin Panels now includes “Reset Admin login”. Set the correct email and a new password (8–100 characters), then give the admin the displayed panel URL /p/<slug>/admin. This resets the existing panel admin account rather than creating a duplicate.
+- Head Admin > Admin Panels now includes “Take back credits”. It can reclaim only the panel's unused available credit balance; it cannot reclaim credits already spent on user wallet credits. Reclaimed credits are returned to Head Admin Main and both sides are recorded in the credit ledger/audit log.
+- Password reset and credit reclaim are covered by offline integration tests.

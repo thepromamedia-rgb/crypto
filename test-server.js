@@ -237,6 +237,10 @@ const stub = http.createServer((q, r) => {
   assert.equal((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi'); ok('panel settings are isolated');
   assert.equal((await a('POST', '/api/admin/panels', { action: 'edit', id: panelCreate.j.panel.id, name: 'Panel One Renamed', slug: 'panel-one-renamed', email: 'paneladmin@x.io', password: '' })).s, 200);
   assert.equal((await panelAdmin('GET', '/api/config')).s, 200); ok('panel link edits preserve old URL alias');
+  const resetLogin = await a('POST', '/api/admin/panels', { action: 'reset-login', id: panelCreate.j.panel.id, email: 'paneladmin@x.io', password: 'ResetPass123' });
+  assert.equal(resetLogin.s, 200); assert.equal(resetLogin.j.panel.adminLink, '/p/panel-one-renamed/admin');
+  assert.equal((await mk('panel-one-renamed')('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 401);
+  assert.equal((await mk('panel-one-renamed')('POST', '/api/login', { email: 'paneladmin@x.io', password: 'ResetPass123' })).s, 200); ok('Head Admin can reset panel admin login and new password works');
   const panelUser = mk('panel-one');
   assert.equal((await panelUser('POST', '/api/register', { name: 'Panel User', email: 'paneluser@x.io', password: 'password1' })).s, 200);
   const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345' });
@@ -254,6 +258,8 @@ const stub = http.createServer((q, r) => {
   const manualCredit = await panelAdmin('POST', '/api/admin/user', { id: panelUserId, action: 'adjust', amount: 200, reason: 'test manual wallet credit' }); assert.equal(manualCredit.s, 200);
   assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400); assert.equal((await panelAdmin('GET', '/api/admin/overview')).j.creditBalance, 100); ok('manual positive wallet adjustment debits panel credits');
   const panelId = panelCreate.j.panel.id;
+  const reclaim = await a('POST', '/api/admin/panels', { action: 'reclaim', id: panelId, amount: 50, reason: 'test reclaim unused credits' });
+  assert.equal(reclaim.s, 200); assert.equal(reclaim.j.panel.creditBalance, 50); assert.equal(reclaim.j.reclaimed, 50); ok('Head Admin can reclaim only unused panel credits');
   const mainCreditsBeforeReturn = (await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'main').creditBalance;
   const panelDelete = await a('POST', '/api/admin/panels', { action: 'delete', id: panelId });
   assert.equal(panelDelete.s, 200);
@@ -261,7 +267,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400);
   assert.equal((await a('GET', '/api/admin/users')).j.users.find(x => x.email === 'paneluser@x.io').panelId, 'main');
   assert.equal((await a('GET', '/api/admin/deposits')).j.items.some(x => x.utr === 'PANELUTR12345' && x.panelId === 'main'), true);
-  assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'main').creditBalance, mainCreditsBeforeReturn + 100); ok('panel deletion migrates users, history and unused credits to Head Admin without logout');
+  assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'main').creditBalance, mainCreditsBeforeReturn + 50); ok('panel deletion migrates users, history and unused credits to Head Admin without logout');
 
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);

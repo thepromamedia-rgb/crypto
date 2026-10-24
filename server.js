@@ -826,6 +826,39 @@ const routes = {
       await save();
       return { ok: true, panel: { id: panel.id, slug: panel.slug, creditBalance: panel.creditBalance, creditsAllocated: panel.creditsAllocated, creditsUsed: panel.creditsUsed } };
     }
+    if (action === 'reclaim') {
+      const panel = D.panels.find(p => p.id === b.id && p.slug !== 'main' && !p.deleted);
+      if (!panel) fail(404, 'Panel not found.');
+      const amount = Number(b.amount), available = r2(Number(panel.creditBalance || 0));
+      const reason = str(b.reason || 'Head Admin reclaimed unused credits', 120);
+      if (!Number.isInteger(amount) || amount < 1 || amount > available) fail(400, `Enter whole credits from 1 to ${available}. Only unused available credits can be reclaimed.`);
+      panel.creditBalance = r2(available - amount);
+      panel.creditsAllocated = Math.max(Number(panel.creditsUsed || 0), r2(Number(panel.creditsAllocated || 0) - amount));
+      recordCreditLedger(panel, -amount, 'reclaim', u.email, reason);
+      const mainPanel = D.panels.find(p => p.slug === 'main' && !p.deleted);
+      if (mainPanel) {
+        mainPanel.creditBalance = r2(Number(mainPanel.creditBalance || 0) + amount);
+        mainPanel.creditsAllocated = r2(Number(mainPanel.creditsAllocated || 0) + amount);
+        recordCreditLedger(mainPanel, amount, 'reclaim-return', u.email, `Unused credits returned from ${panel.slug}`);
+      }
+      audit(u.email, 'panel-credit-reclaim', `${panel.name} (${panel.slug}) -${amount}; remaining ${panel.creditBalance}; ${reason}`);
+      await save();
+      return { ok: true, panel: { id: panel.id, slug: panel.slug, creditBalance: panel.creditBalance, creditsAllocated: panel.creditsAllocated, creditsUsed: panel.creditsUsed }, reclaimed: amount };
+    }
+    if (action === 'reset-login') {
+      const panel = D.panels.find(p => p.id === b.id && p.slug !== 'main' && !p.deleted);
+      if (!panel) fail(404, 'Panel not found.');
+      const admin = D.users.find(x => x.id === panel.adminUserId && x.role === 'panelAdmin') || D.users.find(x => x.role === 'panelAdmin' && String(x.panelId || '') === String(panel.slug));
+      if (!admin) fail(404, 'Panel admin account not found.');
+      const email = normEmail(b.email), password = String(b.password || '');
+      if (!emailOk(email)) fail(400, 'Enter a valid admin email.');
+      if (D.users.some(x => x.id !== admin.id && x.email === email) || D.demoUsers.some(x => x.email === email)) fail(409, 'This email is already in use.');
+      if (password.length < 8 || password.length > 100) fail(400, 'Password must be 8–100 characters.');
+      admin.email = email; admin.pass = hashPw(password); admin.panelId = panel.slug; admin.role = 'panelAdmin'; admin.blocked = false; panel.adminUserId = admin.id;
+      audit(u.email, 'panel-admin-login-reset', `${panel.slug} admin login reset for ${email}`);
+      await save();
+      return { ok: true, panel: { id: panel.id, slug: panel.slug, adminEmail: email, adminLink: '/p/' + panel.slug + '/admin' } };
+    }
     const panel = D.panels.find(p => p.id === b.id && p.slug !== 'main' && !p.deleted);
     if (!panel) fail(404, 'Panel not found.');
     if (action === 'edit') {
