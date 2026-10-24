@@ -46,7 +46,7 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], flipCoinBets: [], flipCoinSessions: [], audit: [], panels: [], creditLedger: [],
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], audit: [], panels: [], creditLedger: [],
   settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
@@ -86,7 +86,7 @@ async function loadDB() {
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
-    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'flipCoinBets', 'flipCoinSessions', 'audit', 'panels', 'creditLedger']) if (!Array.isArray(D[k])) D[k] = [];
+    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'flipCoinBets', 'flipCoinSessions', 'flipCoinRounds', 'audit', 'panels', 'creditLedger']) if (!Array.isArray(D[k])) D[k] = [];
   }
   if (!Array.isArray(D.panels)) D.panels = [];
   if (!D.panels.some(x => x.slug === 'main')) D.panels.unshift(defaultPanel());
@@ -621,69 +621,54 @@ const routes = {
   'GET /api/games/flip-coin': async (req, res, b, u) => {
     needUser(u); const cfg = S(req).flipCoin || {};
     if (!Array.isArray(D.flipCoinSessions)) D.flipCoinSessions = [];
-    const panelId = req.panelId || 'main', sessionNow = now();
+    if (!Array.isArray(D.flipCoinRounds)) D.flipCoinRounds = [];
+    const panelId = req.panelId || 'main', ts = now();
+    // Global 30-second rounds: one server-generated outcome is shared by all users in a panel.
+    const roundNo = Math.floor(ts / 30000), startTs = roundNo * 30000, endTs = startTs + 30000;
+    let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
+    if (!round) { round = { roundNo, panelId, startTs, endTs, result: crypto.randomInt(0, 2) ? 'tails' : 'heads', settled: false, createdTs: ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); await save(); }
+    // Settle bets from completed rounds once, using the stored shared result.
+    let changed = false;
+    for (const bet of (D.flipCoinBets || [])) {
+      if (bet.status !== 'Pending' || Number(bet.roundNo) >= roundNo || String(bet.panelId || 'main') !== String(panelId)) continue;
+      const resultRound = D.flipCoinRounds.find(x => x.roundNo === Number(bet.roundNo) && String(x.panelId || 'main') === String(panelId));
+      if (!resultRound) continue;
+      const owner = [...D.users, ...D.demoUsers].find(x => String(x.id) === String(bet.userId));
+      if (!owner) { bet.status = 'Settled'; bet.result = resultRound.result; bet.won = resultRound.result === bet.side; bet.net = 0; bet.ts = resultRound.endTs; changed = true; continue; }
+      const won = resultRound.result === bet.side, payout = won ? r2(bet.amount * 2) : 0;
+      const beforeSettle = Number(owner.balance || 0); owner.balance = r2(beforeSettle + payout);
+      bet.result = resultRound.result; bet.won = won; bet.payout = payout; bet.lossAmount = won ? 0 : bet.amount; bet.net = r2((won ? bet.amount : -bet.amount) - Number(bet.fee || 0)); bet.balanceAfter = owner.balance; bet.status = 'Settled'; bet.ts = resultRound.endTs; changed = true;
+      audit(bet.email, 'flip-coin-settlement', `round #${bet.roundNo} ${bet.result}; ${won ? 'won' : 'lost'}; payout ${payout}`);
+    }
+    if (changed) await save();
     let gameSession = D.flipCoinSessions.find(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId));
-    if (!gameSession || sessionNow - Number(gameSession.lastActivityTs || gameSession.startTs || 0) > 30 * 60000) {
-      gameSession = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: sessionNow, startBalance: r2(Number(u.balance || 0)), timeProfitResetTs: sessionNow, timeLossResetTs: sessionNow, betProfitCount: 0, betLossCount: 0, lastActivityTs: sessionNow };
-      D.flipCoinSessions = D.flipCoinSessions.filter(x => !(x.userId === u.id && String(x.panelId || 'main') === String(panelId)));
-      D.flipCoinSessions.push(gameSession); await save();
-    } else { gameSession.lastActivityTs = sessionNow; }
-    return { config: { enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, lossPct: Number(cfg.lossPct ?? 100), walletLossPct: Number(cfg.walletLossPct ?? cfg.lossPct ?? 100), walletProfitPct: Number(cfg.walletProfitPct ?? 100), feePct: Number(cfg.feePct || 0), timeProfitMinutes: Number(cfg.timeProfitMinutes || 0), timeProfitPct: Number(cfg.timeProfitPct || 0), timeLossMinutes: Number(cfg.timeLossMinutes || 0), timeLossPct: Number(cfg.timeLossPct || 0), betProfitCount: Number(cfg.betProfitCount || 0), betProfitPct: Number(cfg.betProfitPct || 0), betLossCount: Number(cfg.betLossCount || 0), betLossPct: Number(cfg.betLossPct || 0) },
-      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(req.panelId || 'main')).slice(-1000).reverse() };
+    if (!gameSession || ts - Number(gameSession.lastActivityTs || gameSession.startTs || 0) > 30 * 60000) {
+      gameSession = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: ts, startBalance: r2(Number(u.balance || 0)), timeProfitResetTs: ts, timeLossResetTs: ts, betProfitCount: 0, betLossCount: 0, lastActivityTs: ts };
+      D.flipCoinSessions = D.flipCoinSessions.filter(x => !(x.userId === u.id && String(x.panelId || 'main') === String(panelId))); D.flipCoinSessions.push(gameSession); await save();
+    } else { gameSession.lastActivityTs = ts; }
+    return { config: { enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, feePct: Number(cfg.feePct || 0) },
+      round: { number: roundNo, startTs, endTs, remainingMs: Math.max(0, endTs-ts), bettingOpen: endTs-ts > 5000 },
+      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && x.status === 'Settled').slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,1000) };
   },
   'POST /api/games/flip-coin': async (req, res, b, u) => {
     needUser(u); if (u.role !== 'user') fail(403, 'Only user accounts can play this game.');
-    const cfg = S(req).flipCoin || {}; // Flip Coin is permanently available; it is not coupled to Assets/Bonus Coin settings.
-    const amount = Number(b.amount), side = String(b.side || '').toLowerCase();
+    const cfg = S(req).flipCoin || {}, amount = Number(b.amount), side = String(b.side || '').toLowerCase();
     if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_AMOUNT) fail(400, 'Enter a valid bet amount.');
     if (amount < Number(cfg.minBet || 10) || amount > Number(cfg.maxBet || 10000)) fail(400, `Bet must be between ${cfg.minBet} and ${cfg.maxBet} credits.`);
     if (!['heads','tails'].includes(side)) fail(400, 'Choose Heads or Tails.');
-    const multiplier = 2, lossPct = 100, walletProfitPct = 0, feePct = Number(cfg.feePct || 0), lossSharePct = Number(cfg.lossSharePct || 0);
-    const fee = r2(amount * feePct / 100), debit = r2(amount + fee);
-    const before = r2(Number(u.balance || 0));
-    if (debit > before) fail(400, 'Not enough wallet credits for this bet and fee.');
-    // Result is server-generated and independent of wallet targets; payout multiplier is fixed at 2x.
-    const result = crypto.randomInt(0, 2) === 0 ? 'heads' : 'tails'; const won = result === side;
-    const desiredPayout = r2(amount * multiplier);
-    const payout = won ? desiredPayout : 0;
-    const lossAmount = won ? 0 : r2(amount);
-    // A losing round can only lose this bet (plus the clearly disclosed fee), never a percentage of the whole wallet.
-    u.balance = won ? r2(before - debit + payout) : r2(before - debit);
-    if (u.balance < 0) { u.balance = before; fail(400, 'Insufficient wallet balance.'); }
-
-    // Session thresholds are evaluated on the server. Percentages always use the
-    // wallet balance captured when this game session began. Each threshold resets
-    // its own counter/timer after firing; historical user data is left untouched.
-    if (!Array.isArray(D.flipCoinSessions)) D.flipCoinSessions = [];
+    if (!Array.isArray(D.flipCoinRounds)) D.flipCoinRounds = [];
+    const ts = now(), roundNo = Math.floor(ts / 30000), startTs = roundNo * 30000, endTs = startTs + 30000, remainingMs = endTs-ts;
+    if (remainingMs <= 5000) fail(400, 'Betting closed for this round. Wait for the next round.');
     const panelId = req.panelId || 'main';
-    let session = D.flipCoinSessions.find(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId));
-    const ts = now();
-    if (!session || ts - Number(session.lastActivityTs || session.startTs || 0) > 30 * 60000) {
-      session = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: ts, startBalance: before, timeProfitResetTs: ts, timeLossResetTs: ts, betProfitCount: 0, betLossCount: 0 };
-      D.flipCoinSessions = D.flipCoinSessions.filter(x => !(x.userId === u.id && String(x.panelId || 'main') === String(panelId)));
-      D.flipCoinSessions.push(session);
-    }
-    session.lastActivityTs = ts;
-    const sessionBase = Math.max(0, Number(session.startBalance ?? before));
-    session.betProfitCount = Number(session.betProfitCount || 0) + 1;
-    session.betLossCount = Number(session.betLossCount || 0) + 1;
-    // Thresholds are tracked for admin reporting only. They must not override fair
-    // random outcomes or apply hidden wallet credits/debits.
-    const tpMin = Number(cfg.timeProfitMinutes || 0), tlMin = Number(cfg.timeLossMinutes || 0);
-    if (tpMin > 0 && ts - Number(session.timeProfitResetTs || session.startTs) >= tpMin * 60000) session.timeProfitResetTs = ts;
-    if (tlMin > 0 && ts - Number(session.timeLossResetTs || session.startTs) >= tlMin * 60000) session.timeLossResetTs = ts;
-    const bpCount = Number(cfg.betProfitCount || 0), blCount = Number(cfg.betLossCount || 0);
-    if (bpCount > 0 && session.betProfitCount >= bpCount) session.betProfitCount = 0;
-    if (blCount > 0 && session.betLossCount >= blCount) session.betLossCount = 0;
-    const adjustments = [];
-    if (u.balance < 0) { u.balance = before; fail(400, 'Insufficient wallet balance.'); }
-    const lossShare = r2(lossAmount * lossSharePct / 100);
-    const ruleProfit = r2(adjustments.filter(x => x.type === 'profit').reduce((n,x)=>n+x.amount,0));
-    const ruleLoss = r2(adjustments.filter(x => x.type === 'loss').reduce((n,x)=>n-x.amount,0));
-    const row = { id: crypto.randomUUID(), userId: u.id, uid: String(u.uid || u.id), email: u.email, panelId, amount: r2(amount), side, result, won, multiplier, lossPct, walletLossPct: lossPct, walletProfitPct, feePct, fee, lossAmount, lossShare, payout, ruleAdjustments: adjustments, ruleProfit, ruleLoss, sessionStartBalance: sessionBase, net: r2(u.balance - before), balanceAfter: u.balance, ts };
-    if (!Array.isArray(D.flipCoinBets)) D.flipCoinBets = []; D.flipCoinBets.push(row);
-    audit(u.email, 'flip-coin', `bet ${amount} ${side}; result ${result}; ${won ? 'win' : 'loss'}; fee ${fee}; wallet rules ${JSON.stringify(adjustments)}`);
-    await save(); return { bet: row, balance: u.balance };
+    let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
+    if (!round) { round = { roundNo, panelId, startTs, endTs, result: crypto.randomInt(0,2) ? 'tails':'heads', settled:false, createdTs:ts }; D.flipCoinRounds.push(round); if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000); }
+    const feePct = Number(cfg.feePct || 0), fee = r2(amount*feePct/100), debit = r2(amount+fee), before = r2(Number(u.balance||0));
+    if (debit > before) fail(400, 'Not enough wallet credits for this bet and fee.');
+    u.balance = r2(before-debit);
+    const row = { id: crypto.randomUUID(), userId:u.id, uid:String(u.uid||u.id), email:u.email, panelId, roundNo, amount:r2(amount), side, status:'Pending', result:null, won:null, multiplier:2, feePct, fee, payout:0, lossAmount:0, net:0, balanceAfter:u.balance, ts, roundEndTs:endTs };
+    if (!Array.isArray(D.flipCoinBets)) D.flipCoinBets=[]; D.flipCoinBets.push(row);
+    audit(u.email, 'flip-coin', `bet ${amount} ${side}; round #${roundNo}; pending result; fee ${fee}`);
+    await save(); return { bet: row, balance:u.balance, round:{number:roundNo,endTs,remainingMs,bettingOpen:remainingMs>5000} };
   },
   // ----- admin -----
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
