@@ -25,8 +25,8 @@ const stub = http.createServer((q, r) => {
   await loadDB(); await seedAdmin();
   await new Promise(r => server.listen(0, r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const mk = () => { let cookie = ''; return async (method, p, body) => {
-    const r = await fetch(base + p, { method, headers: { 'Content-Type': 'application/json', ...(cookie && { Cookie: cookie }) }, body: body && JSON.stringify(body) });
+  const mk = (panelSlug = 'main') => { let cookie = ''; return async (method, p, body) => {
+    const r = await fetch(base + p, { method, headers: { 'Content-Type': 'application/json', 'X-Panel-Slug': panelSlug, ...(cookie && { Cookie: cookie }) }, body: body && JSON.stringify(body) });
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
     return { s: r.status, j: await r.json().catch(() => ({})), r };
   }; };
@@ -50,6 +50,9 @@ const stub = http.createServer((q, r) => {
   assert.equal((await u('POST', '/api/deposit', { amount: 999, utr: 'ABCDEFGH1234' })).s, 400); ok('deposit < 1000 rejected');
   assert.equal((await u('POST', '/api/deposit', { amount: 1000, utr: 'ABCDEFGH1234' })).s, 503); ok('deposit blocked until admin sets UPI');
   const a = mk(); assert.equal((await a('POST', '/api/login', { email: 'admin@test.io', password: 'AdminPass123' })).s, 200);
+  const mainForCredits = (await a('GET', '/api/admin/panels')).j.panels.find(p => p.slug === 'main');
+  const mainAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: mainForCredits.id, amount: 9000000, reason: 'integration test starting credits' });
+  assert.equal(mainAllocation.s, 200); assert.equal(mainAllocation.j.panel.creditBalance, 9000000); ok('Head Admin allocates credits to main panel');
   assert.equal((await a('POST', '/api/admin/settings', { upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', notice: '', bonus: '' })).s, 200);
   const d = await u('POST', '/api/deposit', { amount: 1000, utr: 'abcdefgh1234' }); assert.equal(d.s, 200);
   assert.equal((await u('POST', '/api/deposit', { amount: 2000, utr: 'ABCDEFGH1234' })).s, 409); ok('duplicate UTR rejected');
@@ -57,6 +60,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/deposit', { id: d.j.deposit.id, action: 'approve' })).s, 200);
   assert.equal((await a('POST', '/api/admin/deposit', { id: d.j.deposit.id, action: 'approve' })).s, 409); ok('approve credits exactly once');
   assert.equal((await u('GET', '/api/me')).j.user.balance, 1000);
+  assert.equal((await a('GET', '/api/admin/overview')).j.creditBalance, 8999000); ok('deposit approval debits panel credits exactly once');
 
   // Set zero retry delay for this legacy withdrawal flow; cooldown enforcement is tested separately in production checks.
   assert.equal((await a('POST', '/api/admin/settings', { withdrawalCooldownHours: 0, upi: '', payee: '', support: '', notice: '', bonus: '' })).s, 200);
@@ -215,6 +219,47 @@ const stub = http.createServer((q, r) => {
   const badWh = await fetch(base + '/api/razorpay/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-razorpay-signature': '0'.repeat(64) }, body: whEvent });
   assert.equal(badWh.status, 400); ok('Razorpay webhook rejects invalid signature');
   global.fetch = realFetch;
+
+  // Head Admin multi-panel isolation and silent user/data migration.
+  const panelCreate = await a('POST', '/api/admin/panels', { action: 'create', name: 'Panel One', slug: 'panel-one', email: 'paneladmin@x.io', password: 'PanelPass123' });
+  assert.equal(panelCreate.s, 200); assert.equal(panelCreate.j.panel.link, '/p/panel-one');
+  const panelAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 1500, reason: 'panel test allocation' }); assert.equal(panelAllocation.s, 200); assert.equal(panelAllocation.j.panel.creditBalance, 1500); ok('Head Admin allocates isolated panel credits');
+  assert.equal((await fetch(base + '/p/panel-one')).status, 200); assert.equal((await fetch(base + '/p/panel-one/admin')).status, 200); ok('single-domain panel routes serve site and admin pages');
+  const panelAdmin = mk('panel-one');
+  assert.equal((await panelAdmin('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 200);
+  assert.equal((await panelAdmin('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 100 })).s, 403); ok('panel admins cannot allocate or expand their own credit pool');
+  assert.equal((await a('POST', '/api/admin/settings', { upi: 'main@upi', payee: 'Main', paymentMode: 'qr' })).s, 200);
+  assert.equal((await panelAdmin('POST', '/api/admin/settings', { upi: 'panel@upi', payee: 'Panel One', paymentMode: 'qr' })).s, 200);
+  assert.equal((await a('GET', '/api/config')).j.upi, 'main@upi');
+  assert.equal((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi'); ok('panel settings are isolated');
+  assert.equal((await a('POST', '/api/admin/panels', { action: 'edit', id: panelCreate.j.panel.id, name: 'Panel One Renamed', slug: 'panel-one-renamed', email: 'paneladmin@x.io', password: '' })).s, 200);
+  assert.equal((await panelAdmin('GET', '/api/config')).s, 200); ok('panel link edits preserve old URL alias');
+  const panelUser = mk('panel-one');
+  assert.equal((await panelUser('POST', '/api/register', { name: 'Panel User', email: 'paneluser@x.io', password: 'password1' })).s, 200);
+  const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345' });
+  assert.equal(panelDep.s, 200); assert.equal((await panelAdmin('GET', '/api/admin/deposits')).j.items.length, 1);
+  assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'panel-one-renamed').users, 1); ok('panel user and deposit are scoped');
+  assert.equal((await panelUser('POST', '/api/login', { email: 'paneluser@x.io', password: 'password1' })).s, 200);
+  const approvedPanelDep = await panelAdmin('POST', '/api/admin/deposit', { id: panelDep.j.deposit.id, action: 'approve', credits: 1200 });
+  assert.equal(approvedPanelDep.s, 200); assert.equal(approvedPanelDep.j.item.creditedAmount, 1200); assert.equal(approvedPanelDep.j.creditBalance, 300);
+  assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1200);
+  const panelLedger = await panelAdmin('GET', '/api/admin/credits'); assert.equal(panelLedger.s, 200); assert.equal(panelLedger.j.balance, 300); assert.ok(panelLedger.j.items.some(x => x.action === 'deposit-credit' && x.amount === -1200)); ok('custom deposit credits debit panel balance and record credit ledger');
+  const panelDep2 = await panelUser('POST', '/api/deposit', { amount: 500, utr: 'PANELUTR54321' }); assert.equal(panelDep2.s, 200);
+  const tooMuch = await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'approve', credits: 400 }); assert.equal(tooMuch.s, 409); assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1200); ok('insufficient panel credits block deposit approval without mutation');
+  assert.equal((await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'reject' })).s, 200);
+  const panelUserId = (await panelUser('GET', '/api/me')).j.user.id;
+  const manualCredit = await panelAdmin('POST', '/api/admin/user', { id: panelUserId, action: 'adjust', amount: 200, reason: 'test manual wallet credit' }); assert.equal(manualCredit.s, 200);
+  assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400); assert.equal((await panelAdmin('GET', '/api/admin/overview')).j.creditBalance, 100); ok('manual positive wallet adjustment debits panel credits');
+  const panelId = panelCreate.j.panel.id;
+  const mainCreditsBeforeReturn = (await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'main').creditBalance;
+  const panelDelete = await a('POST', '/api/admin/panels', { action: 'delete', id: panelId });
+  assert.equal(panelDelete.s, 200);
+  assert.equal((await panelUser('GET', '/api/me')).s, 200);
+  assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400);
+  assert.equal((await a('GET', '/api/admin/users')).j.users.find(x => x.email === 'paneluser@x.io').panelId, 'main');
+  assert.equal((await a('GET', '/api/admin/deposits')).j.items.some(x => x.utr === 'PANELUTR12345' && x.panelId === 'main'), true);
+  assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'main').creditBalance, mainCreditsBeforeReturn + 100); ok('panel deletion migrates users, history and unused credits to Head Admin without logout');
+
   server.close(); stub.close(); fs.rmSync(tmp, { recursive: true, force: true });
   console.log('ALL TESTS PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

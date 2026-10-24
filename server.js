@@ -46,10 +46,25 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [],
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], audit: [], panels: [], creditLedger: [],
   settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
+const clone = v => JSON.parse(JSON.stringify(v));
+const defaultPanel = () => ({ id: 'main', slug: 'main', name: 'Head Admin Main', active: true, deleted: false, created: Date.now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(D.settings) });
+function getPanel(slug) {
+  slug = String(slug || 'main').toLowerCase();
+  const p = (D.panels || []).find(x => x.slug === slug || (Array.isArray(x.aliases) && x.aliases.includes(slug)));
+  if (!p) return null;
+  // A deleted panel URL silently resolves to the Head Admin main panel so existing users keep working.
+  if (p.deleted || !p.active) return D.panels.find(x => x.slug === 'main') || null;
+  return p;
+}
+const S = req => (req && req.panel && req.panel.settings) || D.settings;
+const isHead = u => !!u && u.role === 'headAdmin';
+const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
+const panelRows = (req, rows) => isHead(req.user) ? rows : rows.filter(x => String(x.panelId || 'main') === String(req.panelId || 'main'));
+function assertPanelAccess(req, row) { if (!isHead(req.user) && String(row && row.panelId || 'main') !== String(req.panelId || 'main')) fail(404, 'Not found'); }
 
 async function loadDB() {
   let raw = null;
@@ -66,8 +81,23 @@ async function loadDB() {
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
-    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'audit']) if (!Array.isArray(D[k])) D[k] = [];
+    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'audit', 'panels', 'creditLedger']) if (!Array.isArray(D[k])) D[k] = [];
   }
+  if (!Array.isArray(D.panels)) D.panels = [];
+  if (!D.panels.some(x => x.slug === 'main')) D.panels.unshift(defaultPanel());
+  const mainPanel = D.panels.find(x => x.slug === 'main');
+  if (!mainPanel.settings) mainPanel.settings = clone(D.settings);
+  D.settings = mainPanel.settings; syncCoins();
+  mainPanel.name = 'Head Admin Main'; mainPanel.active = true; mainPanel.deleted = false;
+  for (const p of D.panels) {
+    if (!Number.isFinite(Number(p.creditBalance))) p.creditBalance = 0;
+    if (!Number.isFinite(Number(p.creditsAllocated))) p.creditsAllocated = Number(p.creditBalance || 0);
+    if (!Number.isFinite(Number(p.creditsUsed))) p.creditsUsed = 0;
+    if (!p.settings) p.settings = clone(D.settings);
+    if (p.slug !== 'main' && !p.deleted && !p.active) p.active = true;
+  }
+  // Backfill old records into the existing main panel without discarding data.
+  for (const x of [...D.users, ...D.demoUsers, ...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (!x.panelId) x.panelId = 'main';
 }
 let saveChain = Promise.resolve();
 function save() {
@@ -93,6 +123,32 @@ const now = () => Date.now();
 const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const money = v => { const n = Number(v); return Number.isInteger(n) && n > 0 && n <= MAX_AMOUNT ? n : null; };
 const audit = (who, action, detail) => { D.audit.push({ id: nid(), ts: now(), who, action, detail }); if (D.audit.length > 2000) D.audit.splice(0, D.audit.length - 2000); };
+function recordCreditLedger(panel, amount, action, who, detail = '') {
+  const row = { id: nid(), ts: now(), panelId: panel.slug, amount: r2(amount), action, who, detail, balanceAfter: r2(panel.creditBalance || 0) };
+  D.creditLedger.push(row); if (D.creditLedger.length > 5000) D.creditLedger.splice(0, D.creditLedger.length - 5000);
+  return row;
+}
+function consumePanelCredits(panelId, amount, who, action, detail = '') {
+  const panel = D.panels.find(p => p.slug === String(panelId || 'main') && !p.deleted);
+  if (!panel) fail(409, 'Credit panel not found.');
+  const n = Number(amount);
+  if (!Number.isInteger(n) || n < 0 || n > MAX_AMOUNT) fail(400, 'Credit amount must be a whole number between 0 and 10,000,000.');
+  if (Number(panel.creditBalance || 0) < n) fail(409, `Insufficient panel credits. Available: ${Number(panel.creditBalance || 0)}; required: ${n}. Ask Head Admin to allocate more credits.`);
+  panel.creditBalance = r2(Number(panel.creditBalance || 0) - n);
+  panel.creditsUsed = r2(Number(panel.creditsUsed || 0) + n);
+  recordCreditLedger(panel, -n, action, who, detail);
+  return panel;
+}
+function previewDepositReferralTotal(user, baseAmount, rates) {
+  let total = 0, parentId = user && user.refBy;
+  for (let level = 0; level < 3 && parentId; level++) {
+    const ref = D.users.find(x => x.id === parentId); if (!ref) break;
+    const pct = Number(rates[level] || 0);
+    if (!ref.blocked && pct > 0 && baseAmount > 0) total += r2(baseAmount * pct / 100);
+    parentId = ref.refBy;
+  }
+  return r2(total);
+}
 class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const fail = (code, msg) => { throw new HttpError(code, msg); };
 
@@ -136,42 +192,52 @@ const syncCoins = () => { COINS.length = 0; COINS.push(...D.settings.coins.map(c
 const PRICE_API = E.PRICE_API_URL || 'https://api.coingecko.com/api/v3/coins/markets';
 let priceCache = { ts: 0, data: null, error: null };
 const BINANCE_API = E.BINANCE_API_URL || 'https://data-api.binance.vision/api/v3/ticker/24hr';
-async function fromCoinGecko() {
-  const url = `${PRICE_API}?vs_currency=usd&ids=${COINS.map(c => c[2]).join(',')}&sparkline=true&price_change_percentage=24h`;
+async function fromCoinGecko(coins = COINS) {
+  const url = `${PRICE_API}?vs_currency=usd&ids=${coins.map(c => c[2]).join(',')}&sparkline=true&price_change_percentage=24h`;
   const headers = { Accept: 'application/json' };
   if (E.COINGECKO_API_KEY) headers['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
   const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error('CoinGecko ' + r.status);
   const rows = await r.json(), by = Object.fromEntries(rows.map(x => [x.id, x]));
-  return COINS.map(([symbol, name, id, mark]) => {
+  return coins.map(([symbol, name, id, mark]) => {
     const x = by[id]; if (!x) return null;
     const sp = (x.sparkline_in_7d && x.sparkline_in_7d.price) || [], step = Math.max(1, Math.floor(sp.length / 28));
     return { symbol, name, mark, price: x.current_price, change: x.price_change_percentage_24h_in_currency ?? x.price_change_percentage_24h ?? 0, spark: sp.filter((_, i) => i % step === 0) };
   }).filter(Boolean);
 }
-async function fromBinance() {   // backup source: no geo-block on data-api.binance.vision, USDT ≈ USD
-  const syms = encodeURIComponent(JSON.stringify(COINS.map(c => c[0] + 'USDT')));
+async function fromBinance(coins = COINS, oldCache = priceCache) {   // backup source: no geo-block on data-api.binance.vision, USDT ≈ USD
+  const syms = encodeURIComponent(JSON.stringify(coins.map(c => c[0] + 'USDT')));
   const r = await fetch(`${BINANCE_API}?symbols=${syms}`, { signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error('Binance ' + r.status);
   const by = Object.fromEntries((await r.json()).map(x => [x.symbol, x]));
-  const old = Object.fromEntries(((priceCache.data) || []).map(x => [x.symbol, x.spark]));
-  return COINS.map(([symbol, name, , mark]) => {
+  const old = Object.fromEntries(((oldCache.data) || []).map(x => [x.symbol, x.spark]));
+  return coins.map(([symbol, name, , mark]) => {
     const x = by[symbol + 'USDT']; if (!x) return null;
     return { symbol, name, mark, price: Number(x.lastPrice), change: Number(x.priceChangePercent), spark: old[symbol] || [] };
   }).filter(Boolean);
 }
-async function getPrices() {
-  if (priceCache.data && now() - priceCache.ts < 20e3) return priceCache;
+const priceCaches = new Map();
+async function getPrices(coins = COINS) {
+  const cacheKey = coins.map(c => c[0] + ':' + c[2]).join('|');
+  let cache = priceCaches.get(cacheKey) || (cacheKey === COINS.map(c => c[0] + ':' + c[2]).join('|') ? priceCache : { ts: 0, data: null, error: null });
+  if (cache.data && now() - cache.ts < 20e3) return cache;
   let data = null, errs = [];
-  for (const src of [fromCoinGecko, fromBinance]) {
-    try { data = await src(); if (data.length) { priceCache = { ts: now(), data, error: null, source: src === fromBinance ? 'Binance' : 'CoinGecko' }; return priceCache; } }
-    catch (e) { errs.push(e.message); }
+  for (const src of ['cg', 'binance']) {
+    try {
+      data = src === 'cg' ? await fromCoinGecko(coins) : await fromBinance(coins, cache);
+      if (data.length) {
+        cache = { ts: now(), data, error: null, source: src === 'binance' ? 'Binance' : 'CoinGecko' };
+        priceCaches.set(cacheKey, cache);
+        if (cacheKey === COINS.map(c => c[0] + ':' + c[2]).join('|')) priceCache = cache;
+        return cache;
+      }
+    } catch (e) { errs.push(e.message); }
   }
-  priceCache = { ...priceCache, error: errs.join(' | ') };
-  if (!priceCache.data) fail(503, 'Price sources failed: ' + errs.join(' | '));
-  return priceCache;
+  cache = { ...cache, error: errs.join(' | ') };
+  priceCaches.set(cacheKey, cache);
+  if (!cache.data) fail(503, 'Price sources failed: ' + errs.join(' | '));
+  return cache;
 }
-
 
 // USD->INR rate for trades (cached). Trades are refused if no trustworthy rate is available.
 const FX_URL = E.FX_URL || 'https://open.er-api.com/v6/latest/USD';
@@ -252,7 +318,7 @@ function settlePosition(p) {
   const u = p.mode === 'demo' ? D.demoUsers.find(x => x.id === p.uid) : D.users.find(x => x.id === p.uid), profit = r2(p.amount * p.returnPct / 100);
   p.status = 'Settled'; p.profit = profit; p.done = now();
   if (u) u.balance = r2(u.balance + p.amount + profit);
-  const ref = p.mode !== 'demo' && u && u.refBy && D.users.find(x => x.id === u.refBy);
+  const ref = p.mode !== 'demo' && u && u.refBy && D.users.find(x => x.id === u.refBy && String(x.panelId || 'main') === String(p.panelId || 'main'));
   if (ref && !ref.blocked && p.refPct > 0) {
     const c = r2((p.refBase === 'amount' ? p.amount : profit) * p.refPct / 100);
     if (c > 0) { ref.balance = r2(ref.balance + c); ref.refEarned = r2((ref.refEarned || 0) + c); p.refUid = ref.id; p.refPaid = c; }
@@ -283,9 +349,10 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = () => ({ withdrawalMode: D.settings.withdrawalMode || 'all', withdrawalCooldownHours: D.settings.withdrawalCooldownHours ?? 24, withdrawalFeeType: D.settings.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(D.settings.withdrawalFeeValue || 0), withdrawalFeeLabel: D.settings.withdrawalFeeLabel || 'Platform Fee', paymentMode: D.settings.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: D.settings.upi, payee: D.settings.payee, qr: D.settings.qr, support: D.settings.support, notice: D.settings.notice, bonus: D.settings.bonus, footerText: D.settings.footerText || 'India-focused platform', minDeposit: LIM().minDeposit, minWithdraw: LIM().minWithdraw, minTrade: LIM().minTrade, bonusCoin: D.settings.bonusCoins[0] || D.settings.bonusCoin, bonusCoins: D.settings.bonusCoins.filter(c => c.enabled), depositRef: D.settings.depositRef, tradeRef: { enabled: D.settings.tradeRef.enabled, pct: D.settings.tradeRef.pct, levels: D.settings.tradeRef.levels || [D.settings.tradeRef.pct || 0, 0, 0] }, coins: COINS });
+const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
 const needUser = u => u || fail(401, 'Please login.');
-const needAdmin = u => { needUser(u); if (u.role !== 'admin') fail(403, 'Forbidden'); };
+const needAdmin = u => { needUser(u); if (!['admin', 'headAdmin', 'panelAdmin'].includes(u.role)) fail(403, 'Forbidden'); };
+const needHead = u => { needUser(u); if (!isHead(u)) fail(403, 'Head Admin only.'); };
 
 async function razorpayRequest(method, endpoint, payload) {
   const id = E.RAZORPAY_KEY_ID, secret = E.RAZORPAY_KEY_SECRET;
@@ -301,17 +368,32 @@ function signatureMatches(expected, supplied) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 function creditDeposit(d, paymentId) {
-  if (!d || d.status === 'Approved') return false;
-  if (d.status !== 'Pending' || d.provider !== 'razorpay') return false;
+  if (!d || d.status === 'Approved') return { credited: false, alreadyCredited: true };
+  if (d.status !== 'Pending' || d.provider !== 'razorpay') return { credited: false, waitingForCredits: false };
   const user = D.users.find(x => x.id === d.uid);
-  if (!user) return false;
-  // No await between status check and balance update: webhook/callback is idempotent in this single process.
-  user.balance = r2((user.balance || 0) + d.amount);
-  d.status = 'Approved'; d.paymentId = paymentId; d.providerStatus = 'captured'; d.done = now(); d.by = 'Razorpay verified';
-  const cfg = D.settings.depositRef || { enabled: false, levels: [0,0,0] };
+  if (!user) { d.paymentId = paymentId; d.providerStatus = 'captured'; d.capturedAt = d.capturedAt || now(); d.creditPending = true; d.creditError = 'User account missing; manual review required'; return { credited: false, waitingForCredits: true }; }
+  const panel = D.panels.find(p => p.slug === String(d.panelId || 'main') && !p.deleted);
+  if (!panel) return { credited: false, waitingForCredits: true };
+  const creditAmount = Number(d.creditAmount || d.amount);
+  const panelSettings = panel.settings || D.settings;
+  const cfg = panelSettings.depositRef || { enabled: false, levels: [0,0,0] };
+  const referralCost = cfg.enabled && user.refBy ? previewDepositReferralTotal(user, d.amount, cfg.levels || [0,0,0]) : 0;
+  const totalCost = r2(creditAmount + referralCost);
+  // Payment can be captured before this panel has enough allocated wallet credits.
+  // Keep the request pending and retry after Head Admin allocates credits.
+  d.paymentId = paymentId; d.providerStatus = 'captured'; d.capturedAt = d.capturedAt || now();
+  if (Number(panel.creditBalance || 0) < totalCost) {
+    d.creditPending = true; d.creditError = `Awaiting panel credits (${totalCost} required)`;
+    audit('system', 'razorpay-awaiting-panel-credits', `deposit #${d.id}, captured ₹${d.amount}; needs ${totalCost} panel credits`);
+    return { credited: false, waitingForCredits: true };
+  }
+  consumePanelCredits(panel.slug, totalCost, 'Razorpay verified', 'deposit-credit', `deposit #${d.id}; user credit ${creditAmount}; referral ${referralCost}`);
+  user.balance = r2((user.balance || 0) + creditAmount);
+  d.creditedAmount = creditAmount; d.creditsSpent = totalCost; d.creditPending = false; delete d.creditError;
+  d.status = 'Approved'; d.done = now(); d.by = 'Razorpay verified';
   if (cfg.enabled && user.refBy) { d.refPayments = payReferralLevels(user, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); }
-  audit('system', 'razorpay-deposit-captured', `deposit #${d.id}, order ${d.orderId}, payment ${paymentId}, ₹${d.amount}`);
-  return true;
+  audit('system', 'razorpay-deposit-captured', `deposit #${d.id}, order ${d.orderId}, payment ${paymentId}, ₹${d.amount}; credited ${creditAmount}`);
+  return { credited: true, waitingForCredits: false };
 }
 async function confirmRazorpayPayment(orderId, paymentId, suppliedSignature) {
   const d = D.deposits.find(x => x.provider === 'razorpay' && x.orderId === orderId);
@@ -322,19 +404,20 @@ async function confirmRazorpayPayment(orderId, paymentId, suppliedSignature) {
   if (!signatureMatches(expected, suppliedSignature)) fail(400, 'Payment signature verification failed.');
   const payment = await razorpayRequest('GET', '/payments/' + encodeURIComponent(paymentId));
   if (payment.order_id !== orderId || payment.status !== 'captured' || Number(payment.amount) !== Number(d.amount) * 100 || payment.currency !== 'INR') fail(409, 'Payment is not captured for the expected amount. Balance was not credited.');
-  const changed = creditDeposit(d, paymentId);
-  if (changed) await save();
-  return { ok: true, alreadyCredited: !changed, deposit: d };
+  const result = creditDeposit(d, paymentId);
+  await save();
+  return { ok: true, alreadyCredited: false, waitingForCredits: !!result.waitingForCredits, message: result.waitingForCredits ? 'Payment verified. Wallet credit is pending until Head Admin allocates enough panel credits.' : 'Payment verified and wallet credited.', deposit: d };
 }
 
 const routes = {
-  'GET /api/prices': async () => { const c = await getPrices(); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
-  'GET /api/config': async () => PUBLIC_SETTINGS(),
+  'GET /api/prices': async (req) => { const c = await getPrices(S(req).coins); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
+  'GET /api/config': async (req) => PUBLIC_SETTINGS(req),
   'GET /api/klines': async (req) => {
     limit('kl:' + req.ip, 120, 60e3);
     const q = new URL(req.url, 'http://x').searchParams, sym = str(q.get('symbol'), 10).toUpperCase(), iv = q.get('interval') || '1h';
-    if (!COINS.some(c => c[0] === sym) && !(D.settings.bonusCoins || []).some(c => c.symbol === sym)) fail(400, 'Unknown coin.'); if (!KL_LIMIT[iv]) fail(400, 'Bad interval.');
-    return { symbol: sym, interval: iv, candles: await getKlines(sym, iv) };
+    if (!S(req).coins.some(c => c[0] === sym) && !(S(req).bonusCoins || []).some(c => c.symbol === sym)) fail(400, 'Unknown coin.'); if (!KL_LIMIT[iv]) fail(400, 'Bad interval.');
+    const localCoin = (S(req).bonusCoins || []).find(c => c.symbol === sym);
+    return { symbol: sym, interval: iv, candles: localCoin ? getAdminCoinKlines(localCoin, iv) : await getKlines(sym, iv) };
   },
 
   'POST /api/register': async (req, res, b) => {
@@ -344,9 +427,9 @@ const routes = {
     if (!emailOk(email)) fail(400, 'Enter a valid email.');
     if (pw.length < 8 || pw.length > 100) fail(400, 'Password must be 8–100 characters.');
     if (D.users.some(u => u.email === email) || D.demoUsers.some(u => u.email === email)) fail(409, 'This email is already registered.');
-    const ref = str(b.ref, 20).toUpperCase(); let refBy = ref && D.users.find(u => u.refCode === ref);
+    const ref = str(b.ref, 20).toUpperCase(); let refBy = ref && D.users.find(u => u.refCode === ref && String(u.panelId || 'main') === String(req.panelId || 'main'));
     if (refBy && ((refBy.phone && refBy.phone === phone) || refBy.email === email)) refBy = null;   // no self-referral with the same phone
-    const u = { id: nid(), name, email, phone, role: 'user', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
+    const u = { id: nid(), name, email, phone, role: 'user', panelId: req.panelId || 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
     D.users.push(u); audit('system', 'register', u.email); await save();
     setCookie(res, makeToken(u.id), 7 * 86400);
     return { user: pubUser(u) };
@@ -355,6 +438,7 @@ const routes = {
     const email = normEmail(b.email); limit('login:' + req.ip, 20, 600e3); limit('loginu:' + email, 8, 600e3);
     const u = D.users.find(x => x.email === email) || D.demoUsers.find(x => x.email === email);
     if (!u || !checkPw(String(b.password || ''), u.pass)) fail(401, 'Wrong email or password.');
+    if (u.role !== 'headAdmin' && String(u.panelId || 'main') !== String(req.panelId || 'main')) fail(401, 'Wrong email or password.');
     if (u.blocked) fail(403, 'This account is blocked. Contact support.');
     setCookie(res, makeToken(u.id), 7 * 86400);
     return { user: pubUser(u) };
@@ -363,11 +447,11 @@ const routes = {
   'GET /api/me': async (req, res, b, u) => {
     needUser(u); await settleAndSave();
     return {
-      user: pubUser(u), config: PUBLIC_SETTINGS(),
+      user: pubUser(u), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
       positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
-      referrals: u.mode === 'demo' ? 0 : D.users.filter(x => x.refBy === u.id).length,
+      referrals: u.mode === 'demo' ? 0 : D.users.filter(x => x.refBy === u.id && String(x.panelId || 'main') === String(u.panelId || 'main')).length,
       trades: (u.mode === 'demo' ? (u.trades || []) : D.trades.filter(t => t.uid === u.id)).sort((a, c) => c.ts - a.ts).slice(0, 50)
     };
   },
@@ -379,12 +463,12 @@ const routes = {
   },
   'POST /api/razorpay/order': async (req, res, b, u) => {
     needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts cannot make real deposits.');
-    if (D.settings.paymentMode !== 'razorpay') fail(403, 'Razorpay deposits are currently disabled by the administrator.');
+    if (S(req).paymentMode !== 'razorpay') fail(403, 'Razorpay deposits are currently disabled by the administrator.');
     if (!E.RAZORPAY_KEY_ID || !E.RAZORPAY_KEY_SECRET || !E.RAZORPAY_WEBHOOK_SECRET) fail(503, 'Razorpay is not fully configured on the server.');
     limit('rzorder:' + u.id, 8, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
-    if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
-    const d = { id: nid(), uid: u.id, email: u.email, amount, status: 'Pending', provider: 'razorpay', paymentMethod: 'razorpay', ts: now() };
+    if (amount < S(req).limits.minDeposit) fail(400, `Minimum deposit is ₹${S(req).limits.minDeposit.toLocaleString('en-IN')}.`);
+    const d = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', amount, status: 'Pending', provider: 'razorpay', paymentMethod: 'razorpay', ts: now() };
     const order = await razorpayRequest('POST', '/orders', { amount: amount * 100, currency: 'INR', receipt: 'cb_' + d.id + '_' + now(), notes: { app: 'Crypto Bridge', deposit_id: String(d.id), user_id: String(u.id) } });
     d.orderId = order.id; d.providerStatus = order.status || 'created'; D.deposits.push(d);
     audit(u.email, 'razorpay-order-created', `deposit #${d.id}, order ${order.id}, ₹${amount}`); await save();
@@ -397,23 +481,23 @@ const routes = {
     return await confirmRazorpayPayment(orderId, paymentId, sig);
   },
   'POST /api/deposit': async (req, res, b, u) => {
-    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real deposits are disabled.'); if (D.settings.paymentMode === 'razorpay') fail(403, 'QR/UTR deposits are disabled. Use Razorpay Checkout.'); limit('dep:' + u.id, 10, 3600e3);
+    needUser(u); if (u.mode === 'demo') fail(403, 'Demo accounts use simulated funds; real deposits are disabled.'); if (S(req).paymentMode === 'razorpay') fail(403, 'QR/UTR deposits are disabled. Use Razorpay Checkout.'); limit('dep:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
-    if (amount < LIM().minDeposit) fail(400, `Minimum deposit is ₹${LIM().minDeposit.toLocaleString('en-IN')}.`);
+    if (amount < S(req).limits.minDeposit) fail(400, `Minimum deposit is ₹${S(req).limits.minDeposit.toLocaleString('en-IN')}.`);
     const utr = str(b.utr, 30).toUpperCase(); if (!/^[A-Z0-9]{8,30}$/.test(utr)) fail(400, 'Enter the UTR / transaction reference (8–30 letters/digits).');
     if (D.deposits.some(d => d.utr === utr)) fail(409, 'This UTR has already been submitted.');
-    if (!D.settings.upi && !D.settings.qr) fail(503, 'Deposits are not open yet. Contact support.');
-    const d = { id: nid(), uid: u.id, email: u.email, amount, utr, status: 'Pending', ts: now() };
+    if (!S(req).upi && !S(req).qr) fail(503, 'Deposits are not open yet. Contact support.');
+    const d = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', amount, utr, status: 'Pending', ts: now() };
     D.deposits.push(d); audit(u.email, 'deposit-request', `₹${amount} ${utr}`); await save(); return { deposit: d };
   },
   'POST /api/withdraw': async (req, res, b, u) => {
     needUser(u); limit('wd:' + u.id, 10, 3600e3);
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid amount.');
-    if (amount < LIM().minWithdraw) fail(400, `Minimum withdrawal is ₹${LIM().minWithdraw}.`);
+    if (amount < S(req).limits.minWithdraw) fail(400, `Minimum withdrawal is ₹${S(req).limits.minWithdraw}.`);
     const lastRejected = D.withdrawals.filter(w => w.uid === u.id && w.status === 'Rejected' && Number(w.retryAt || 0) > now()).sort((a,b) => Number(b.retryAt || 0) - Number(a.retryAt || 0))[0];
     if (lastRejected) { const mins = Math.ceil((lastRejected.retryAt - now()) / 60000); fail(429, `Your last withdrawal was rejected. You can submit another request in about ${mins} minute(s).`); }
     if (amount > u.balance) fail(400, 'Amount is more than your available balance.');
-    const mode = D.settings.withdrawalMode || 'all';
+    const mode = S(req).withdrawalMode || 'all';
     if (mode === 'profit') {
       const userTrades = u.mode === 'demo' ? (u.trades || []) : D.trades.filter(t => t.uid === u.id);
       const earned = r2(D.positions.filter(p => p.uid === u.id && p.status === 'Settled').reduce((n,p) => n + Math.max(0, Number(p.profit || 0)), 0) + userTrades.reduce((n,t) => n + Math.max(0, Number(t.profit || 0)), 0));
@@ -422,21 +506,21 @@ const routes = {
       if (amount > availableProfit) fail(400, `Profit-only withdrawals are enabled. Available profit for withdrawal: ₹${availableProfit}. To request principal release, contact support.`);
     }
     const upi = str(b.upi, 60); if (!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(upi)) fail(400, 'Enter a valid UPI ID (name@bank).');
-    const feeType = D.settings.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent';
-    const feeValue = Math.max(0, Number(D.settings.withdrawalFeeValue || 0));
+    const feeType = S(req).withdrawalFeeType === 'fixed' ? 'fixed' : 'percent';
+    const feeValue = Math.max(0, Number(S(req).withdrawalFeeValue || 0));
     const fee = Math.min(amount, r2(feeType === 'fixed' ? feeValue : amount * feeValue / 100));
     const netAmount = r2(amount - fee);
     if (netAmount <= 0) fail(400, 'Withdrawal fee must be less than the requested amount.');
     u.balance = r2(u.balance - amount);   // gross amount held; refunded once if rejected
-    const w = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), amount, fee, feeType, feeValue, feeLabel: str(D.settings.withdrawalFeeLabel || 'Platform Fee', 40), netAmount, upi, status: 'Pending', ts: now() };
+    const w = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), amount, fee, feeType, feeValue, feeLabel: str(S(req).withdrawalFeeLabel || 'Platform Fee', 40), netAmount, upi, status: 'Pending', ts: now() };
     D.withdrawals.push(w); audit(u.email, 'withdraw-request', `gross ₹${amount}; fee ₹${fee}; payout ₹${netAmount} ${upi}`); await save(); return { withdrawal: w, balance: u.balance };
   },
 
   'POST /api/trade': async (req, res, b, u) => {
     needUser(u); limit('trade:' + u.id, 40, 600e3);
-    const sym = str(b.symbol, 10).toUpperCase(), coin = COINS.find(c => c[0] === sym); if (!coin) fail(400, 'Unknown coin.');
+    const sym = str(b.symbol, 10).toUpperCase(), coin = S(req).coins.find(c => c[0] === sym); if (!coin) fail(400, 'Unknown coin.');
     if (b.side !== 'buy' && b.side !== 'sell') fail(400, 'Bad order.');
-    const pc = await getPrices(), fx = await getFx();
+    const pc = await getPrices(S(req).coins), fx = await getFx();
     if (pc.error || now() - pc.ts > 60e3) fail(503, 'Live price is not fresh right now. Please try again in a moment.');
     const p = pc.data.find(x => x.symbol === sym); if (!p) fail(503, 'Price unavailable for ' + sym);
     const unit = p.price * fx;                       // ₹ per coin, decided on the server only
@@ -444,7 +528,7 @@ const routes = {
     let qty, inrAmt, profit = null, refPaid = 0, refUid = null, tRefPayments = [];
     if (b.side === 'buy') {
       inrAmt = r2(Number(b.amount));
-      if (!Number.isFinite(inrAmt) || inrAmt < LIM().minTrade) fail(400, `Minimum buy is ₹${LIM().minTrade}.`);
+      if (!Number.isFinite(inrAmt) || inrAmt < S(req).limits.minTrade) fail(400, `Minimum buy is ₹${S(req).limits.minTrade}.`);
       if (inrAmt > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
       qty = Math.floor(inrAmt / unit * 1e8) / 1e8; if (qty <= 0) fail(400, 'Amount too small.');
       if (!u.cost) u.cost = {};
@@ -463,7 +547,7 @@ const routes = {
       profit = r2(inrAmt - costPart); u.cost[sym] = r2(Math.max(0, (u.cost[sym] == null ? 0 : u.cost[sym]) - costPart));
       u.balance = r2(u.balance + inrAmt); u.holdings[sym] = r8(have - qty); if (u.holdings[sym] <= 1e-9) { delete u.holdings[sym]; delete u.cost[sym]; }
       // referral commission: only on REAL realised profit, paid from platform funds (the user's own proceeds are not reduced)
-      const tr = D.settings.tradeRef;
+      const tr = S(req).tradeRef;
       if (tr.enabled && profit > 0 && u.refBy) {
         const rates = Array.isArray(tr.levels) ? tr.levels : [Number(tr.pct || 0), 0, 0];
         const payments = payReferralLevels(u, profit, rates, 'trade', Number(tr.maxPerTrade || 0));
@@ -471,7 +555,7 @@ const routes = {
         if (payments.length) { tRefPayments = payments; refUid = payments[0].uid; }
       }
     }
-    const t = { id: nid(), uid: u.id, email: u.email, side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
+    const t = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', side: b.side, symbol: sym, qty, priceUsd: p.price, fx, price: r2(unit), amount: inrAmt, ts: now() };
     if (profit !== null) t.profit = profit; if (refPaid) { t.refPaid = refPaid; t.refUid = refUid; t.refPayments = tRefPayments; audit('system', 'trade-referral', `#${t.id} ${u.email} profit ₹${profit} -> ₹${refPaid} across ${tRefPayments.length} level(s)`); }
     if (u.mode === 'demo') { if (!Array.isArray(u.trades)) u.trades = []; u.trades.push(t); if (u.trades.length > 2000) u.trades.splice(0, u.trades.length - 2000); }
     else { D.trades.push(t); if (D.trades.length > 20000) D.trades.splice(0, D.trades.length - 20000); }
@@ -480,13 +564,13 @@ const routes = {
 
   'POST /api/bonus/trade': async (req, res, b, u) => {
     needUser(u); limit('bonus:' + u.id, 30, 600e3);
-    const sym = str(b.symbol || (D.settings.bonusCoins[0] || D.settings.bonusCoin).symbol, 8).toUpperCase(); const c = D.settings.bonusCoins.find(x => x.symbol === sym); if (!c || !c.enabled) fail(403, sym + ' is not open right now.');
+    const sym = str(b.symbol || (S(req).bonusCoins[0] || S(req).bonusCoin).symbol, 8).toUpperCase(); const c = S(req).bonusCoins.find(x => x.symbol === sym); if (!c || !c.enabled) fail(403, sym + ' is not open right now.');
     const amount = money(b.amount); if (!amount) fail(400, 'Enter a valid whole-rupee amount.');
     if (amount < c.minAmount) fail(400, `Minimum is ₹${c.minAmount}.`); if (amount > c.maxAmount) fail(400, `Maximum per trade is ₹${c.maxAmount}.`);
     if (amount > u.balance) fail(400, 'Not enough wallet balance. Recharge first.');
     u.balance = r2(u.balance - amount);
     // rates are snapshotted on the position, so later admin changes never alter an open trade
-    const p = { id: nid(), uid: u.id, email: u.email, mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockSeconds: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600), lockHours: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) / 3600, status: 'Active', ts: now(), matureAt: now() + Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) * 1000 };
+    const p = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), symbol: c.symbol, amount, returnPct: c.returnPct, refPct: c.refPct, refBase: c.refBase, lockSeconds: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600), lockHours: Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) / 3600, status: 'Active', ts: now(), matureAt: now() + Number(c.lockSeconds ?? (c.lockHours || 0) * 3600) * 1000 };
     D.positions.push(p); audit(u.email, 'bonus-trade', `#${p.id} ₹${amount} @${c.returnPct}%`);
     settleDue(); await save(); return { position: p, balance: u.balance };
   },
@@ -494,19 +578,19 @@ const routes = {
   // ----- admin -----
   'GET /api/admin/overview': async (req, res, b, u) => {
     needAdmin(u); await settleAndSave();
-    const users = D.users.filter(x => x.role !== 'admin'), ok = D.deposits.filter(d => d.status === 'Approved'), paid = D.withdrawals.filter(w => w.status === 'Paid');
+    const users = panelRows(req, D.users.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role))), depRows = panelRows(req, D.deposits), wdRows = panelRows(req, D.withdrawals), tradeRows = panelRows(req, D.trades), posRows = panelRows(req, D.positions), ok = depRows.filter(d => d.status === 'Approved'), paid = wdRows.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
-      users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: D.trades.length, demoUsers: D.demoUsers.length, demoWallets: r2(D.demoUsers.reduce((s, x) => s + Number(x.balance || 0), 0)),
+      role: u.role, panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
       depositsApproved: sum(ok), withdrawalsPaid: sumPayout(paid),
-      pendingDeposits: D.deposits.filter(d => d.status === 'Pending').length, pendingWithdrawals: D.withdrawals.filter(w => w.status === 'Pending').length,
-      bonus: { active: D.positions.filter(p => p.status === 'Active').length, activeAmount: sum(D.positions.filter(p => p.status === 'Active')), profitPaid: r2(D.positions.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(D.positions.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(D.trades.reduce((s, t) => s + (t.refPaid || 0), 0)) },
-      storage: UP_URL ? 'upstash' : 'file', settings: D.settings, min: { deposit: LIM().minDeposit, withdraw: LIM().minWithdraw, trade: LIM().minTrade }
+      pendingDeposits: depRows.filter(d => d.status === 'Pending').length, pendingWithdrawals: wdRows.filter(w => w.status === 'Pending').length,
+      bonus: { active: posRows.filter(p => p.status === 'Active').length, activeAmount: sum(posRows.filter(p => p.status === 'Active')), profitPaid: r2(posRows.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(posRows.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(tradeRows.reduce((s, t) => s + (t.refPaid || 0), 0)) },
+      storage: UP_URL ? 'upstash' : 'file', settings: S(req), min: { deposit: S(req).limits.minDeposit, withdraw: S(req).limits.minWithdraw, trade: S(req).limits.minTrade }
     };
   },
-  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: D.users.map(x => ({ ...pubUser(x), blocked: x.blocked, refBy: x.refBy })) }; },
-  'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: D.demoUsers.map(x => ({ id: x.id, name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
+  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: x.blocked, refBy: x.refBy })) }; },
+  'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
   'POST /api/admin/demo-user': async (req, res, b, u) => {
     needAdmin(u); const action = str(b.action, 16);
     if (action === 'create') {
@@ -515,10 +599,10 @@ const routes = {
       if (!emailOk(email)) fail(400, 'Enter a valid email.');
       if (password.length < 8 || password.length > 100) fail(400, 'Password must be 8–100 characters.');
       if (D.demoUsers.some(x => x.email === email) || D.users.some(x => x.email === email)) fail(409, 'Email already exists in real or demo accounts.');
-      const x = { id: 'demo-' + nid(), name, email, phone: str(b.phone, 20), pass: hashPw(password), balance: 0, holdings: {}, trades: [], blocked: false, mode: 'demo', created: now() };
+      const x = { id: 'demo-' + nid(), name, email, phone: str(b.phone, 20), panelId: req.panelId || 'main', pass: hashPw(password), balance: 0, holdings: {}, trades: [], blocked: false, mode: 'demo', created: now() };
       D.demoUsers.push(x); audit(u.email, 'demo-create', x.id + ' ' + x.email); await save(); return { user: { id: x.id, name: x.name, email: x.email, balance: x.balance, created: x.created } };
     }
-    const x = D.demoUsers.find(v => v.id === b.id); if (!x) fail(404, 'Demo account not found.');
+    const x = D.demoUsers.find(v => v.id === b.id); if (!x) fail(404, 'Demo account not found.'); assertPanelAccess(req, x);
     if (action === 'delete') D.demoUsers = D.demoUsers.filter(v => v.id !== x.id);
     else if (action === 'block') x.blocked = true;
     else if (action === 'unblock') x.blocked = false;
@@ -528,22 +612,23 @@ const routes = {
     else fail(400, 'Bad action');
     audit(u.email, 'demo-' + action, x.id + ' ' + x.email); await save(); return { ok: true };
   },
-  'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...D.deposits].sort((a, c) => c.ts - a.ts) }; },
-  'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...D.withdrawals].sort((a, c) => c.ts - a.ts) }; },
-  'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); const demo = D.demoUsers.flatMap(x => (x.trades || []).map(t => ({ ...t, mode: 'demo', email: t.email || x.email }))); const real = D.trades.map(t => ({ ...t, mode: 'real' })); return { items: [...real, ...demo].sort((a, c) => c.ts - a.ts).slice(0, 1000) }; },
-  'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: D.settings.bonusCoins[0] || BONUS_DEFAULT(), coins: D.settings.bonusCoins, items: [...D.positions].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
+  'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...panelRows(req, D.deposits)].sort((a, c) => c.ts - a.ts) }; },
+  'GET /api/admin/credits': async (req, res, b, u) => { needAdmin(u); const ps = isHead(u) ? D.panels.filter(p => !p.deleted) : [req.panel]; return { items: (isHead(u) ? D.creditLedger : D.creditLedger.filter(x => String(x.panelId || 'main') === String(req.panelId || 'main'))).slice().reverse().slice(0, 1000), balance: r2(ps.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), allocated: r2(ps.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), used: r2(ps.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) }; },
+  'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...panelRows(req, D.withdrawals)].sort((a, c) => c.ts - a.ts) }; },
+  'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); const demo = panelRows(req, D.demoUsers).flatMap(x => (x.trades || []).map(t => ({ ...t, mode: 'demo', email: t.email || x.email }))); const real = panelRows(req, D.trades).map(t => ({ ...t, mode: 'real' })); return { items: [...real, ...demo].sort((a, c) => c.ts - a.ts).slice(0, 1000) }; },
+  'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: S(req).bonusCoins[0] || BONUS_DEFAULT(), coins: S(req).bonusCoins, items: [...panelRows(req, D.positions)].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
   'POST /api/admin/bonuscoin': async (req, res, b, u) => {
     needAdmin(u);
     const action = str(b.action || 'save', 12), sym = str(b.symbol, 8).toUpperCase();
     if (action === 'delete') {
-      const coin = D.settings.bonusCoins.find(x => x.symbol === sym); if (!coin) fail(404, 'Bonus coin not found.');
+      const coin = S(req).bonusCoins.find(x => x.symbol === sym); if (!coin) fail(404, 'Bonus coin not found.');
       if (D.positions.some(p => p.symbol === sym && p.status === 'Active')) fail(409, 'This coin has active positions. Settle or refund them first.');
-      D.settings.bonusCoins = D.settings.bonusCoins.filter(x => x.symbol !== sym); D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
-      audit(u.email, 'bonuscoin-delete', sym); await save(); return { ok: true, coins: D.settings.bonusCoins };
+      S(req).bonusCoins = S(req).bonusCoins.filter(x => x.symbol !== sym); S(req).bonusCoin = S(req).bonusCoins[0] || BONUS_DEFAULT();
+      audit(u.email, 'bonuscoin-delete', sym); await save(); return { ok: true, coins: S(req).bonusCoins };
     }
     const name = str(b.name, 40), ret = Number(b.returnPct), refp = Number(b.refPct), lock = Number(b.lockSeconds ?? (b.lockHours != null ? Number(b.lockHours) * 3600 : 60)), mn = Number(b.minAmount), mx = Number(b.maxAmount), startPrice = Number(b.startPrice ?? 1), chartPercent = Number(b.chartPercent ?? 0), chartMode = b.chartMode === 'graph' ? 'graph' : 'percent', chartHours = Number(b.chartHours ?? 24), chartAgeHours = Number(b.chartAgeHours ?? 24), candleVolatilityPct = Number(b.candleVolatilityPct ?? 2);
     if (!/^[A-Z0-9]{2,8}$/.test(sym)) fail(400, 'Symbol must be 2–8 letters/digits.');
-    if (COINS.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
+    if (S(req).coins.some(c => c[0] === sym)) fail(400, 'Symbol clashes with a market coin.');
     if (name.length < 2) fail(400, 'Enter a coin name.');
     if (!(ret >= 0 && ret <= 100) || !(refp >= 0 && refp <= 100)) fail(400, 'Return and referral percentages must be 0–100.');
     if (!['profit','amount'].includes(b.refBase)) fail(400, 'Bad referral base.');
@@ -554,19 +639,19 @@ const routes = {
     if (!Number.isFinite(chartHours) || chartHours < 1 || chartHours > 8760) fail(400, 'Trend duration must be 1–8760 hours.');
     if (!Number.isFinite(chartAgeHours) || chartAgeHours < 1 || chartAgeHours > 8760) fail(400, 'Coin chart age must be 1–8760 hours.');
     if (!Number.isFinite(candleVolatilityPct) || candleVolatilityPct < 0 || candleVolatilityPct > 20) fail(400, 'Candle volatility must be 0–20%.');
-    let coin = D.settings.bonusCoins.find(x => x.symbol === sym);
+    let coin = S(req).bonusCoins.find(x => x.symbol === sym);
     if (action === 'add' && coin) fail(409, 'Bonus coin already exists.');
     if (action !== 'add' && !coin && action !== 'save') fail(404, 'Bonus coin not found.');
     const old = coin || {};
     const chartAgeChanged = !old.id || Number(old.chartAgeHours || 24) !== chartAgeHours;
     const chartStartedAt = chartAgeChanged ? now() - chartAgeHours * 3600000 : (Number(old.chartStartedAt) || now() - chartAgeHours * 3600000);
     coin = { ...old, id: old.id || 'bc-' + sym, enabled: !!b.enabled, symbol: sym, name, returnPct: r2(ret), refPct: r2(refp), refBase: b.refBase, lockSeconds: lock, minAmount: mn, maxAmount: mx, startPrice, priceHistory: old.priceHistory || [], updatedAt: now(), chartStartedAt, chartAgeHours, priceMode: 'admin-simulated', chartMode, chartPercent, chartHours, candleVolatilityPct };
-    if (!old.id) D.settings.bonusCoins.push(coin); else D.settings.bonusCoins = D.settings.bonusCoins.map(x => x.symbol === sym ? coin : x);
-    D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
-    audit(u.email, 'bonuscoin-' + action, JSON.stringify(coin)); await save(); return { ok: true, coin, coins: D.settings.bonusCoins };
+    if (!old.id) S(req).bonusCoins.push(coin); else S(req).bonusCoins = S(req).bonusCoins.map(x => x.symbol === sym ? coin : x);
+    S(req).bonusCoin = S(req).bonusCoins[0] || BONUS_DEFAULT();
+    audit(u.email, 'bonuscoin-' + action, JSON.stringify(coin)); await save(); return { ok: true, coin, coins: S(req).bonusCoins };
   },
   'POST /api/admin/position': async (req, res, b, u) => {
-    needAdmin(u); const p = D.positions.find(x => x.id === b.id); if (!p) fail(404, 'Not found');
+    needAdmin(u); const p = D.positions.find(x => x.id === b.id); if (!p) fail(404, 'Not found'); assertPanelAccess(req, p);
     if (p.status !== 'Active') fail(409, 'Already ' + p.status + '.');
     if (b.action === 'cancel') { const t = D.users.find(x => x.id === p.uid); if (t) t.balance = r2(t.balance + p.amount); p.status = 'Cancelled'; p.done = now(); }   // refund principal once
     else if (b.action === 'settle') settlePosition(p); else fail(400, 'Bad action');
@@ -575,12 +660,13 @@ const routes = {
   'GET /api/admin/report': async (req, res, b, u) => {      // per-day summary, last 14 days (IST)
     needAdmin(u); await settleAndSave();
     const day = ts => new Date(ts + 19800e3).toISOString().slice(0, 10), rows = {};
+    const reportUsers = panelRows(req, D.users), reportDeposits = panelRows(req, D.deposits), reportWithdrawals = panelRows(req, D.withdrawals), reportTrades = panelRows(req, D.trades);
     for (let i = 0; i < 14; i++) { const k = day(now() - i * 864e5); rows[k] = { date: k, signups: 0, deposits: 0, depositAmt: 0, withdrawals: 0, withdrawAmt: 0, trades: 0, tradeVol: 0 }; }
     const add = (ts, f) => { const r = rows[day(ts)]; if (r) f(r); };
-    D.users.filter(x => x.role !== 'admin').forEach(x => add(x.created, r => r.signups++));
-    D.deposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
-    D.withdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += Number(x.netAmount == null ? x.amount : x.netAmount); }));
-    D.trades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
+    reportUsers.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).forEach(x => add(x.created, r => r.signups++));
+    reportDeposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
+    reportWithdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += Number(x.netAmount == null ? x.amount : x.netAmount); }));
+    reportTrades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
     return { rows: Object.values(rows).sort((a, c) => c.date.localeCompare(a.date)) };
   },
   'POST /api/admin/referral': async (req, res, b, u) => {
@@ -589,16 +675,16 @@ const routes = {
     while (levels.length < 3) levels.push(0);
     if (levels.some(x => !Number.isFinite(x) || x < 0 || x > 100)) fail(400, 'Each level percent must be 0–100.');
     if (!(mx >= 0 && mx <= MAX_AMOUNT)) fail(400, 'Max per trade must be 0 or more.');
-    D.settings.tradeRef = { enabled: !!b.enabled, pct: r2(levels[0]), levels: levels.map(r2), maxPerTrade: r2(mx) };
-    audit(u.email, 'trade-referral-settings', JSON.stringify(D.settings.tradeRef)); await save(); return { ok: true };
+    S(req).tradeRef = { enabled: !!b.enabled, pct: r2(levels[0]), levels: levels.map(r2), maxPerTrade: r2(mx) };
+    audit(u.email, 'trade-referral-settings', JSON.stringify(S(req).tradeRef)); await save(); return { ok: true };
   },
   'POST /api/admin/depositreferral': async (req, res, b, u) => {
     needAdmin(u);
     const levels = Array.isArray(b.levels) ? b.levels.slice(0, 3).map(Number) : [];
     while (levels.length < 3) levels.push(0);
     if (levels.some(x => !Number.isFinite(x) || x < 0 || x > 100)) fail(400, 'Each level percent must be 0–100.');
-    D.settings.depositRef = { enabled: !!b.enabled, levels: levels.map(r2) };
-    audit(u.email, 'deposit-referral-settings', JSON.stringify(D.settings.depositRef)); await save(); return { ok: true };
+    S(req).depositRef = { enabled: !!b.enabled, levels: levels.map(r2) };
+    audit(u.email, 'deposit-referral-settings', JSON.stringify(S(req).depositRef)); await save(); return { ok: true };
   },
   'POST /api/admin/coin': async (req, res, b, u) => {
     needAdmin(u);
@@ -607,43 +693,56 @@ const routes = {
       const name = str(b.name, 40), id = str(b.id, 60).toLowerCase(), mark = str(b.mark, 2) || sym[0];
       if (!/^[A-Z0-9]{2,10}$/.test(sym)) fail(400, 'Symbol must be 2–10 letters/digits (e.g. MATIC).'); if (name.length < 2) fail(400, 'Enter the coin name.');
       if (!/^[a-z0-9-]{2,60}$/.test(id)) fail(400, 'Enter the CoinGecko id (e.g. polygon-ecosystem-token) — see coingecko.com coin page "API id".');
-      if (COINS.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
-      if ((D.settings.bonusCoins || []).some(c => c.symbol === sym) || D.settings.bonusCoin.symbol === sym) fail(409, 'Symbol clashes with a bonus coin.');
+      if (S(req).coins.some(c => c[0] === sym || c[2] === id)) fail(409, 'This coin is already listed.');
+      if ((S(req).bonusCoins || []).some(c => c.symbol === sym) || S(req).bonusCoin.symbol === sym) fail(409, 'Symbol clashes with a bonus coin.');
       try {   // verify the coin really exists on both price sources before listing it
         const r1 = await fetch(`${BINANCE_API}?symbols=${encodeURIComponent(JSON.stringify([sym + 'USDT']))}`, { signal: AbortSignal.timeout(8000) }); if (!r1.ok) throw new Error('not on Binance');
         const hdr = { Accept: 'application/json' }; if (E.COINGECKO_API_KEY) hdr['x-cg-demo-api-key'] = E.COINGECKO_API_KEY;
         const r2 = await fetch(`${PRICE_API}?vs_currency=usd&ids=${id}`, { headers: hdr, signal: AbortSignal.timeout(8000) }); const j2 = await r2.json(); if (!r2.ok || !Array.isArray(j2) || !j2.length) throw new Error('CoinGecko id not found');
       } catch (e) { fail(400, `Could not verify ${sym}: ${e.message}. Use the exact Binance symbol (${sym}USDT must exist) and the CoinGecko API id.`); }
-      D.settings.coins.push([sym, name, id, mark]); syncCoins(); priceCache.ts = 0; audit(u.email, 'coin-add', `${sym} ${id}`);
+      S(req).coins.push([sym, name, id, mark]); priceCache.ts = 0; audit(u.email, 'coin-add', `${sym} ${id}`);
     } else if (b.action === 'remove') {
-      if (!COINS.some(c => c[0] === sym)) fail(404, 'Coin not listed.');
-      const holders = D.users.filter(x => (x.holdings && x.holdings[sym]) > 0).length;
+      if (!S(req).coins.some(c => c[0] === sym)) fail(404, 'Coin not listed.');
+      const holders = D.users.filter(x => String(x.panelId || 'main') === String(req.panelId || 'main') && (x.holdings && x.holdings[sym]) > 0).length;
       if (holders) fail(409, `${holders} user(s) still hold ${sym}. Removing it would trap their coins — wait until they sell, or adjust their balance first.`);
-      if (COINS.length <= 1) fail(400, 'Keep at least one coin.');
-      D.settings.coins = D.settings.coins.filter(c => c[0] !== sym); syncCoins(); priceCache.ts = 0; audit(u.email, 'coin-remove', sym);
+      if (S(req).coins.length <= 1) fail(400, 'Keep at least one coin.');
+      S(req).coins = S(req).coins.filter(c => c[0] !== sym); priceCache.ts = 0; audit(u.email, 'coin-remove', sym);
     } else fail(400, 'Bad action');
-    await save(); return { coins: COINS };
+    await save(); return { coins: S(req).coins };
   },
-  'GET /api/admin/audit': async (req, res, b, u) => { needAdmin(u); return { items: [...D.audit].reverse().slice(0, 300) }; },
+  'GET /api/admin/audit': async (req, res, b, u) => { needAdmin(u); return { items: (isHead(u) ? D.audit : D.audit.filter(x => x.panelId === req.panelId || !x.panelId && req.panelId === 'main')).slice().reverse().slice(0, 300) }; },
   'POST /api/admin/deposit': async (req, res, b, u) => {
-    needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found');
+    needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found'); assertPanelAccess(req, d);
     if (d.status !== 'Pending') fail(409, 'Already ' + d.status + '.');     // credit exactly once
-    if (d.provider === 'razorpay' && b.action === 'approve') fail(403, 'Razorpay deposits can only be credited by verified payment status/webhook.');
-    if (b.action === 'approve') { const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing'); t.balance = r2((t.balance || 0) + d.amount); d.status = 'Approved'; const cfg = D.settings.depositRef || { enabled: false, levels: [0,0,0] }; if (cfg.enabled && t.refBy) { d.refPayments = payReferralLevels(t, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); if (d.refPaid) audit('system', 'deposit-referral', `Deposit #${d.id}: ₹${d.refPaid} referral commission across ${d.refPayments.length} level(s)`); } }
-    else if (b.action === 'reject') d.status = 'Rejected'; else fail(400, 'Bad action');
-    d.by = u.email; d.done = now(); audit(u.email, 'deposit-' + b.action, `#${d.id} ₹${d.amount}`); await save(); return { item: d };
+    if (b.action === 'approve') {
+      if (d.provider === 'razorpay' && d.providerStatus !== 'captured') fail(403, 'Razorpay deposits can only be approved after verified payment capture.');
+      const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing');
+      const depositPanel = D.panels.find(p => p.slug === String(d.panelId || 'main') && !p.deleted); if (!depositPanel) fail(409, 'Deposit panel not found.');
+      const depositSettings = depositPanel.settings || D.settings;
+      const creditAmount = b.credits === undefined || b.credits === null || b.credits === '' ? Number(d.amount) : Number(b.credits);
+      if (!Number.isInteger(creditAmount) || creditAmount < 1 || creditAmount > MAX_AMOUNT) fail(400, 'User credits must be a whole number between 1 and 10,000,000.');
+      const cfg = depositSettings.depositRef || { enabled: false, levels: [0,0,0] };
+      const referralCost = cfg.enabled && t.refBy ? previewDepositReferralTotal(t, d.amount, cfg.levels || [0,0,0]) : 0;
+      const totalCost = r2(creditAmount + referralCost);
+      if (Number(depositPanel.creditBalance || 0) < totalCost) fail(409, `Insufficient panel credits. Available: ${Number(depositPanel.creditBalance || 0)}; required: ${totalCost}. Ask Head Admin to allocate more credits.`);
+      consumePanelCredits(depositPanel.slug, totalCost, u.email, 'deposit-credit', `deposit #${d.id}; user ${t.email}; credited ${creditAmount}; referral ${referralCost}`);
+      t.balance = r2((t.balance || 0) + creditAmount); d.creditedAmount = creditAmount; d.creditsSpent = totalCost; d.status = 'Approved'; d.creditPending = false; delete d.creditError;
+      if (cfg.enabled && t.refBy) { d.refPayments = payReferralLevels(t, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); if (d.refPaid) audit('system', 'deposit-referral', `Deposit #${d.id}: ₹${d.refPaid} referral commission across ${d.refPayments.length} level(s)`); }
+    }
+    else if (b.action === 'reject') { if (d.provider === 'razorpay' && d.providerStatus === 'captured') fail(409, 'This payment is already captured. Allocate panel credits and complete the wallet credit; do not reject a captured payment.'); d.status = 'Rejected'; } else fail(400, 'Bad action');
+    d.by = u.email; d.done = now(); audit(u.email, 'deposit-' + b.action, `#${d.id} ₹${d.amount}${d.creditedAmount ? ` → ${d.creditedAmount} credits` : ''}`); await save(); return { item: d, creditBalance: r2((D.panels.find(p => p.slug === String(d.panelId || 'main')) || req.panel).creditBalance || 0) };
   },
   'POST /api/admin/withdrawal': async (req, res, b, u) => {
-    needAdmin(u); const w = D.withdrawals.find(x => x.id === b.id); if (!w) fail(404, 'Not found');
+    needAdmin(u); const w = D.withdrawals.find(x => x.id === b.id); if (!w) fail(404, 'Not found'); assertPanelAccess(req, w);
     if (w.status !== 'Pending') fail(409, 'Already ' + w.status + '.');
     if (b.action === 'paid') { w.status = 'Paid'; w.ref = str(b.ref, 40); w.payoutType = w.mode === 'demo' ? 'Simulated demo withdrawal' : 'Manual payout'; }
-    else if (b.action === 'reject') { const t = D.users.find(x => x.id === w.uid) || D.demoUsers.find(x => x.id === w.uid); if (t) t.balance = r2((t.balance || 0) + w.amount); w.status = 'Rejected'; w.note = str(b.note, 120); w.rejectedAt = now(); w.cooldownHours = Number(D.settings.withdrawalCooldownHours ?? 24); w.retryAt = w.rejectedAt + w.cooldownHours * 3600e3; } // refund once
+    else if (b.action === 'reject') { const t = D.users.find(x => x.id === w.uid) || D.demoUsers.find(x => x.id === w.uid); if (t) t.balance = r2((t.balance || 0) + w.amount); w.status = 'Rejected'; w.note = str(b.note, 120); w.rejectedAt = now(); w.cooldownHours = Number(S(req).withdrawalCooldownHours ?? 24); w.retryAt = w.rejectedAt + w.cooldownHours * 3600e3; } // refund once
     else fail(400, 'Bad action');
     w.by = u.email; w.done = now(); audit(u.email, 'withdrawal-' + b.action, `#${w.id} ₹${w.amount}`); await save(); return { item: w };
   },
   'POST /api/admin/user': async (req, res, b, u) => {
-    needAdmin(u); const t = D.users.find(x => x.id === b.id); if (!t) fail(404, 'Not found');
-    if (t.role === 'admin') fail(400, 'Admin accounts cannot be changed here.');
+    needAdmin(u); const t = D.users.find(x => x.id === b.id); if (!t) fail(404, 'Not found'); assertPanelAccess(req, t);
+    if (['admin','headAdmin','panelAdmin'].includes(t.role)) fail(400, 'Admin accounts cannot be changed here.');
     if (b.action === 'block') t.blocked = true; else if (b.action === 'unblock') t.blocked = false;
     else if (b.action === 'password') { const pw = String(b.password || ''); if (pw.length < 8) fail(400, 'Min 8 characters'); t.pass = hashPw(pw); }
     else if (b.action === 'delete') {
@@ -655,12 +754,13 @@ const routes = {
       const amt = Number(b.amount), reason = str(b.reason, 120);
       if (!Number.isInteger(amt) || amt === 0 || Math.abs(amt) > MAX_AMOUNT) fail(400, 'Enter a non-zero whole amount.');
       if (!reason) fail(400, 'A reason is required.'); if (t.balance + amt < 0) fail(400, 'Balance cannot go below zero.');
-      t.balance += amt; audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true };
+      if (amt > 0) consumePanelCredits(String(t.panelId || req.panelId || 'main'), amt, u.email, 'wallet-adjustment', `user #${t.id} ${t.email}; ${reason}`);
+      t.balance = r2(t.balance + amt); audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true, creditBalance: r2(req.panel.creditBalance || 0) };
     } else fail(400, 'Bad action');
     audit(u.email, 'user-' + b.action, `#${t.id} ${t.email}`); await save(); return { ok: true };
   },
   'POST /api/admin/settings': async (req, res, b, u) => {
-    needAdmin(u); const s = D.settings;
+    needAdmin(u); const s = S(req);
     if (b.withdrawalMode !== undefined) { if (!['all','profit'].includes(b.withdrawalMode)) fail(400, 'Invalid withdrawal policy.'); s.withdrawalMode = b.withdrawalMode; }
     if (b.withdrawalCooldownHours !== undefined) { const h = Number(b.withdrawalCooldownHours); if (!Number.isInteger(h) || h < 0 || h > 720) fail(400, 'Withdrawal retry delay must be 0–720 hours.'); s.withdrawalCooldownHours = h; }
     if (b.paymentMode !== undefined) { if (!['qr','razorpay'].includes(b.paymentMode)) fail(400, 'Invalid payment mode.'); if (b.paymentMode === 'razorpay' && !(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET)) fail(400, 'Configure RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET in Render before enabling Razorpay.'); s.paymentMode = b.paymentMode; }
@@ -674,11 +774,94 @@ const routes = {
       for (const [v, n] of [[md, 'deposit'], [mw, 'withdrawal'], [mt, 'trade']]) if (!Number.isInteger(v) || v < 1 || v > 1000000) fail(400, `Minimum ${n} must be a whole number between 1 and 10,00,000.`);
       s.limits = { minDeposit: md, minWithdraw: mw, minTrade: mt };
     }
-    if (b.qr !== undefined) { const q = String(b.qr || ''); if (q && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q) || q.length > 400000)) fail(400, 'QR must be a PNG/JPG/WEBP under ~250 KB.'); s.qr = q; }
+    if (b.qr !== undefined) { const q = String(b.qr || ''); if (q && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q) || q.length > 8_500_000)) fail(400, 'QR image is too large (maximum 6 MB).'); s.qr = q; }
     audit(u.email, 'settings', JSON.stringify(s.limits)); await save(); return { ok: true };
   },
+  'GET /api/admin/panels': async (req, res, b, u) => {
+    needHead(u);
+    const panels = D.panels.filter(p => !p.deleted).map(p => {
+      const users = D.users.filter(x => x.role === 'user' && String(x.panelId || 'main') === p.slug);
+      const demos = D.demoUsers.filter(x => String(x.panelId || 'main') === p.slug);
+      const deposits = D.deposits.filter(x => String(x.panelId || 'main') === p.slug);
+      const withdrawals = D.withdrawals.filter(x => String(x.panelId || 'main') === p.slug);
+      const admin = D.users.find(x => x.id === p.adminUserId);
+      return { id: p.id, name: p.name, slug: p.slug, active: p.active !== false, created: p.created, creditBalance: r2(p.creditBalance || 0), creditsAllocated: r2(p.creditsAllocated || 0), creditsUsed: r2(p.creditsUsed || 0), link: p.slug === 'main' ? '/' : '/p/' + p.slug, adminEmail: admin && admin.email || '', users: users.length, demoUsers: demos.length, wallets: r2(users.reduce((n, x) => n + Number(x.balance || 0), 0)), deposits: deposits.length, pendingDeposits: deposits.filter(x => x.status === 'Pending').length, withdrawals: withdrawals.length };
+    });
+    return { panels, totalPanels: panels.length, totalUsers: D.users.filter(x => x.role === 'user').length, totalDemoUsers: D.demoUsers.length, totalWallets: r2(D.users.filter(x => x.role === 'user').reduce((n, x) => n + Number(x.balance || 0), 0)), totalCreditsAvailable: r2(panels.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), totalCreditsAllocated: r2(panels.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), totalCreditsUsed: r2(panels.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) };
+  },
+  'POST /api/admin/panels': async (req, res, b, u) => {
+    needHead(u);
+    const action = str(b.action, 16);
+    if (action === 'create') {
+      const name = str(b.name, 60), slug = str(b.slug, 48).toLowerCase().replace(/^\/+|\/+$/g, ''), email = normEmail(b.email), password = String(b.password || '');
+      if (name.length < 2) fail(400, 'Panel name must have at least 2 characters.');
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug === 'main' || slug === 'admin') fail(400, 'Link ID must use lowercase letters, numbers and hyphens; main/admin are reserved.');
+      if (D.panels.some(p => p.slug === slug || (p.aliases || []).includes(slug))) fail(409, 'This panel link is already in use.');
+      if (!emailOk(email)) fail(400, 'Enter a valid panel admin email.');
+      if (password.length < 8 || password.length > 100) fail(400, 'Panel admin password must be 8–100 characters.');
+      if (D.users.some(x => x.email === email) || D.demoUsers.some(x => x.email === email)) fail(409, 'This email is already in use.');
+      const panel = { id: 'panel-' + crypto.randomBytes(6).toString('hex'), slug, aliases: [], name, active: true, deleted: false, created: now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(S(req)) };
+      panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
+      const admin = { id: nid(), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
+      panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);
+      audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`); await save();
+      return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminEmail: email } };
+    }
+    if (action === 'allocate') {
+      const panel = D.panels.find(p => p.id === b.id && !p.deleted);
+      if (!panel) fail(404, 'Panel not found.');
+      const amount = Number(b.amount), reason = str(b.reason || 'Head Admin allocation', 120);
+      if (!Number.isInteger(amount) || amount < 1 || amount > MAX_AMOUNT) fail(400, 'Enter whole credits between 1 and 10,000,000.');
+      if (Number(panel.creditBalance || 0) + amount > MAX_AMOUNT) fail(400, 'Allocation would exceed the 10,000,000 available-credit limit.');
+      panel.creditBalance = r2(Number(panel.creditBalance || 0) + amount);
+      panel.creditsAllocated = r2(Number(panel.creditsAllocated || 0) + amount);
+      recordCreditLedger(panel, amount, 'allocate', u.email, reason);
+      audit(u.email, 'panel-credit-allocate', `${panel.name} (${panel.slug}) +${amount}; balance ${panel.creditBalance}; ${reason}`);
+      await save();
+      return { ok: true, panel: { id: panel.id, slug: panel.slug, creditBalance: panel.creditBalance, creditsAllocated: panel.creditsAllocated, creditsUsed: panel.creditsUsed } };
+    }
+    const panel = D.panels.find(p => p.id === b.id && p.slug !== 'main' && !p.deleted);
+    if (!panel) fail(404, 'Panel not found.');
+    if (action === 'edit') {
+      const name = str(b.name, 60), slug = str(b.slug, 48).toLowerCase().replace(/^\/+|\/+$/g, '');
+      const admin = D.users.find(x => x.id === panel.adminUserId);
+      const email = b.email !== undefined ? normEmail(b.email) : (admin && admin.email);
+      const password = b.password ? String(b.password) : '';
+      if (name.length < 2) fail(400, 'Panel name must have at least 2 characters.');
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || slug === 'main' || slug === 'admin') fail(400, 'Invalid panel link ID.');
+      if (D.panels.some(p => p.id !== panel.id && (p.slug === slug || (p.aliases || []).includes(slug)))) fail(409, 'This panel link is already in use.');
+      if (b.email !== undefined && (!emailOk(email) || D.users.some(x => x.id !== (admin && admin.id) && x.email === email) || D.demoUsers.some(x => x.email === email))) fail(400, 'Panel admin email is invalid or already in use.');
+      if (password && (password.length < 8 || password.length > 100)) fail(400, 'Password must be 8–100 characters.');
+      // All inputs are validated before mutating any records.
+      if (slug !== panel.slug) { panel.aliases = [...new Set([...(panel.aliases || []), panel.slug])]; const oldSlug = panel.slug; panel.slug = slug; for (const x of [...D.users, ...D.demoUsers, ...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (String(x.panelId || 'main') === oldSlug) x.panelId = slug; for (const x of D.creditLedger) if (String(x.panelId || 'main') === oldSlug) x.panelId = slug; if (admin) admin.panelId = slug; }
+      panel.name = name;
+      if (b.email !== undefined && admin) admin.email = email;
+      if (password && admin) admin.pass = hashPw(password);
+      audit(u.email, 'panel-edit', `${panel.name} (${panel.slug})`); await save(); return { ok: true };
+    }
+    if (action === 'toggle') { panel.active = b.active !== false; audit(u.email, 'panel-toggle', `${panel.slug} active=${panel.active}`); await save(); return { ok: true, active: panel.active }; }
+    if (action === 'delete') {
+      // Atomic migration in memory before the single durable write: user identity, wallets and histories remain intact.
+      const oldSlug = panel.slug;
+      for (const x of [...D.users, ...D.demoUsers, ...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (String(x.panelId || 'main') === oldSlug) x.panelId = 'main';
+      const mainPanel = D.panels.find(p => p.slug === 'main' && !p.deleted);
+      const unusedCredits = r2(Number(panel.creditBalance || 0));
+      if (mainPanel && unusedCredits > 0) {
+        mainPanel.creditBalance = r2(Number(mainPanel.creditBalance || 0) + unusedCredits);
+        mainPanel.creditsAllocated = r2(Number(mainPanel.creditsAllocated || 0) + unusedCredits);
+        panel.creditBalance = 0;
+        recordCreditLedger(panel, -unusedCredits, 'panel-delete-return', u.email, `Unused credits returned to Head Admin Main from ${oldSlug}`);
+        recordCreditLedger(mainPanel, unusedCredits, 'panel-delete-return', u.email, `Unused credits returned from ${oldSlug}`);
+      } else panel.creditBalance = 0;
+      const panelAdmin = D.users.find(x => x.id === panel.adminUserId); if (panelAdmin) panelAdmin.blocked = true;
+      panel.deleted = true; panel.active = false; panel.deletedAt = now();
+      audit(u.email, 'panel-delete-migrate', `${oldSlug} users and records moved to main panel; history retained`); await save();
+      return { ok: true, migratedUsers: D.users.filter(x => x.role === 'user' && x.panelId === 'main').length, linkRedirectsToMain: true };
+    }
+    fail(400, 'Unknown panel action.');
+  },
   'GET /api/admin/backup': async (req, res, b, u) => {
-    needAdmin(u);
+    needHead(u);
     const copy = JSON.parse(JSON.stringify(D)); delete copy.secret; copy.users.forEach(x => delete x.pass); if (Array.isArray(copy.demoUsers)) copy.demoUsers.forEach(x => delete x.pass);
     return { __download: 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: copy };
   }
@@ -687,7 +870,7 @@ const routes = {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let n = 0; const chunks = [];
-    req.on('data', c => { n += c.length; if (n > 600e3) { reject(new HttpError(413, 'Request too large')); req.destroy(); } else chunks.push(c); });
+    req.on('data', c => { n += c.length; if (n > 9_000_000) { reject(new HttpError(413, 'Request too large (max 9 MB).')); req.destroy(); } else chunks.push(c); });
     req.on('end', () => { try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}); } catch { reject(new HttpError(400, 'Bad JSON')); } });
     req.on('error', reject);
   });
@@ -696,6 +879,10 @@ const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'R
 function json(res, code, obj, extra = {}) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...extra }); res.end(JSON.stringify(obj)); }
 
 async function handleApi(req, res, pathname) {
+  const requestedSlug = String(req.headers['x-panel-slug'] || 'main').toLowerCase();
+  const panel = getPanel(requestedSlug);
+  if (!panel) return json(res, 404, { error: 'Panel link not found.' });
+  req.panel = panel; req.panelId = panel.slug;
   const h = routes[req.method + ' ' + pathname];
   if (!h) return json(res, 404, { error: 'Not found' });
   try {
@@ -704,7 +891,10 @@ async function handleApi(req, res, pathname) {
       if (origin && new URL(origin).host !== req.headers.host) fail(403, 'Bad origin');   // CSRF guard
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
-    const out = await h(req, res, body, authUser(req));
+    const user = authUser(req); req.user = user;
+    if (user && user.role !== 'headAdmin' && String(user.panelId || 'main') !== String(req.panelId || 'main')) fail(403, 'This account belongs to a different panel.');
+    if (user && user.role === 'panelAdmin' && String(user.panelId || '') !== String(req.panelId || '')) fail(403, 'Admin panel access denied.');
+    const out = await h(req, res, body, user);
     if (out && out.__download) { res.setHeader('Content-Disposition', `attachment; filename="${out.__download}"`); return json(res, 200, out.data); }
     json(res, 200, out);
   } catch (e) {
@@ -735,6 +925,8 @@ const server = http.createServer((req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end('Method Not Allowed'); }
   if (pathname === '/') pathname = '/index.html';
   if (pathname === '/admin') pathname = '/admin.html';
+  const panelRoute = pathname.match(/^\/p\/([a-z0-9-]+)(\/admin)?\/?$/i);
+  if (panelRoute) pathname = panelRoute[2] ? '/admin.html' : '/index.html';
   const meta = STATIC[pathname];
   if (!meta) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
   fs.readFile(path.join(ROOT, pathname), (err, buf) => {
@@ -749,15 +941,19 @@ async function seedAdmin() {
   let pw = E.ADMIN_PASSWORD;
   if (!emailOk(email)) throw new Error('ADMIN_EMAIL must be a valid email address.');
   if (pw && (pw.length < 8 || pw.length > 100)) throw new Error('ADMIN_PASSWORD must be 8–100 characters.');
-  let admin = D.users.find(u => u.role === 'admin' && u.email === email);
+  let admin = D.users.find(u => ['admin','headAdmin'].includes(u.role) && u.email === email);
   if (!admin) {
     const generated = !pw; if (!pw) pw = crypto.randomBytes(9).toString('base64url');
-    admin = { id: nid(), name: 'Admin', email, phone: '', role: 'admin', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
+    admin = { id: nid(), name: 'Head Admin', email, phone: '', role: 'headAdmin', panelId: 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
     D.users.push(admin); audit('system', 'admin-created', email); await save();
     console.log(`ADMIN CREATED: ${email}` + (generated ? `  password: ${pw}   (set ADMIN_EMAIL / ADMIN_PASSWORD env vars on Render to choose your own)` : ''));
-  } else if (E.ADMIN_PASSWORD && !checkPw(E.ADMIN_PASSWORD, admin.pass)) {
+  } else { if (admin.role === 'admin') admin.role = 'headAdmin'; admin.panelId = 'main'; if (E.ADMIN_PASSWORD && !checkPw(E.ADMIN_PASSWORD, admin.pass)) {
     admin.pass = hashPw(E.ADMIN_PASSWORD); audit('system', 'admin-password-from-env', email); await save();
-  }
+  } }
+  if (!D.panels.some(p => p.slug === 'main')) D.panels.unshift(defaultPanel());
+  if (!D.panels.find(p => p.slug === 'main').settings) D.panels.find(p => p.slug === 'main').settings = clone(D.settings);
+  D.settings = D.panels.find(p => p.slug === 'main').settings; syncCoins();
+  await save();
 }
 
 if (require.main === module) {
@@ -766,4 +962,4 @@ if (require.main === module) {
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));
   }).catch(e => { console.error('Startup failed:', e.message); process.exit(1); });
 }
-module.exports = { server, loadDB, seedAdmin, MIN_DEPOSIT, MIN_WITHDRAW, _resetPrices: () => { priceCache.ts = 0; } };
+module.exports = { server, loadDB, seedAdmin, MIN_DEPOSIT, MIN_WITHDRAW, _resetPrices: () => { priceCache.ts = 0; if (typeof priceCaches !== 'undefined') priceCaches.clear(); } };

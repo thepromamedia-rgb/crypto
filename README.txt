@@ -29,6 +29,17 @@ HOW MONEY FLOWS (manual UPI verification, same idea as Refer Karo's QR/UTR mode)
 ADMIN PANEL (/admin): Overview, Deposits, Withdrawals, Users (block, set password, logged balance
 adjust), Settings (UPI, QR, support link, notice, bonus text), Audit log, JSON backup download.
 
+
+CREDIT ALLOCATION + DEPOSIT VERIFICATION (multi-panel)
+  Head Admin > Admin Panels > Allocate credits: allocate an available credit pool to each panel (including Head Admin Main).
+  Panel admins cannot allocate credits. Their Deposits tab defaults to ₹1 = 1 wallet credit, but on each manual UPI deposit
+  approval they can enter a different whole-number credit amount. Approval debits that panel's available credits and credits
+  the user's wallet once. Positive manual wallet adjustments also consume panel credits. Insufficient credits block approval.
+  Head Admin > Credits and each Panel Admin > Credits show the credit ledger. Rejected deposits do not consume credits.
+  Razorpay capture is verified server-side; if the panel has insufficient credits, the payment remains captured/pending credit
+  until Head Admin allocates credits and an admin completes the wallet credit. Captured Razorpay payments cannot be rejected.
+  Unused panel credits return to Head Admin Main when a panel is deleted; user identities, balances and financial history remain.
+
 DATA SAFETY: existing data is loaded and merged on start, never reset. Writes are serialized; the
 server refuses to start if Upstash is configured but unreachable (so it can't overwrite your data).
 Backups exclude password hashes.
@@ -142,3 +153,16 @@ AUDIT / LIVE-MONEY SAFETY NOTES
 - Crypto market/Bonus Coin activity in this app is not an exchange order-book or custody system.
   Do not represent it as a regulated exchange or accept real funds until appropriate licensing,
   compliance, custody, and security reviews are completed.
+
+V3.1 HEAD ADMIN MULTI-PANEL SYSTEM
+------------------------------------------------------------
+- The original /admin login is now the Head Admin Panel (same ADMIN_EMAIL / ADMIN_PASSWORD environment variables).
+- Head Admin > Admin Panels can create multiple panel admins, choose each panel name and unique URL slug, and set/reset the panel admin login.
+- Public panel URLs use the same domain: /p/<slug>. The panel admin URL is /p/<slug>/admin. The main website remains / and the Head Admin remains /admin.
+- Each panel has its own settings record: QR/UPI/payee, limits, withdrawal policy/fees, referral settings, bonus coins and market coin list. New panels start with blank payment details so they do not accidentally inherit the main panel's QR or UPI ID.
+- Panel admin access is checked server-side. Panel admins see/manage their own panel's users and records; Head Admin can see all panels and their user/deposit/withdrawal counts and wallet totals.
+- Editing a panel slug keeps the previous link as an alias. Pausing a panel prevents its normal panel login. Deleting a panel migrates its users, demo users, deposits, withdrawals, trades and bonus positions to Head Admin Main without deleting balances/history. Existing user sessions remain valid; the deleted panel URL silently resolves to the main panel. The panel admin account is blocked after deletion.
+- The QR image uploader supports images up to 6 MB (request payload limit 9 MB); this is a practical limit, not unlimited storage. Use persistent storage/Upstash and verify provider payload limits before large uploads.
+- Added offline integration tests for panel settings isolation, panel-scoped records and deletion migration.
+
+IMPORTANT: This remains a demo application with JSON/Upstash single-key storage, not a production-grade transactional financial ledger. Before using real customer funds, move wallet/payment records to a durable transactional database and test concurrency, backups, payment reconciliation and recovery procedures.

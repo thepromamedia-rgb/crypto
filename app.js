@@ -14,8 +14,11 @@ const usd = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits
 const dt = ts => new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 const PROTECTED = new Set(['Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite']);
 
+function activePanelSlug() { const m = location.pathname.match(/^\/p\/([a-z0-9-]+)/i); return m ? m[1] : 'main'; }
 async function api(path, body) {
-  const r = await fetch('/api/' + path, body === undefined ? { credentials: 'same-origin' } : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const headers = { 'X-Panel-Slug': activePanelSlug() };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const r = await fetch('/api/' + path, body === undefined ? { credentials: 'same-origin', headers } : { method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(j.error || 'Request failed'); e.status = r.status; throw e; }
   return j;
@@ -407,12 +410,15 @@ function renderPage(page, quiet) {
         if (razor) {
           const order = await api('razorpay/order', { amount });
           if (!window.Razorpay) await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.onload = resolve; script.onerror = () => reject(new Error('Could not load Razorpay Checkout. Please retry.')); document.head.appendChild(script); });
-          await new Promise((resolve, reject) => {
+          const verification = await new Promise((resolve, reject) => {
             let finished = false;
-            const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: order.name, description: order.description, order_id: order.orderId, handler: async response => { try { await api('razorpay/verify', response); finished = true; resolve(); } catch (err) { reject(err); } }, modal: { ondismiss: () => { if (!finished) reject(new Error('Checkout closed. If you paid, your deposit will update after Razorpay webhook verification.')); } }, theme: { color: '#245ce8' } });
+            const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: order.name, description: order.description, order_id: order.orderId, handler: async response => { try { const result = await api('razorpay/verify', response); finished = true; resolve(result); } catch (err) { reject(err); } }, modal: { ondismiss: () => { if (!finished) reject(new Error('Checkout closed. If you paid, your deposit will update after Razorpay webhook verification.')); } }, theme: { color: '#245ce8' } });
             checkout.on('payment.failed', response => reject(new Error(response.error && response.error.description || 'Payment failed. Please retry.'))); checkout.open();
           });
-          await loadMe(); showModal('Payment verified', 'Razorpay confirmed your payment and your wallet deposit was credited.'); renderPage('Assets');
+          await loadMe();
+          if (verification && verification.waitingForCredits) showModal('Payment verified · credit pending', 'Your payment was verified. The panel is waiting for Head Admin to allocate enough credits before your wallet can be credited. Your payment request is saved.');
+          else showModal('Payment verified', 'Razorpay confirmed your payment and your wallet deposit was credited.');
+          renderPage('Assets');
         } else {
           await api('deposit', { amount, utr: $('#dUtr').value }); await loadMe(); showDepositCountdown(); renderPage('Assets');
         }
