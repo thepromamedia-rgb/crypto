@@ -172,3 +172,25 @@ V3.2 PANEL ADMIN LOGIN + CREDIT RECLAIM FIX
 - Head Admin > Admin Panels now includes “Reset Admin login”. Set the correct email and a new password (8–100 characters), then give the admin the displayed panel URL /p/<slug>/admin. This resets the existing panel admin account rather than creating a duplicate.
 - Head Admin > Admin Panels now includes “Take back credits”. It can reclaim only the panel's unused available credit balance; it cannot reclaim credits already spent on user wallet credits. Reclaimed credits are returned to Head Admin Main and both sides are recorded in the credit ledger/audit log.
 - Password reset and credit reclaim are covered by offline integration tests.
+
+V3.3 ACCOUNT UID + ADD MONEY FIX (2026-10-24)
+------------------------------------------------------------
+- Added stable account UIDs for Head Admin (HAD-######), Panel Admin (PAD-######),
+  registered users (USR-######), and demo accounts (DEM-######). Legacy accounts
+  receive a UID on startup without replacing their internal IDs, so sessions,
+  referrals, and financial-history links remain intact.
+- UIDs are shown in the user's Profile and Assets pages, the admin panel header,
+  registered-user table, panel-admin list, and demo-account table.
+- Added a dedicated Add Money action for real users in both Head Admin and Panel
+  Admin user lists. The server validates positive whole-rupee amounts, requires a
+  reason and unique request key, enforces panel ownership and available panel
+  credits, and records the credit ledger and audit entry. Reusing a request key
+  returns a conflict instead of crediting twice.
+- Added regression coverage for UID uniqueness/visibility, Head Admin crediting,
+  Panel Admin scope restrictions, panel-credit deduction, wallet balance updates,
+  ledger/audit records, and duplicate Add Money requests.
+
+After deployment, configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+(or another durable storage arrangement) before relying on account data across
+Render restarts/redeploys. Automated tests are offline integration tests; the
+live Render deployment and live payment provider were not tested by this ZIP build.

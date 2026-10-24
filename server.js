@@ -108,6 +108,7 @@ async function loadDB() {
     const owner = D.panels.find(p => !p.deleted && panelValueMatches(p, x.panelId));
     if (owner) x.panelId = owner.slug;
   }
+  ensureAccountUids();
 }
 let saveChain = Promise.resolve();
 function save() {
@@ -130,6 +131,31 @@ function save() {
 // ---------- helpers ----------
 const nid = () => D.seq++;
 const now = () => Date.now();
+function uidPrefix(account) {
+  const role = String(account && account.role || 'user');
+  if (role === 'headAdmin' || role === 'admin') return 'HAD';
+  if (role === 'panelAdmin') return 'PAD';
+  if (account && account.mode === 'demo' || String(account && account.id || '').startsWith('demo-')) return 'DEM';
+  return 'USR';
+}
+function nextAccountUid(prefix) {
+  const accounts = [...(D.users || []), ...(D.demoUsers || [])];
+  const used = new Set(accounts.map(x => String(x.uid || '')).filter(Boolean));
+  let n = 1, candidate;
+  do { candidate = prefix + '-' + String(n++).padStart(6, '0'); } while (used.has(candidate));
+  return candidate;
+}
+function ensureAccountUids() {
+  const accounts = [...(D.users || []), ...(D.demoUsers || [])];
+  const seen = new Set();
+  // Keep established IDs unchanged. Fill missing IDs in creation order and repair duplicates.
+  accounts.sort((a, b) => Number(a.created || 0) - Number(b.created || 0) || String(a.id).localeCompare(String(b.id)));
+  for (const account of accounts) {
+    const prefix = uidPrefix(account);
+    if (!account.uid || seen.has(String(account.uid))) account.uid = nextAccountUid(prefix);
+    seen.add(String(account.uid));
+  }
+}
 const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const money = v => { const n = Number(v); return Number.isInteger(n) && n > 0 && n <= MAX_AMOUNT ? n : null; };
 const audit = (who, action, detail) => { D.audit.push({ id: nid(), ts: now(), who, action, detail }); if (D.audit.length > 2000) D.audit.splice(0, D.audit.length - 2000); };
@@ -191,7 +217,7 @@ function limit(key, max, windowMs) {
 }
 setInterval(() => { const t = now(); for (const [k, a] of hits) if (!a.some(x => t - x < 3600e3)) hits.delete(k); }, 600e3).unref();
 
-const pubUser = u => ({ id: u.id, uid: String(u.id), name: u.name, email: u.email, phone: u.phone, role: u.role || 'user', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), balance: Number(u.balance || 0), refCode: u.refCode || '', created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
+const pubUser = u => ({ id: u.id, uid: String(u.uid || u.id), name: u.name, email: u.email, phone: u.phone, role: u.role || 'user', mode: u.mode || (String(u.id).startsWith('demo-') ? 'demo' : 'real'), balance: Number(u.balance || 0), refCode: u.refCode || '', created: u.created, holdings: u.holdings || {}, refEarned: u.refEarned || 0 });
 const normEmail = v => str(v, 120).toLowerCase();
 const emailOk = v => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 const makeRef = () => { let c; do c = 'CB' + crypto.randomBytes(3).toString('hex').toUpperCase(); while (D.users.some(u => u.refCode === c)); return c; };
@@ -439,7 +465,7 @@ const routes = {
     if (D.users.some(u => u.email === email) || D.demoUsers.some(u => u.email === email)) fail(409, 'This email is already registered.');
     const ref = str(b.ref, 20).toUpperCase(); let refBy = ref && D.users.find(u => u.refCode === ref && String(u.panelId || 'main') === String(req.panelId || 'main'));
     if (refBy && ((refBy.phone && refBy.phone === phone) || refBy.email === email)) refBy = null;   // no self-referral with the same phone
-    const u = { id: nid(), name, email, phone, role: 'user', panelId: req.panelId || 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
+    const u = { id: nid(), uid: nextAccountUid('USR'), name, email, phone, role: 'user', panelId: req.panelId || 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: refBy ? refBy.id : null, blocked: false, created: now() };
     D.users.push(u); audit('system', 'register', u.email); await save();
     setCookie(res, makeToken(u.id), 7 * 86400);
     return { user: pubUser(u) };
@@ -598,7 +624,7 @@ const routes = {
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
-      role: u.role, panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
+      role: u.role, accountUid: String(u.uid || u.id), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
       depositsApproved: sum(ok), withdrawalsPaid: sumPayout(paid),
       pendingDeposits: depRows.filter(d => d.status === 'Pending').length, pendingWithdrawals: wdRows.filter(w => w.status === 'Pending').length,
       bonus: { active: posRows.filter(p => p.status === 'Active').length, activeAmount: sum(posRows.filter(p => p.status === 'Active')), profitPaid: r2(posRows.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(posRows.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(tradeRows.reduce((s, t) => s + (t.refPaid || 0), 0)) },
@@ -606,7 +632,7 @@ const routes = {
     };
   },
   'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
-  'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
+  'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, uid: String(x.uid || x.id), name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
   'POST /api/admin/demo-user': async (req, res, b, u) => {
     needAdmin(u); const action = str(b.action, 16);
     if (action === 'create') {
@@ -615,7 +641,7 @@ const routes = {
       if (!emailOk(email)) fail(400, 'Enter a valid email.');
       if (password.length < 8 || password.length > 100) fail(400, 'Password must be 8–100 characters.');
       if (D.demoUsers.some(x => x.email === email) || D.users.some(x => x.email === email)) fail(409, 'Email already exists in real or demo accounts.');
-      const x = { id: 'demo-' + nid(), name, email, phone: str(b.phone, 20), panelId: req.panelId || 'main', pass: hashPw(password), balance: 0, holdings: {}, trades: [], blocked: false, mode: 'demo', created: now() };
+      const x = { id: 'demo-' + nid(), uid: nextAccountUid('DEM'), name, email, phone: str(b.phone, 20), panelId: req.panelId || 'main', pass: hashPw(password), balance: 0, holdings: {}, trades: [], blocked: false, mode: 'demo', created: now() };
       D.demoUsers.push(x); audit(u.email, 'demo-create', x.id + ' ' + x.email); await save(); return { user: { id: x.id, name: x.name, email: x.email, balance: x.balance, created: x.created } };
     }
     const x = D.demoUsers.find(v => v.id === b.id); if (!x) fail(404, 'Demo account not found.'); assertPanelAccess(req, x);
@@ -766,12 +792,25 @@ const routes = {
       for (const row of [...D.deposits, ...D.withdrawals, ...D.trades, ...D.positions]) if (row.uid === id) row.userDeleted = true;
       audit(u.email, 'user-delete', `#${id} ${email}`); await save(); return { ok: true };
     }
+    else if (b.action === 'addMoney') { // positive wallet credit, panel-scoped and auditable
+      const amt = Number(b.amount), reason = str(b.reason, 120), operationKey = str(b.operationKey, 100);
+      if (!Number.isInteger(amt) || amt < 1 || amt > MAX_AMOUNT) fail(400, 'Enter a positive whole amount between ₹1 and ₹10,000,000.');
+      if (!reason) fail(400, 'A reason is required.');
+      if (!operationKey) fail(400, 'A unique request key is required. Please retry from the Add Money button.');
+      if (D.audit.some(x => x.action === 'add-money' && x.operationKey === operationKey)) fail(409, 'This Add Money request was already processed.');
+      const targetPanelId = String(t.panelId || req.panelId || 'main');
+      consumePanelCredits(targetPanelId, amt, u.email, 'wallet-add-money', `user #${t.id} ${t.email}; ${reason}`);
+      t.balance = r2(t.balance + amt);
+      const event = { who: u.email, action: 'add-money', detail: `UID ${t.uid || t.id} (${t.email}) +₹${amt}; ${reason}`, operationKey: operationKey || undefined };
+      D.audit.push({ id: nid(), ts: now(), ...event }); if (D.audit.length > 2000) D.audit.splice(0, D.audit.length - 2000);
+      await save(); return { ok: true, uid: String(t.uid || t.id), balance: r2(t.balance), creditBalance: r2((D.panels.find(p => p.slug === targetPanelId) || {}).creditBalance || 0) };
+    }
     else if (b.action === 'adjust') {        // manual wallet correction, always logged with a reason
       const amt = Number(b.amount), reason = str(b.reason, 120);
       if (!Number.isInteger(amt) || amt === 0 || Math.abs(amt) > MAX_AMOUNT) fail(400, 'Enter a non-zero whole amount.');
       if (!reason) fail(400, 'A reason is required.'); if (t.balance + amt < 0) fail(400, 'Balance cannot go below zero.');
       if (amt > 0) consumePanelCredits(String(t.panelId || req.panelId || 'main'), amt, u.email, 'wallet-adjustment', `user #${t.id} ${t.email}; ${reason}`);
-      t.balance = r2(t.balance + amt); audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true, uid: String(t.id), balance: r2(t.balance), creditBalance: r2(req.panel.creditBalance || 0) };
+      t.balance = r2(t.balance + amt); audit(u.email, 'adjust', `#${t.id} ${amt > 0 ? '+' : ''}${amt} — ${reason}`); await save(); return { ok: true, uid: String(t.uid || t.id), balance: r2(t.balance), creditBalance: r2(req.panel.creditBalance || 0) };
     } else fail(400, 'Bad action');
     audit(u.email, 'user-' + b.action, `#${t.id} ${t.email}`); await save(); return { ok: true };
   },
@@ -801,7 +840,7 @@ const routes = {
       const deposits = D.deposits.filter(x => String(x.panelId || 'main') === p.slug);
       const withdrawals = D.withdrawals.filter(x => String(x.panelId || 'main') === p.slug);
       const admin = D.users.find(x => x.id === p.adminUserId);
-      return { id: p.id, name: p.name, slug: p.slug, active: p.active !== false, created: p.created, creditBalance: r2(p.creditBalance || 0), creditsAllocated: r2(p.creditsAllocated || 0), creditsUsed: r2(p.creditsUsed || 0), link: p.slug === 'main' ? '/' : '/p/' + p.slug, adminEmail: admin && admin.email || '', users: users.length, demoUsers: demos.length, wallets: r2(users.reduce((n, x) => n + Number(x.balance || 0), 0)), deposits: deposits.length, pendingDeposits: deposits.filter(x => x.status === 'Pending').length, withdrawals: withdrawals.length };
+      return { id: p.id, name: p.name, slug: p.slug, active: p.active !== false, created: p.created, creditBalance: r2(p.creditBalance || 0), creditsAllocated: r2(p.creditsAllocated || 0), creditsUsed: r2(p.creditsUsed || 0), link: p.slug === 'main' ? '/' : '/p/' + p.slug, adminEmail: admin && admin.email || '', adminUid: admin && (admin.uid || String(admin.id)) || '', users: users.length, demoUsers: demos.length, wallets: r2(users.reduce((n, x) => n + Number(x.balance || 0), 0)), deposits: deposits.length, pendingDeposits: deposits.filter(x => x.status === 'Pending').length, withdrawals: withdrawals.length };
     });
     return { panels, totalPanels: panels.length, totalUsers: D.users.filter(x => x.role === 'user').length, totalDemoUsers: D.demoUsers.length, totalWallets: r2(D.users.filter(x => x.role === 'user').reduce((n, x) => n + Number(x.balance || 0), 0)), totalCreditsAvailable: r2(panels.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), totalCreditsAllocated: r2(panels.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), totalCreditsUsed: r2(panels.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) };
   },
@@ -818,7 +857,7 @@ const routes = {
       if (D.users.some(x => x.email === email) || D.demoUsers.some(x => x.email === email)) fail(409, 'This email is already in use.');
       const panel = { id: 'panel-' + crypto.randomBytes(6).toString('hex'), slug, aliases: [], name, active: true, deleted: false, created: now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(S(req)) };
       panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
-      const admin = { id: nid(), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
+      const admin = { id: nid(), uid: nextAccountUid('PAD'), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
       panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);
       audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`); await save();
       return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminLink: '/p/' + panel.slug + '/admin', adminEmail: email } };
@@ -993,7 +1032,7 @@ async function seedAdmin() {
   let admin = D.users.find(u => ['admin','headAdmin'].includes(u.role) && u.email === email);
   if (!admin) {
     const generated = !pw; if (!pw) pw = crypto.randomBytes(9).toString('base64url');
-    admin = { id: nid(), name: 'Head Admin', email, phone: '', role: 'headAdmin', panelId: 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
+    admin = { id: nid(), uid: nextAccountUid('HAD'), name: 'Head Admin', email, phone: '', role: 'headAdmin', panelId: 'main', pass: hashPw(pw), balance: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
     D.users.push(admin); audit('system', 'admin-created', email); await save();
     console.log(`ADMIN CREATED: ${email}` + (generated ? `  password: ${pw}   (set ADMIN_EMAIL / ADMIN_PASSWORD env vars on Render to choose your own)` : ''));
   } else { if (admin.role === 'admin') admin.role = 'headAdmin'; admin.panelId = 'main'; if (E.ADMIN_PASSWORD && !checkPw(E.ADMIN_PASSWORD, admin.pass)) {
