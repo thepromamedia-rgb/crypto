@@ -721,60 +721,63 @@ const routes = {
     audit(u.email, 'flip-coin', `bet ${amount} ${side}; round #${roundNo}; pending result; fee ${fee}`);
     await save(); return { bet: row, balance:u.balance, round:{number:roundNo,endTs,remainingMs,bettingOpen:remainingMs>5000} };
   },
-  // ----- Big Small game: shared fair number result, derived size/color, isolated history -----
+  // ----- Big Small game: shared number result, with independent duration rounds -----
   'GET /api/games/big-small': async (req, res, b, u) => {
-    needUser(u); const panelId=req.panelId||'main', ts=now(), roundNo=Math.floor(ts/30000), startTs=roundNo*30000, endTs=startTs+30000;
-    if(!Array.isArray(D.bigSmallRounds)) D.bigSmallRounds=[]; if(!Array.isArray(D.bigSmallBets)) D.bigSmallBets=[];
-    for(let n=Math.max(0,roundNo-10);n<=roundNo;n++) if(!D.bigSmallRounds.some(x=>Number(x.roundNo)===n&&String(x.panelId||'main')===String(panelId))) D.bigSmallRounds.push({roundNo:n,panelId,startTs:n*30000,endTs:(n+1)*30000,result:null,createdTs:ts,outcomeLocked:false});
+    needUser(u);
+    const panelId=req.panelId||'main', ts=now();
+    const requestedDuration=Number(new URL(req.url,'http://localhost').searchParams.get('duration')||30000);
+    const durationMs=[30000,60000,180000,300000].includes(requestedDuration)?requestedDuration:30000;
+    const durationKey=String(durationMs), isDuration=x=>Number(x.durationMs||30000)===durationMs;
+    const roundNo=Math.floor(ts/durationMs), startTs=roundNo*durationMs, endTs=startTs+durationMs;
+    if(!Array.isArray(D.bigSmallRounds))D.bigSmallRounds=[];
+    if(!Array.isArray(D.bigSmallBets))D.bigSmallBets=[];
+    for(let n=Math.max(0,roundNo-10);n<=roundNo;n++) if(!D.bigSmallRounds.some(x=>Number(x.roundNo)===n&&String(x.panelId||'main')===String(panelId)&&isDuration(x))) D.bigSmallRounds.push({roundNo:n,panelId,durationMs,startTs:n*durationMs,endTs:(n+1)*durationMs,result:null,createdTs:ts,outcomeLocked:false});
     let changed=false;
-    for(const r of D.bigSmallRounds){ if(String(r.panelId||'main')!==String(panelId)||Number(r.roundNo)>=roundNo||r.outcomeLocked) continue;
-      // Transparent low-stake selection rule: choose the size with the lower
-      // aggregate stake, then choose the lowest-staked number within that size.
-      // Deterministic tie-breaks: equal Big/Small totals select Small; equal lowest number stakes select the smallest number. With no bets, generate a result normally.
-      const roundBets=D.bigSmallBets.filter(x=>Number(x.roundNo)===Number(r.roundNo)&&String(x.panelId||'main')===String(panelId));
-      if(roundBets.length===0){
-        r.result=crypto.randomInt(0,10);
-      } else {
+    for(const r of D.bigSmallRounds){ if(String(r.panelId||'main')!==String(panelId)||!isDuration(r)||Number(r.roundNo)>=roundNo||r.outcomeLocked) continue;
+      // Preserve the ZIP's existing result-selection rules for every duration.
+      const roundBets=D.bigSmallBets.filter(x=>Number(x.roundNo)===Number(r.roundNo)&&String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
+      if(roundBets.length===0){ r.result=crypto.randomInt(0,10); }
+      else {
         const totals={Big:0,Small:0};
         for(const bet of roundBets) if(bet.type==='size'&&(bet.pick==='Big'||bet.pick==='Small')) totals[bet.pick]+=Number(bet.amount||0);
         let chosenSize;
-        if(totals.Big<totals.Small) chosenSize='Big';
-        else if(totals.Small<totals.Big) chosenSize='Small';
-        else chosenSize='Small';
+        if(totals.Big<totals.Small)chosenSize='Big'; else if(totals.Small<totals.Big)chosenSize='Small'; else chosenSize='Small';
         const nums=chosenSize==='Big'?[5,6,7,8,9]:[0,1,2,3,4];
         const numberTotals=Object.fromEntries(nums.map(n=>[n,0]));
         for(const bet of roundBets) if(bet.type==='number'&&Object.prototype.hasOwnProperty.call(numberTotals,String(bet.pick))) numberTotals[Number(bet.pick)]+=Number(bet.amount||0);
-        const lowest=Math.min(...nums.map(n=>numberTotals[n]));
-        const tied=nums.filter(n=>numberTotals[n]===lowest);
-        r.result=Math.min(...tied);
+        const lowest=Math.min(...nums.map(n=>numberTotals[n])); const tied=nums.filter(n=>numberTotals[n]===lowest); r.result=Math.min(...tied);
       }
       r.bigSmall=r.result>=5?'Big':'Small';
       r.color=(r.result===0?'Red+Violet':r.result===5?'Green+Violet':r.result%2===1?'Green':'Red'); r.outcomeLocked=true; changed=true;
     }
-    for(const bet of D.bigSmallBets){ if(bet.status!=='Pending'||Number(bet.roundNo)>=roundNo||String(bet.panelId||'main')!==String(panelId)) continue;
-      const rr=D.bigSmallRounds.find(x=>Number(x.roundNo)===Number(bet.roundNo)&&String(x.panelId||'main')===String(panelId)); if(!rr||!rr.outcomeLocked) continue;
+    for(const bet of D.bigSmallBets){ if(bet.status!=='Pending'||Number(bet.roundNo)>=roundNo||String(bet.panelId||'main')!==String(panelId)||Number(bet.durationMs||30000)!==durationMs) continue;
+      const rr=D.bigSmallRounds.find(x=>Number(x.roundNo)===Number(bet.roundNo)&&String(x.panelId||'main')===String(panelId)&&isDuration(x)); if(!rr||!rr.outcomeLocked)continue;
       const owner=[...D.users,...D.demoUsers].find(x=>String(x.id)===String(bet.userId));
       const win=bet.type==='number'?Number(bet.pick)===Number(rr.result):bet.type==='size'?String(bet.pick)===rr.bigSmall:String(bet.pick)==='Violet'?rr.color.includes('Violet'):rr.color.split('+')[0]===String(bet.pick);
       const payout=win?r2(Number(bet.amount)*Number(bet.multiplier)):0;
-      if(owner&&payout) owner.balance=r2(Number(owner.balance||0)+payout);
-      bet.result=rr.result; bet.resultSize=rr.bigSmall; bet.resultColor=rr.color; bet.won=win; bet.payout=payout; bet.net=r2(payout-Number(bet.amount)); bet.status='Settled'; bet.settledTs=rr.endTs; changed=true;
-      if(owner) audit(owner.email,'big-small-settlement',`round #${bet.roundNo}; ${bet.type} ${bet.pick}; ${win?'won':'lost'}; payout ${payout}`);
+      if(owner&&payout)owner.balance=r2(Number(owner.balance||0)+payout);
+      bet.result=rr.result;bet.resultSize=rr.bigSmall;bet.resultColor=rr.color;bet.won=win;bet.payout=payout;bet.net=r2(payout-Number(bet.amount));bet.status='Settled';bet.settledTs=rr.endTs;changed=true;
+      if(owner)audit(owner.email,'big-small-settlement',`round #${bet.roundNo} (${durationKey}ms); ${bet.type} ${bet.pick}; ${win?'won':'lost'}; payout ${payout}`);
     }
-    if(changed) await save();
-    const round=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId));
-    return {config:{minBet:10,maxBet:10000,multipliers:{size:1.8,color:1.8,number:8.8}},round:{number:roundNo,startTs,endTs,bettingOpen:endTs-ts>5000},resultsHistory:D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,20).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:D.bigSmallBets.filter(x=>String(x.userId)===String(u.id)&&String(x.panelId||'main')===String(panelId)&&Number(x.roundNo)===roundNo),history:D.bigSmallBets.filter(x=>String(x.userId)===String(u.id)&&String(x.panelId||'main')===String(panelId)).sort((a,b)=>b.ts-a.ts).slice(0,500)};
+    if(changed)await save();
+    const round=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&isDuration(x));
+    const matchingRounds=D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&isDuration(x));
+    const matchingBets=D.bigSmallBets.filter(x=>String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
+    return {config:{durationMs,minBet:10,maxBet:10000,multipliers:{size:1.8,color:1.8,number:8.8}},round:{number:roundNo,startTs,endTs,remainingMs:Math.max(0,endTs-ts),bettingOpen:endTs-ts>5000},resultsHistory:matchingRounds.filter(x=>x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,20).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:matchingBets.filter(x=>String(x.userId)===String(u.id)&&Number(x.roundNo)===roundNo),history:matchingBets.filter(x=>String(x.userId)===String(u.id)).sort((a,b)=>b.ts-a.ts).slice(0,500)};
   },
   'POST /api/games/big-small': async (req,res,b,u) => {
-    needUser(u); if(u.role!=='user') fail(403,'Only user accounts can play this game.');
-    const type=String(b.type||''), pick=String(b.pick||''), amount=Number(b.amount), allowed=type==='number'?/^(?:[0-9])$/.test(pick):type==='size'?['Big','Small'].includes(pick):type==='color'?['Green','Red','Violet'].includes(pick):false;
-    if(!allowed) fail(400,'Choose a valid number, color, or Big/Small option.'); if(!Number.isFinite(amount)||amount<10||amount>10000||amount>MAX_AMOUNT) fail(400,'Bet amount must be between ₹10 and ₹10,000.');
-    const ts=now(),roundNo=Math.floor(ts/30000),startTs=roundNo*30000,endTs=startTs+30000;if(endTs-ts<=5000) fail(400,'Betting is closed for the last 5 seconds of this round.');
-    if(!Array.isArray(D.bigSmallBets))D.bigSmallBets=[]; if(!Array.isArray(D.bigSmallRounds))D.bigSmallRounds=[];
-    const panelId=req.panelId||'main'; let rr=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)); if(!rr){rr={roundNo,panelId,startTs,endTs,result:null,outcomeLocked:false,createdTs:ts};D.bigSmallRounds.push(rr);}
-    const multiplier=type==='number'?8.8:1.8, debit=r2(amount), balance=Number(u.balance||0); if(debit>balance)fail(400,'Not enough wallet balance for this bet.'); u.balance=r2(balance-debit);
-    const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,roundNo,type,pick,amount:r2(amount),multiplier,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet); audit(u.email,'big-small-bet',`round #${roundNo}; ${type} ${pick}; ₹${amount}; ${multiplier}x`); await save(); return {bet,balance:u.balance,round:{number:roundNo,endTs,bettingOpen:true}};
+    needUser(u); if(u.role!=='user')fail(403,'Only user accounts can play this game.');
+    const type=String(b.type||''),pick=String(b.pick||''),amount=Number(b.amount),allowed=type==='number'?/^(?:[0-9])$/.test(pick):type==='size'?['Big','Small'].includes(pick):type==='color'?['Green','Red','Violet'].includes(pick):false;
+    if(!allowed)fail(400,'Choose a valid number, color, or Big/Small option.');if(!Number.isFinite(amount)||amount<10||amount>10000||amount>MAX_AMOUNT)fail(400,'Bet amount must be between ₹10 and ₹10,000.');
+    const requestedDuration=Number(b.durationMs||30000),durationMs=[30000,60000,180000,300000].includes(requestedDuration)?requestedDuration:30000;
+    const ts=now(),roundNo=Math.floor(ts/durationMs),startTs=roundNo*durationMs,endTs=startTs+durationMs;
+    if(endTs-ts<=5000)fail(400,'Betting is closed for the last 5 seconds of this round.');
+    if(!Array.isArray(D.bigSmallBets))D.bigSmallBets=[];if(!Array.isArray(D.bigSmallRounds))D.bigSmallRounds=[];
+    const panelId=req.panelId||'main';let rr=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
+    if(!rr){rr={roundNo,panelId,durationMs,startTs,endTs,result:null,outcomeLocked:false,createdTs:ts};D.bigSmallRounds.push(rr);}
+    const multiplier=type==='number'?8.8:1.8,debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);
+    const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
   },
-
   // ----- admin -----
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const rows = (D.flipCoinBets || []).filter(x => isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')).slice().sort((a,b) => b.ts-a.ts).slice(0,1000);

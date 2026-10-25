@@ -1,13 +1,8 @@
-BIG SMALL GAME UPDATE
+BIG SMALL / WINGO GAME NOTES
 
-- Kept the existing website base, login, wallet actions, Head/Tail game and admin routes.
-- Refined Big Small mobile UI to match the supplied WinGo screenshot: compact coral wallet card, paired Withdraw/Deposit buttons, four duration-style indicators, compact red timer/period panel, quick amount controls, color buttons, circular 0-9 grid, and compact result/bet history.
-- 30-second rounds; betting closes during the final 5 seconds.
-- Big = 5-9; Small = 0-4.
-- Color mapping: 1,3,7,9 = Green; 2,4,6,8 = Red; 0 = Red + Violet; 5 = Green + Violet.
-- Big/Small and Color payout multiplier: 1.80x. Number payout multiplier: 8.80x.
-- Payout multiplier is total return including stake. Lost bets are not refunded.
-- Results and individual bet history remain separate from Head/Tail history.
-- Deterministic low-stake rule: lower aggregate Big/Small stake chooses the size; if equal, Small is selected. Within the selected size, the lowest-staked number is selected; if tied, the smallest number is selected. If no bets exist, the server chooses a random number.
-- Color and size derive from the selected number. Since outcomes depend on aggregate wagers, this rule must be disclosed to users before betting.
-- This is a source-code update; deploy/restart is required. A live deployment/API connection was not tested here.
+- Existing result-selection and settlement rules are preserved.
+- Supported independent round durations: 30 seconds, 1 minute, 3 minutes, and 5 minutes.
+- Each duration has its own round clock, round identifiers, pending bets, settlement, results history, and personal bet history.
+- Betting closes during the final 5 seconds of each selected duration.
+- The UI duration tabs switch the selected mode and update the countdown, round label, and displayed history.
+- Results remain server-generated and are saved using the existing persistence mechanism.
