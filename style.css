@@ -433,46 +433,34 @@
 #bigSmallGame .bs-numbers button:nth-child(2),#bigSmallGame .bs-numbers button:nth-child(4),#bigSmallGame .bs-numbers button:nth-child(8),#bigSmallGame .bs-numbers button:nth-child(10){color:#20b879;box-shadow:inset 0 -4px 0 #20b879}
 #bigSmallGame .bs-numbers button:nth-child(3),#bigSmallGame .bs-numbers button:nth-child(5),#bigSmallGame .bs-numbers button:nth-child(7),#bigSmallGame .bs-numbers button:nth-child(9){color:#ff5963;box-shadow:inset 0 -4px 0 #ff5963}
 
-/* Mobile reference alignment pass (294px-wide WinGo screenshot) */
-@media (max-width: 480px) {
-  #bigSmallGame.big-small-game { gap: 8px; }
-  #bigSmallGame .flip-wallet-head {
-    padding: 14px 0 0;
-    gap: 0;
-    border-radius: 15px;
-    overflow: hidden;
-    background: linear-gradient(120deg, #ff686d 0%, #ff9a8d 100%);
-  }
-  #bigSmallGame .flip-wallet-balance {
-    min-height: 56px;
-    padding: 6px 14px 3px;
-    border-radius: 12px 12px 0 0;
-    justify-content: center;
-    gap: 8px;
-  }
-  #bigSmallGame .flip-wallet-copy { flex: 0 1 auto; }
-  #bigSmallGame .flip-wallet-balance strong { font-size: 14px; }
-  #bigSmallGame .flip-wallet-actions {
-    background: #fff;
-    padding: 0 16px 11px;
-    gap: 8px;
-    border-radius: 0 0 12px 12px;
-  }
-  #bigSmallGame .flip-wallet-actions button {
-    min-height: 29px;
-    padding: 6px 8px;
-    font-size: 11px;
-  }
-  #bigSmallGame .flip-notice { margin-top: 4px; }
-  #bigSmallGame .bs-duration-strip { margin-top: 4px; min-height: 76px; }
-  #bigSmallGame .flip-timer-panel { min-height: 60px; }
-  #bigSmallGame .bs-numbers { gap: 7px; padding: 5px 8px; }
-  #bigSmallGame .bs-numbers button {
-    font-size: 24px;
-    font-weight: 800;
-    background: linear-gradient(145deg, #fff 15%, #f0f2f6 100%);
-    box-shadow: inset 0 2px 0 #fff, inset 0 -4px 0 currentColor;
-  }
-  #bigSmallGame .bs-history-tabs { margin-bottom: 10px; }
-  #bigSmallGame .bs-history-tabs button { min-width: 0; white-space: nowrap; }
-}
+/* Bet amount popup modeled on the supplied mobile reference */
+#bigSmallGame .bs-modal[hidden]{display:none!important}
+#bigSmallGame .bs-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center}
+#bigSmallGame .bs-modal-scrim{position:absolute;inset:0;border:0;background:rgba(15,18,28,.72);width:100%;height:100%;}
+#bigSmallGame .bs-modal-sheet{position:relative;width:min(100%,520px);max-height:88dvh;overflow:auto;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -10px 35px #0002;color:#202638;padding-bottom:env(safe-area-inset-bottom);animation:bsSheetIn .18s ease-out}
+@keyframes bsSheetIn{from{transform:translateY(22px);opacity:.75}to{transform:translateY(0);opacity:1}}
+#bigSmallGame .bs-modal-head{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(110deg,#ff5b64,#ff3155);color:#fff;padding:13px 18px;border-radius:22px 22px 0 0;font-size:16px}
+#bigSmallGame .bs-modal-head button{background:transparent;color:#fff;border:0;font-size:28px;line-height:1;cursor:pointer}
+#bigSmallGame .bs-modal-body{padding:14px 16px 12px}
+#bigSmallGame .bs-modal-pick{background:var(--pick-color,#ff5963);color:white;border-radius:12px;text-align:center;padding:12px 10px;font-size:16px;font-weight:800;margin-bottom:14px}
+#bigSmallGame .bs-modal-pick[data-kind="number"]{background:#f6f7fb;color:var(--pick-color,#ff5963);border:2px solid var(--pick-color,#ff5963);font-size:22px}
+#bigSmallGame .bs-modal-balance,#bigSmallGame .bs-modal-quantity{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf0f5;font-size:14px}
+#bigSmallGame .bs-modal-balance strong{font-variant-numeric:tabular-nums}
+#bigSmallGame .bs-modal-quantity>div{display:flex;align-items:center;gap:6px}
+#bigSmallGame .bs-modal-quantity button{width:40px;height:38px;border:0;border-radius:8px;background:var(--pick-color,#ff5963);color:#fff;font-size:22px}
+#bigSmallGame .bs-modal-quantity input{width:72px;height:38px;border:0;border-radius:8px;background:#f3f5fa;text-align:center;font-size:17px;color:#202638}
+#bigSmallGame .bs-modal-amounts,#bigSmallGame .bs-modal-multipliers{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-top:12px}
+#bigSmallGame .bs-modal-multipliers{grid-template-columns:repeat(6,minmax(0,1fr));margin-top:10px}
+#bigSmallGame .bs-modal-amounts button,#bigSmallGame .bs-modal-multipliers button{min-width:0;border:0;border-radius:8px;background:#f2f4f8;color:#596477;padding:10px 2px;font-size:12px;white-space:nowrap}
+#bigSmallGame .bs-modal-amounts button.active,#bigSmallGame .bs-modal-multipliers button.active{background:var(--pick-color,#ff5963);color:#fff}
+#bigSmallGame .bs-modal-agree{display:flex;align-items:center;gap:8px;margin-top:15px;color:#7d8492;font-size:13px}
+#bigSmallGame .bs-modal-agree input{width:18px;height:18px;accent-color:#ff5963}
+#bigSmallGame .bs-modal-agree span{color:#ff5963}
+#bigSmallGame #bsModalError{min-height:16px;color:#e34b5a;font-size:12px;margin:8px 0 0}
+#bigSmallGame .bs-modal-footer{display:grid;grid-template-columns:1fr 2fr;border-top:1px solid #edf0f5}
+#bigSmallGame .bs-modal-footer button{border:0;min-height:54px;font-size:15px;cursor:pointer}
+#bigSmallGame .bs-modal-footer button:first-child{background:#f4f5f8;color:#6d7585}
+#bigSmallGame .bs-modal-footer button:last-child{background:var(--pick-color,#ff5963);color:#fff;font-weight:800}
+#bigSmallGame .bs-modal-footer button:disabled{opacity:.6}
+body.bs-modal-open{overflow:hidden}
+@media(max-width:360px){#bigSmallGame .bs-modal-body{padding:12px}#bigSmallGame .bs-modal-amounts,#bigSmallGame .bs-modal-multipliers{gap:4px}#bigSmallGame .bs-modal-amounts button,#bigSmallGame .bs-modal-multipliers button{font-size:10px;padding:9px 1px}}

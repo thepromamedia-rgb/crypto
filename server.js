@@ -731,8 +731,24 @@ const routes = {
     const roundNo=Math.floor(ts/durationMs), startTs=roundNo*durationMs, endTs=startTs+durationMs;
     if(!Array.isArray(D.bigSmallRounds))D.bigSmallRounds=[];
     if(!Array.isArray(D.bigSmallBets))D.bigSmallBets=[];
-    for(let n=Math.max(0,roundNo-10);n<=roundNo;n++) if(!D.bigSmallRounds.some(x=>Number(x.roundNo)===n&&String(x.panelId||'main')===String(panelId)&&isDuration(x))) D.bigSmallRounds.push({roundNo:n,panelId,durationMs,startTs:n*durationMs,endTs:(n+1)*durationMs,result:null,createdTs:ts,outcomeLocked:false});
     let changed=false;
+    // Repair duplicate round rows for this panel/duration, preferring an already locked result.
+    const uniqueRounds=[]; const roundIndex=new Map();
+    for(const x of D.bigSmallRounds){
+      if(String(x.panelId||'main')!==String(panelId)||!isDuration(x)){uniqueRounds.push(x);continue;}
+      const key=String(Number(x.roundNo));
+      if(!roundIndex.has(key)){roundIndex.set(key,uniqueRounds.length);uniqueRounds.push(x);continue;}
+      const idx=roundIndex.get(key), prior=uniqueRounds[idx];
+      if(!prior.outcomeLocked&&x.outcomeLocked)uniqueRounds[idx]=x;
+      changed=true;
+    }
+    D.bigSmallRounds=uniqueRounds;
+    const knownRounds=D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&isDuration(x)).map(x=>Number(x.roundNo)).filter(Number.isFinite);
+    const lastKnown=knownRounds.length?Math.max(...knownRounds):null;
+    // Create at least the latest 20 rounds and fill any gap after the last stored round,
+    // bounded to 2,000 rounds per request to avoid runaway writes after very long downtime.
+    const earliest=Math.max(0,roundNo-1999,lastKnown===null?roundNo-20:Math.min(roundNo-20,lastKnown+1));
+    for(let n=earliest;n<=roundNo;n++) if(!D.bigSmallRounds.some(x=>Number(x.roundNo)===n&&String(x.panelId||'main')===String(panelId)&&isDuration(x))){D.bigSmallRounds.push({roundNo:n,panelId,durationMs,startTs:n*durationMs,endTs:(n+1)*durationMs,result:null,createdTs:ts,outcomeLocked:false});changed=true;}
     for(const r of D.bigSmallRounds){ if(String(r.panelId||'main')!==String(panelId)||!isDuration(r)||Number(r.roundNo)>=roundNo||r.outcomeLocked) continue;
       // Preserve the ZIP's existing result-selection rules for every duration.
       const roundBets=D.bigSmallBets.filter(x=>Number(x.roundNo)===Number(r.roundNo)&&String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
