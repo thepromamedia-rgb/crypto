@@ -423,10 +423,10 @@ async function renderPage(page, quiet) {
         <div class="flip-game-rule">Round closes in the final 5 seconds. The coin animation and result appear automatically.</div>
         <button type="button" id="flipSoundToggle" class="secondary-btn flip-sound-toggle">🔊 Coin sound: ON</button>
       </div>
-      <section class="flip-history-section"><div class="flip-history-tabs"><button type="button" class="active" data-flip-tab="results">Game history</button><button type="button" disabled>Chart</button><button type="button" disabled>My bets</button></div>
+      <section class="flip-history-section"><div class="flip-history-tabs"><button type="button" class="active" data-flip-tab="results">Game history</button><button type="button" disabled>Chart</button><button type="button" data-flip-tab="mybets">My bets</button></div>
         <div class="content-card" id="flipResultsHistory"><div id="flipResultsRows">No results yet.</div></div>
       </section>
-      <section class="flip-history-section"><div class="flip-section-title">My bet history</div>
+      <section class="flip-history-section" id="flipMyBetsSection" hidden><div class="flip-section-title">My bet history</div>
         <div class="content-card" id="flipHistory"><div id="flipHistoryRows"></div><div class="flip-history-pages" id="flipHistoryPages" style="display:none"><button type="button" id="flipHistoryPrev" class="secondary-btn">← Newer 10</button><span id="flipHistoryPageLabel">1 / 1</span><button type="button" id="flipHistoryNext" class="secondary-btn">Older 10 →</button></div></div>
       </section>
     </section>`;
@@ -445,6 +445,17 @@ async function renderPage(page, quiet) {
       $('#flipHistoryNext').disabled = flipHistoryPage >= totalPages - 1;
     };
     const renderFlipResults = (items=[]) => { const el=$('#flipResultsRows'); if(!el)return; el.innerHTML=items.length?`<div class="tbl"><table><tr><th>Round</th><th>Result</th><th>Time</th></tr>${items.map(x=>`<tr><td>#${x.roundNo}</td><td><b>${String(x.result||'').toUpperCase()}</b></td><td>${dt(x.endTs)}</td></tr>`).join('')}</table></div>`:'No results yet.'; };
+    const flipTabButtons = $$('[data-flip-tab]');
+    const setFlipHistoryTab = (tab) => {
+      const showBets = tab === 'mybets';
+      const resultsPanel = $('#flipResultsHistory');
+      const betsPanel = $('#flipMyBetsSection');
+      if (resultsPanel) resultsPanel.hidden = showBets;
+      if (betsPanel) betsPanel.hidden = !showBets;
+      flipTabButtons.forEach(b => { b.classList.toggle('active', b.dataset.flipTab === tab); b.setAttribute('aria-pressed', String(b.dataset.flipTab === tab)); });
+    };
+    flipTabButtons.forEach(b => b.addEventListener('click', () => setFlipHistoryTab(b.dataset.flipTab)));
+    setFlipHistoryTab('results');
     renderFlipHistory();
     $('#flipHistoryPrev').onclick = () => { if (flipHistoryPage > 0) { flipHistoryPage--; renderFlipHistory(); } };
     $('#flipHistoryNext').onclick = () => { if ((flipHistoryPage + 1) * 10 < history.length) { flipHistoryPage++; renderFlipHistory(); } };

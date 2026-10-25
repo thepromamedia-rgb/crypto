@@ -176,3 +176,14 @@
 #flipGameCard #flipRevealCoin{width:clamp(100px,28vw,150px);height:clamp(100px,28vw,150px)}
 @media(min-width:701px){.flip-page{max-width:560px}.flip-wallet-head{padding:15px}.flip-wallet-balance{justify-content:flex-start;padding:14px 18px}.flip-timer-panel{padding:16px}.flip-bet-panel{padding:18px}}
 @media(max-width:380px){.flip-wallet-balance strong{font-size:17px}.flip-digits{font-size:23px;letter-spacing:3px}.flip-quick-amounts{gap:4px}.flip-quick-amounts button{font-size:10px}.flip-side-buttons button{min-height:76px}.flip-history-section .content-card{padding:7px}.flip-history-section th{font-size:9px;padding:9px 3px}.flip-history-section td{font-size:10px;padding:9px 3px}}
+
+
+/* Coin reveal centering: keep the full coin visible inside the timer card */
+#flipGameCard #flipReveal{inset:8px;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;box-sizing:border-box;overflow:hidden}
+#flipGameCard #flipRevealCoin{position:relative;flex:0 0 auto;width:clamp(96px,26vw,138px);height:clamp(96px,26vw,138px);min-width:96px;min-height:96px;max-width:100%;max-height:100%;margin:0;transform-origin:center center}
+#flipGameCard #flipRevealCoin span{font-size:clamp(18px,4vw,28px);letter-spacing:1px}
+#flipGameCard #flipRevealText{margin:0;line-height:1.1;max-width:100%;text-align:center}
+#flipGameCard #flipReveal.is-spinning #flipRevealCoin{animation:flipCenteredCoin 5s linear both}
+@keyframes flipCenteredCoin{0%{transform:rotateY(0) scale(.88)}20%{transform:rotateY(1440deg) scale(1)}45%{transform:rotateY(3240deg) scale(1.06)}70%{transform:rotateY(5040deg) scale(1)}100%{transform:rotateY(7200deg) scale(.96)}}
+.flip-history-tabs button[data-flip-tab]{cursor:pointer}
+.flip-history-section [hidden],#flipResultsHistory[hidden],#flipMyBetsSection[hidden]{display:none!important}
