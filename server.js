@@ -730,7 +730,7 @@ const routes = {
     for(const r of D.bigSmallRounds){ if(String(r.panelId||'main')!==String(panelId)||Number(r.roundNo)>=roundNo||r.outcomeLocked) continue;
       // Transparent low-stake selection rule: choose the size with the lower
       // aggregate stake, then choose the lowest-staked number within that size.
-      // Ties are broken randomly. With no bets at all, use a random number.
+      // Deterministic tie-breaks: equal Big/Small totals select Small; equal lowest number stakes select the smallest number. With no bets, generate a result normally.
       const roundBets=D.bigSmallBets.filter(x=>Number(x.roundNo)===Number(r.roundNo)&&String(x.panelId||'main')===String(panelId));
       if(roundBets.length===0){
         r.result=crypto.randomInt(0,10);
@@ -740,13 +740,13 @@ const routes = {
         let chosenSize;
         if(totals.Big<totals.Small) chosenSize='Big';
         else if(totals.Small<totals.Big) chosenSize='Small';
-        else chosenSize=crypto.randomInt(0,2)===0?'Big':'Small';
+        else chosenSize='Small';
         const nums=chosenSize==='Big'?[5,6,7,8,9]:[0,1,2,3,4];
         const numberTotals=Object.fromEntries(nums.map(n=>[n,0]));
         for(const bet of roundBets) if(bet.type==='number'&&Object.prototype.hasOwnProperty.call(numberTotals,String(bet.pick))) numberTotals[Number(bet.pick)]+=Number(bet.amount||0);
         const lowest=Math.min(...nums.map(n=>numberTotals[n]));
         const tied=nums.filter(n=>numberTotals[n]===lowest);
-        r.result=tied[crypto.randomInt(0,tied.length)];
+        r.result=Math.min(...tied);
       }
       r.bigSmall=r.result>=5?'Big':'Small';
       r.color=(r.result===0?'Red+Violet':r.result===5?'Green+Violet':r.result%2===1?'Green':'Red'); r.outcomeLocked=true; changed=true;

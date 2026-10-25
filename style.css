@@ -211,3 +211,14 @@
 #bsResults table,#bsMyHistory table{min-width:470px}
 #bsResults,#bsMyHistory{overflow-x:auto}
 @media(max-width:380px){.bs-two button,.bs-three button{font-size:11px;padding:11px 3px}.bs-numbers{gap:5px}.bs-numbers button{font-size:15px}}
+
+/* Game picker shown when the Games section opens */
+.game-chooser{display:flex;flex-direction:column;gap:12px;padding:14px 0}
+.game-chooser[hidden]{display:none!important}
+.game-chooser h2{font-size:20px;margin:2px 0 0;color:#202b43}
+.game-chooser>p{font-size:13px;color:#69758b;margin:0 0 4px}
+.game-choice{display:flex;align-items:center;gap:12px;width:100%;padding:15px 14px;border:1px solid #e8eaf0;border-radius:15px;background:#fff;box-shadow:0 4px 14px #1827470d;text-align:left;cursor:pointer;color:#25314a}
+.game-choice-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:13px;background:#fff0f1;font-size:25px;flex-shrink:0}
+.game-choice>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:4px}
+.game-choice strong{font-size:15px}.game-choice small{font-size:12px;color:#69758b}.game-choice-arrow{font-size:27px;color:#ff5963}
+.game-back{align-self:flex-start;border:0;border-radius:999px;background:#fff0f1;color:#d94350;font-weight:800;padding:9px 13px;cursor:pointer}
