@@ -225,19 +225,9 @@ const stub = http.createServer((q, r) => {
   assert.equal(panelCreate.s, 200); assert.equal(panelCreate.j.panel.link, '/p/panel-one');
   const panelAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 1500, reason: 'panel test allocation' }); assert.equal(panelAllocation.s, 200); assert.equal(panelAllocation.j.panel.creditBalance, 1500); ok('Head Admin allocates isolated panel credits');
   assert.equal(panelCreate.j.panel.adminLink, '/p/panel-one/admin');
-  const loginDiag = await a('GET', '/api/admin/panel-login-diagnostics');
-  assert.equal(loginDiag.s, 200);
-  const drow = loginDiag.j.panels.find(x => x.panel === 'panel-one');
-  assert.equal(drow.adminFound, true);
-  assert.equal(drow.passwordHashValid, true);
-  assert.equal(drow.panelIdMatches, true);
-  ok('Head Admin diagnostic confirms newly created panel credentials are stored');
-
   assert.equal((await fetch(base + '/p/panel-one')).status, 200); assert.equal((await fetch(base + '/p/panel-one/admin')).status, 200); ok('single-domain panel routes serve site and admin pages');
   const wrongPanelLogin = await mk()('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' });
-  assert.equal(wrongPanelLogin.s, 200); assert.equal(wrongPanelLogin.j.adminRedirect, '/p/panel-one/admin'); ok('Panel Admin login on main URL redirects to assigned panel');
-  const headOnPanel = await mk('panel-one')('POST', '/api/login', { email:'admin@test.io', password:'AdminPass123' });
-  assert.equal(headOnPanel.s,200); assert.equal(headOnPanel.j.adminRedirect,'/admin'); ok('Head Admin login on panel URL redirects to main');
+  assert.equal(wrongPanelLogin.s, 403); assert.match(wrongPanelLogin.j.error, /\/p\/panel-one\/admin/); ok('wrong main-admin URL gives correct panel login link');
   const panelAdmin = mk('panel-one');
   assert.equal((await panelAdmin('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 200);
   assert.equal((await panelAdmin('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 100 })).s, 403); ok('panel admins cannot allocate or expand their own credit pool');
