@@ -1,0 +1,25 @@
+ReferKro Admin Security & Accounting Update
+
+Implemented in this incremental update:
+- Head Admin can set each panel Admin's profit-share percentage from 0–100%; Head Admin receives the remainder.
+- Profit-share changes require a reason and save previous/new percentages, timestamp, actor, and audit event.
+- Panel Admin QR/UPI/payee changes remain pending until Head Admin approval; approval history is recorded.
+- Manual QR deposits require UTR and a payment-proof image; image type/content and size are validated server-side.
+- Deposit and withdrawal actions are panel-scoped; only pending requests can be processed; rejection reason is compulsory.
+- Real withdrawals require payout UTR/reference and payout-proof image before marking Paid; repeat processing is rejected.
+- Server calculates weekly accounting per panel, records Head/Admin share snapshots, creates weekly settlement records automatically for the last completed week, and prevents duplicate settlements.
+- Head Admin can record expenses and signed adjustments with a compulsory reason, mark settlement payouts Paid with reference, and review weekly settlement history.
+- Authenticator-app TOTP 2FA setup/confirmation is available for admins; enabled admins must enter OTP at login.
+- Admin alerts endpoint reports pending deposits/withdrawals; Head Admin can export a backup that excludes password hashes and 2FA secrets.
+- Accounting/2FA/settlement actions are added to the audit log.
+- Admin UI includes weekly accounting, expenses/adjustments, settlement status, 2FA setup, backup export, and pending-alert review.
+- Regression test suite passes: `npm test`.
+
+Important limitations / production notes:
+- Weekly settlement calculates and records amounts; it does NOT send bank/UPI payouts automatically. Head Admin must pay and enter the payout reference.
+- Alerts are available in the admin panel/API; external email/SMS/push notifications are not configured.
+- Backup export is manual, not a scheduled offsite backup. Configure durable storage (Upstash or a mounted persistent disk) and a separate protected backup schedule.
+- QR UTR + screenshot review is not independent bank/UPI verification. Verify transactions with the bank/payment provider before approval.
+- The weekly formula is explicit in the Accounting screen/API. Verify that its business definitions match your actual accounts before using the numbers for real settlement.
+- TOTP secrets are stored in the application database; protect the database and restrict server access. Set up 2FA and test recovery before relying on it.
+- This update is not a guarantee of zero bugs or a substitute for staging tests, payment reconciliation, legal/accounting review, and a verified live database backup.

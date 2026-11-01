@@ -47,15 +47,15 @@ const stub = http.createServer((q, r) => {
   assert.equal((await mk()('POST', '/api/login', { email: 'ravi@x.io', password: 'bad' })).s, 401);
 
   // deposit rules
-  assert.equal((await u('POST', '/api/deposit', { amount: 999, utr: 'ABCDEFGH1234' })).s, 400); ok('deposit < 1000 rejected');
-  assert.equal((await u('POST', '/api/deposit', { amount: 1000, utr: 'ABCDEFGH1234' })).s, 503); ok('deposit blocked until admin sets UPI');
+  assert.equal((await u('POST', '/api/deposit', { amount: 999, utr: 'ABCDEFGH1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 400); ok('deposit < 1000 rejected');
+  assert.equal((await u('POST', '/api/deposit', { amount: 1000, utr: 'ABCDEFGH1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 503); ok('deposit blocked until admin sets UPI');
   const a = mk(); assert.equal((await a('POST', '/api/login', { email: 'admin@test.io', password: 'AdminPass123' })).s, 200);
   const mainForCredits = (await a('GET', '/api/admin/panels')).j.panels.find(p => p.slug === 'main');
   const mainAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: mainForCredits.id, amount: 9000000, reason: 'integration test starting credits' });
   assert.equal(mainAllocation.s, 200); assert.equal(mainAllocation.j.panel.creditBalance, 9000000); ok('Head Admin allocates credits to main panel');
   assert.equal((await a('POST', '/api/admin/settings', { upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', notice: '', bonus: '' })).s, 200);
-  const d = await u('POST', '/api/deposit', { amount: 1000, utr: 'abcdefgh1234' }); assert.equal(d.s, 200);
-  assert.equal((await u('POST', '/api/deposit', { amount: 2000, utr: 'ABCDEFGH1234' })).s, 409); ok('duplicate UTR rejected');
+  const d = await u('POST', '/api/deposit', { amount: 1000, utr: 'abcdefgh1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' }); assert.equal(d.s, 200);
+  assert.equal((await u('POST', '/api/deposit', { amount: 2000, utr: 'ABCDEFGH1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 409); ok('duplicate UTR rejected');
   assert.equal((await u('GET', '/api/me')).j.user.balance, 0);
   assert.equal((await a('POST', '/api/admin/deposit', { id: d.j.deposit.id, action: 'approve' })).s, 200);
   assert.equal((await a('POST', '/api/admin/deposit', { id: d.j.deposit.id, action: 'approve' })).s, 409); ok('approve credits exactly once');
@@ -69,11 +69,11 @@ const stub = http.createServer((q, r) => {
   assert.equal((await u('POST', '/api/withdraw', { amount: 1001, upi: 'ravi@bank' })).s, 400);
   assert.equal((await u('POST', '/api/withdraw', { amount: 300, upi: 'bad' })).s, 400);
   const w = await u('POST', '/api/withdraw', { amount: 300, upi: 'ravi@bank' }); assert.equal(w.s, 200); assert.equal(w.j.balance, 700);
-  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject' })).s, 200);
-  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject' })).s, 409);
+  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 409);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 1000); ok('reject refunds exactly once');
   const w2 = await u('POST', '/api/withdraw', { amount: 400, upi: 'ravi@bank' });
-  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w2.j.withdrawal.id, action: 'paid', ref: 'X1' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/withdrawal', { id: w2.j.withdrawal.id, action: 'paid', ref: 'X1', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 200);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 600); ok('paid withdrawal keeps deduction');
   assert.equal((await a('GET', '/api/admin/overview')).j.withdrawalsPaid, 400);
   assert.equal((await a('POST', '/api/admin/user', { id: (await u('GET', '/api/me')).j.user.id, action: 'adjust', amount: -5000, reason: 'x' })).s, 400); ok('adjust cannot go negative');
@@ -152,7 +152,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await u('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 403);
   assert.equal((await a('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 200);
   assert.equal((await anon('GET', '/api/config')).j.minDeposit, 500);
-  assert.equal((await u('POST', '/api/deposit', { amount: 499, utr: 'ZZZZZZZZ9999' })).s, 400); assert.equal((await u('POST', '/api/deposit', { amount: 500, utr: 'ZZZZZZZZ9999' })).s, 200);
+  assert.equal((await u('POST', '/api/deposit', { amount: 499, utr: 'ZZZZZZZZ9999', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 400); assert.equal((await u('POST', '/api/deposit', { amount: 500, utr: 'ZZZZZZZZ9999', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 200);
   assert.equal((await u('POST', '/api/withdraw', { amount: 199, upi: 'ravi@bank' })).s, 400); ok('admin-set minimum deposit / withdrawal');
   // referral on real trading profit (level 1 only)
   assert.equal((await boss('POST', '/api/admin/referral', { enabled: true, pct: 10 })).s, 403);
@@ -181,7 +181,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/settings', { withdrawalFeeType: 'percent', withdrawalFeeValue: 2, withdrawalFeeLabel: 'Platform Fee', paymentMode: 'qr' })).s, 200);
   const feeWd = await feeUser('POST', '/api/withdraw', { amount: 300, upi: 'fee@bank' });
   assert.equal(feeWd.s, 200); assert.equal(feeWd.j.withdrawal.fee, 6); assert.equal(feeWd.j.withdrawal.netAmount, 294); assert.equal(feeWd.j.balance, 700);
-  assert.equal((await a('POST', '/api/admin/withdrawal', { id: feeWd.j.withdrawal.id, action: 'reject' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/withdrawal', { id: feeWd.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 200);
   assert.equal((await feeUser('GET', '/api/me')).j.user.balance, 1000); ok('admin withdrawal fee and gross refund');
   assert.equal((await a('POST', '/api/admin/settings', { paymentMode: 'razorpay' })).s, 400); ok('Razorpay cannot be enabled without server secrets');
   assert.equal((await feeUser('POST', '/api/razorpay/order', { amount: 1000 })).s, 403); ok('Razorpay order blocked while QR mode is selected');
@@ -244,7 +244,13 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/settings', { upi: 'main@upi', payee: 'Main', paymentMode: 'qr' })).s, 200);
   assert.equal((await panelAdmin('POST', '/api/admin/settings', { upi: 'panel@upi', payee: 'Panel One', paymentMode: 'qr' })).s, 200);
   assert.equal((await a('GET', '/api/config')).j.upi, 'main@upi');
-  assert.equal((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi'); ok('panel settings are isolated');
+  assert.notEqual((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi');
+  const pendingPanel = (await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'panel-one'); assert.equal(pendingPanel.pendingQrApproval, true);
+  assert.equal((await a('POST', '/api/admin/panels', { action: 'approve-qr', id: panelCreate.j.panel.id })).s, 200);
+  assert.equal((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi'); ok('panel QR/UPI changes require Head Admin approval');
+  const shareChange = await a('POST', '/api/admin/panels', { action: 'set-share', id: panelCreate.j.panel.id, adminSharePct: 42.5, reason: 'integration test' });
+  assert.equal(shareChange.s, 200); assert.equal(shareChange.j.adminSharePct, 42.5); assert.equal(shareChange.j.headAdminSharePct, 57.5);
+  assert.equal((await panelAdmin('POST', '/api/admin/panels', { action: 'set-share', id: panelCreate.j.panel.id, adminSharePct: 50, reason: 'unauthorized' })).s, 403); ok('Head Admin controls per-panel profit share with audit reason');
   assert.equal((await a('POST', '/api/admin/panels', { action: 'edit', id: panelCreate.j.panel.id, name: 'Panel One Renamed', slug: 'panel-one-renamed', email: 'paneladmin@x.io', password: '' })).s, 200);
   assert.equal((await panelAdmin('GET', '/api/config')).s, 200); ok('panel link edits preserve old URL alias');
   const resetLogin = await a('POST', '/api/admin/panels', { action: 'reset-login', id: panelCreate.j.panel.id, email: 'paneladmin@x.io', password: 'ResetPass123' });
@@ -256,7 +262,7 @@ const stub = http.createServer((q, r) => {
   assert.equal(panelRegister.s, 200); assert.ok(panelRegister.j.user.id != null); assert.match(panelRegister.j.user.uid, /^USR-\d{6}$/); assert.notEqual(panelRegister.j.user.uid, String(panelRegister.j.user.id));
   const panelListed = await panelAdmin('GET', '/api/admin/users'); assert.equal(panelListed.s, 200); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').uid, panelRegister.j.user.uid); assert.equal(panelListed.j.users.find(x => x.email === 'paneluser@x.io').panelId, 'panel-one-renamed');
   const headListed = await a('GET', '/api/admin/users'); assert.equal(headListed.s, 200); assert.equal(headListed.j.users.find(x => x.email === 'paneluser@x.io').id, panelRegister.j.user.id); assert.equal(headListed.j.scope, 'all-panels'); ok('registered user UID appears in both panel admin and Head Admin user lists');
-  const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345' });
+  const panelDep = await panelUser('POST', '/api/deposit', { amount: 1000, utr: 'PANELUTR12345', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' });
   assert.equal(panelDep.s, 200); assert.equal((await panelAdmin('GET', '/api/admin/deposits')).j.items.length, 1);
   assert.equal((await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'panel-one-renamed').users, 1); ok('panel user and deposit are scoped');
   assert.equal((await panelUser('POST', '/api/login', { email: 'paneluser@x.io', password: 'password1' })).s, 200);
@@ -264,9 +270,9 @@ const stub = http.createServer((q, r) => {
   assert.equal(approvedPanelDep.s, 200); assert.equal(approvedPanelDep.j.item.creditedAmount, 1200); assert.equal(approvedPanelDep.j.creditBalance, 300);
   assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1200);
   const panelLedger = await panelAdmin('GET', '/api/admin/credits'); assert.equal(panelLedger.s, 200); assert.equal(panelLedger.j.balance, 300); assert.ok(panelLedger.j.items.some(x => x.action === 'deposit-credit' && x.amount === -1200)); ok('custom deposit credits debit panel balance and record credit ledger');
-  const panelDep2 = await panelUser('POST', '/api/deposit', { amount: 500, utr: 'PANELUTR54321' }); assert.equal(panelDep2.s, 200);
+  const panelDep2 = await panelUser('POST', '/api/deposit', { amount: 500, utr: 'PANELUTR54321', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' }); assert.equal(panelDep2.s, 200);
   const tooMuch = await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'approve', credits: 400 }); assert.equal(tooMuch.s, 409); assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1200); ok('insufficient panel credits block deposit approval without mutation');
-  assert.equal((await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'reject' })).s, 200);
+  assert.equal((await panelAdmin('POST', '/api/admin/deposit', { id: panelDep2.j.deposit.id, action: 'reject', reason: 'Test rejection reason' })).s, 200);
   const panelUserId = (await panelUser('GET', '/api/me')).j.user.id;
   const manualCredit = await panelAdmin('POST', '/api/admin/user', { id: panelUserId, action: 'adjust', amount: 200, reason: 'test manual wallet credit' }); assert.equal(manualCredit.s, 200); assert.equal(manualCredit.j.uid, panelRegister.j.user.uid); assert.equal(manualCredit.j.balance, 1400);
   assert.equal((await panelUser('GET', '/api/me')).j.user.balance, 1400); assert.equal((await panelAdmin('GET', '/api/admin/overview')).j.creditBalance, 100); ok('manual positive wallet adjustment debits panel credits');

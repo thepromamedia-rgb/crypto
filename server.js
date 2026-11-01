@@ -51,7 +51,7 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [],
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
   settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
@@ -109,7 +109,7 @@ async function loadDB() {
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
     syncCoins();
-    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'flipCoinBets', 'flipCoinSessions', 'flipCoinRounds', 'bigSmallBets', 'bigSmallRounds', 'audit', 'panels', 'creditLedger']) if (!Array.isArray(D[k])) D[k] = [];
+    for (const k of ['users', 'demoUsers', 'deposits', 'withdrawals', 'trades', 'positions', 'flipCoinBets', 'flipCoinSessions', 'flipCoinRounds', 'bigSmallBets', 'bigSmallRounds', 'audit', 'panels', 'creditLedger', 'accountingEntries', 'weeklySettlements', 'alerts']) if (!Array.isArray(D[k])) D[k] = [];
   }
   if (!Array.isArray(D.panels)) D.panels = [];
   if (!D.panels.some(x => x.slug === 'main')) D.panels.unshift(defaultPanel());
@@ -468,6 +468,55 @@ async function confirmRazorpayPayment(orderId, paymentId, suppliedSignature) {
   return { ok: true, alreadyCredited: false, waitingForCredits: !!result.waitingForCredits, message: result.waitingForCredits ? 'Payment verified. Wallet credit is pending until Head Admin allocates enough panel credits.' : 'Payment verified and wallet credited.', deposit: d };
 }
 
+function base32Encode(buf) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = 0, value = 0, out = '';
+  for (const byte of buf) { value = (value << 8) | byte; bits += 8; while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; } }
+  if (bits) out += alphabet[(value << (5 - bits)) & 31]; return out;
+}
+function base32Decode(text) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = 0, value = 0; const out = [];
+  for (const c of String(text || '').toUpperCase().replace(/=+$/,'')) { const n = alphabet.indexOf(c); if (n < 0) throw new Error('Invalid base32'); value = (value << 5) | n; bits += 5; if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; } }
+  return Buffer.from(out);
+}
+function totp(secret, timestamp = Date.now()) {
+  const counter = Math.floor(timestamp / 30000), msg = Buffer.alloc(8); msg.writeBigUInt64BE(BigInt(counter));
+  const h = crypto.createHmac('sha1', base32Decode(secret)).update(msg).digest(), off = h[h.length - 1] & 15;
+  return String((h.readUInt32BE(off) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+function verifyTotp(secret, code) { const c = String(code || '').replace(/\s/g,''); if (!/^\d{6}$/.test(c)) return false; for (const drift of [-30000,0,30000]) { const expected = totp(secret, Date.now()+drift); if (crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(c))) return true; } return false; }
+function requireProof(value, label) {
+  if (value == null || value === '') return '';
+  const v = String(value);
+  const match = v.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/); if (v.length > 5_500_000 || !match) fail(400, `${label} must be a PNG, JPEG or WebP image under 4 MB.`);
+  const bytes = Buffer.from(match[2],'base64'); if (bytes.length > 4*1024*1024) fail(400, `${label} must be under 4 MB.`);
+  const kind = match[1], valid = kind==='png' ? bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : kind==='jpeg' ? bytes[0]===255 && bytes[1]===216 && bytes[bytes.length-2]===255 && bytes[bytes.length-1]===217 : bytes.length>=12 && bytes.toString('ascii',0,4)==='RIFF' && bytes.toString('ascii',8,12)==='WEBP';
+  if (!valid) fail(400, `${label} file contents do not match its image type.`); return v;
+}
+function panelWeekKey(panelId, start) { return `${panelId}:${new Date(start).toISOString().slice(0,10)}`; }
+function weekStart(ts) { const d = new Date(ts); d.setUTCHours(0,0,0,0); const day = (d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-day); return d.getTime(); }
+function calculatePanelWeek(panelId, start, end) {
+  const inWindow = x => Number(x.ts || x.done || 0) >= start && Number(x.ts || x.done || 0) < end && String(x.panelId || 'main') === String(panelId);
+  const gameRows = [...D.flipCoinBets, ...D.bigSmallBets].filter(inWindow).filter(x => ['Settled','Completed'].includes(x.status) || x.result != null);
+  const tradeRows = [...D.trades, ...D.positions].filter(inWindow).filter(x => ['Completed','Settled','Closed','Done'].includes(String(x.status || '')) || x.profit != null);
+  const gameNet = r2(gameRows.reduce((n,x)=>n+Number(x.amount||0)+Number(x.fee||0)-Number(x.payout||0),0));
+  const tradeNet = r2(tradeRows.reduce((n,x)=>n+Number(x.profit||0),0));
+  const fees = r2(D.withdrawals.filter(inWindow).filter(x=>x.status==='Paid').reduce((n,x)=>n+Number(x.fee||0),0));
+  const expenses = r2(D.accountingEntries.filter(inWindow).filter(x=>x.type==='expense').reduce((n,x)=>n+Number(x.amount||0),0));
+  const adjustments = r2(D.accountingEntries.filter(inWindow).filter(x=>x.type==='adjustment').reduce((n,x)=>n+Number(x.signedAmount||0),0));
+  return { gameNet, tradeNet, fees, expenses, adjustments, grossProfit:r2(gameNet+tradeNet+fees), netProfit:r2(gameNet+tradeNet+fees-expenses+adjustments), gameRows:gameRows.length, tradeRows:tradeRows.length };
+}
+async function autoSettleCompletedWeeks() {
+  const completedStart = weekStart(now()) - 7*864e5, end = completedStart + 7*864e5; let changed = false;
+  for (const panel of D.panels.filter(p=>!p.deleted)) {
+    const key = panelWeekKey(panel.slug, completedStart); if (D.weeklySettlements.some(x=>x.key===key)) continue;
+    const calc = calculatePanelWeek(panel.slug, completedStart, end), pct = Number(panel.adminSharePct ?? 30);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) { audit('system','weekly-settlement-error',`${panel.slug}: invalid share percentage`); continue; }
+    D.weeklySettlements.push({id:crypto.randomUUID(),key,panelId:panel.slug,start:completedStart,end,calculatedAt:now(),calculatedBy:'system:auto-weekly',...calc,adminSharePct:pct,headSharePct:100-pct,adminAmount:r2(Math.max(0,calc.netProfit)*pct/100),headAmount:r2(Math.max(0,calc.netProfit)*(100-pct)/100),status:'Pending',shareSnapshotAt:now(),paidAt:null,paidBy:null,automatic:true});
+    audit('system','weekly-settlement-auto',`${key}; net ₹${calc.netProfit}; admin ${pct}%`); changed = true;
+  }
+  if (changed) await save();
+}
+
 const routes = {
   'GET /api/prices': async (req) => { const c = await getPrices(S(req).coins); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async (req) => PUBLIC_SETTINGS(req),
@@ -500,6 +549,7 @@ const routes = {
     const candidates = [...D.users, ...D.demoUsers].filter(x => normEmail(x.email) === email);
     const u = candidates.find(x => checkPw(String(b.password || ''), x.pass));
     if (!u) fail(401, 'Wrong email or password.');
+    if (['headAdmin','admin','panelAdmin'].includes(u.role) && u.twoFactorEnabled && !verifyTotp(u.twoFactorSecret, b.otp)) fail(401, 'Authenticator OTP is required or invalid.');
     // Once credentials are verified, give panel admins a useful redirect hint instead of
     // disguising a correct password as a password error when they use /admin by mistake.
     if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
@@ -559,7 +609,8 @@ const routes = {
     const utr = str(b.utr, 30).toUpperCase(); if (!/^[A-Z0-9]{8,30}$/.test(utr)) fail(400, 'Enter the UTR / transaction reference (8–30 letters/digits).');
     if (D.deposits.some(d => d.utr === utr)) fail(409, 'This UTR has already been submitted.');
     if (!S(req).upi && !S(req).qr) fail(503, 'Deposits are not open yet. Contact support.');
-    const d = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', amount, utr, status: 'Pending', ts: now() };
+    const proof = requireProof(b.proof, 'Payment proof'); if (!proof) fail(400, 'Payment proof image is required.');
+    const d = { id: nid(), uid: u.id, email: u.email, panelId: u.panelId || req.panelId || 'main', amount, utr, proof, status: 'Pending', ts: now() };
     D.deposits.push(d); audit(u.email, 'deposit-request', `₹${amount} ${utr}`); await save(); return { deposit: d };
   },
   'POST /api/withdraw': async (req, res, b, u) => {
@@ -991,6 +1042,7 @@ const routes = {
     needAdmin(u); const d = D.deposits.find(x => x.id === b.id); if (!d) fail(404, 'Not found'); assertPanelAccess(req, d);
     if (d.status !== 'Pending') fail(409, 'Already ' + d.status + '.');     // credit exactly once
     if (b.action === 'approve') {
+      if (d.status !== 'Pending') fail(409, 'Only pending deposits can be processed.');
       if (d.provider === 'razorpay' && d.providerStatus !== 'captured') fail(403, 'Razorpay deposits can only be approved after verified payment capture.');
       const t = D.users.find(x => x.id === d.uid); if (!t) fail(404, 'User missing');
       const depositPanel = D.panels.find(p => p.slug === String(d.panelId || 'main') && !p.deleted); if (!depositPanel) fail(409, 'Deposit panel not found.');
@@ -1005,14 +1057,14 @@ const routes = {
       t.balance = r2((t.balance || 0) + creditAmount); d.creditedAmount = creditAmount; d.creditsSpent = totalCost; d.status = 'Approved'; d.creditPending = false; delete d.creditError;
       if (cfg.enabled && t.refBy) { d.refPayments = payReferralLevels(t, d.amount, cfg.levels || [0,0,0], 'deposit'); d.refPaid = r2(d.refPayments.reduce((sum, x) => sum + x.amount, 0)); if (d.refPaid) audit('system', 'deposit-referral', `Deposit #${d.id}: ₹${d.refPaid} referral commission across ${d.refPayments.length} level(s)`); }
     }
-    else if (b.action === 'reject') { if (d.provider === 'razorpay' && d.providerStatus === 'captured') fail(409, 'This payment is already captured. Allocate panel credits and complete the wallet credit; do not reject a captured payment.'); d.status = 'Rejected'; } else fail(400, 'Bad action');
+    else if (b.action === 'reject') { if (d.status !== 'Pending') fail(409, 'Only pending deposits can be processed.'); const rejectReason = str(b.reason, 200); if (!rejectReason) fail(400, 'A rejection reason is required.'); d.rejectionReason = rejectReason; if (d.provider === 'razorpay' && d.providerStatus === 'captured') fail(409, 'This payment is already captured. Allocate panel credits and complete the wallet credit; do not reject a captured payment.'); d.status = 'Rejected'; } else fail(400, 'Bad action');
     d.by = u.email; d.done = now(); audit(u.email, 'deposit-' + b.action, `#${d.id} ₹${d.amount}${d.creditedAmount ? ` → ${d.creditedAmount} credits` : ''}`); await save(); return { item: d, creditBalance: r2((D.panels.find(p => p.slug === String(d.panelId || 'main')) || req.panel).creditBalance || 0) };
   },
   'POST /api/admin/withdrawal': async (req, res, b, u) => {
     needAdmin(u); const w = D.withdrawals.find(x => x.id === b.id); if (!w) fail(404, 'Not found'); assertPanelAccess(req, w);
     if (w.status !== 'Pending') fail(409, 'Already ' + w.status + '.');
-    if (b.action === 'paid') { w.status = 'Paid'; w.ref = str(b.ref, 40); w.payoutType = w.mode === 'demo' ? 'Simulated demo withdrawal' : 'Manual payout'; }
-    else if (b.action === 'reject') { const t = D.users.find(x => x.id === w.uid) || D.demoUsers.find(x => x.id === w.uid); if (t) t.balance = r2((t.balance || 0) + w.amount); w.status = 'Rejected'; w.note = str(b.note, 120); w.rejectedAt = now(); w.cooldownHours = Number(S(req).withdrawalCooldownHours ?? 24); w.retryAt = w.rejectedAt + w.cooldownHours * 3600e3; } // refund once
+    if (b.action === 'paid') { const payoutRef = str(b.ref, 80), proof = requireProof(b.proof, 'Payout proof'); if (w.mode !== 'demo' && !payoutRef) fail(400, 'Payment UTR/reference is required before marking a withdrawal paid.'); if (w.mode !== 'demo' && !proof) fail(400, 'Payout proof image is required before marking a withdrawal paid.'); if (w.status === 'Paid') fail(409, 'This withdrawal has already been marked Paid.'); w.status = 'Paid'; w.ref = payoutRef; w.payoutProof = proof; w.payoutType = w.mode === 'demo' ? 'Simulated demo withdrawal' : 'Manual payout'; }
+    else if (b.action === 'reject') { const rejectReason = str(b.note, 200); if (!rejectReason) fail(400, 'A rejection reason is required.'); const t = D.users.find(x => x.id === w.uid) || D.demoUsers.find(x => x.id === w.uid); if (t) t.balance = r2((t.balance || 0) + w.amount); w.status = 'Rejected'; w.note = rejectReason; w.rejectedAt = now(); w.cooldownHours = Number(S(req).withdrawalCooldownHours ?? 24); w.retryAt = w.rejectedAt + w.cooldownHours * 3600e3; } // refund once
     else fail(400, 'Bad action');
     w.by = u.email; w.done = now(); audit(u.email, 'withdrawal-' + b.action, `#${w.id} ₹${w.amount}`); await save(); return { item: w };
   },
@@ -1056,15 +1108,75 @@ const routes = {
     if (b.withdrawalFeeType !== undefined) { if (!['percent','fixed'].includes(b.withdrawalFeeType)) fail(400, 'Invalid withdrawal fee type.'); s.withdrawalFeeType = b.withdrawalFeeType; }
     if (b.withdrawalFeeValue !== undefined) { const n = Number(b.withdrawalFeeValue); if (!Number.isFinite(n) || n < 0 || n > 100000 || (s.withdrawalFeeType === 'percent' && n > 100)) fail(400, 'Withdrawal fee must be between 0 and 100% (or ₹100,000 fixed).'); s.withdrawalFeeValue = n; }
     if (b.withdrawalFeeLabel !== undefined) s.withdrawalFeeLabel = str(b.withdrawalFeeLabel, 40) || 'Platform Fee';
-    s.upi = str(b.upi, 60); s.payee = str(b.payee, 60); s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
+    const requestedUpi = b.upi !== undefined ? str(b.upi, 60) : s.upi; const requestedPayee = b.payee !== undefined ? str(b.payee, 60) : s.payee;
+    if (!(isPanelAdmin(u) && req.panel && req.panel.slug !== 'main')) { s.upi = requestedUpi; s.payee = requestedPayee; }
+    s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
     if (b.minDeposit !== undefined) {
       const md = Number(b.minDeposit), mw = Number(b.minWithdraw), mt = Number(b.minTrade);
       for (const [v, n] of [[md, 'deposit'], [mw, 'withdrawal'], [mt, 'trade']]) if (!Number.isInteger(v) || v < 1 || v > 1000000) fail(400, `Minimum ${n} must be a whole number between 1 and 10,00,000.`);
       s.limits = { minDeposit: md, minWithdraw: mw, minTrade: mt };
     }
-    if (b.qr !== undefined) { const q = String(b.qr || ''); if (q && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q) || q.length > 8_500_000)) fail(400, 'QR image is too large (maximum 6 MB).'); s.qr = q; }
-    audit(u.email, 'settings', JSON.stringify(s.limits)); await save(); return { ok: true };
+    if (b.qr !== undefined) { const q = String(b.qr || ''); if (q && (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(q) || q.length > 8_500_000)) fail(400, 'QR image is too large (maximum 6 MB).');
+      if (isPanelAdmin(u) && req.panel && req.panel.slug !== 'main') s.qr = s.qr || ''; else s.qr = q;
+    }
+    if (isPanelAdmin(u) && req.panel && req.panel.slug !== 'main' && (b.qr !== undefined || b.upi !== undefined || b.payee !== undefined)) {
+      req.panel.pendingQrConfig = { qr: b.qr !== undefined ? String(b.qr || '') : String(s.qr || ''), upi: requestedUpi, payee: requestedPayee };
+      audit(u.email, 'panel-qr-change-request', `${req.panel.slug} requested QR/payment detail change`);
+    }
+    audit(u.email, 'settings', JSON.stringify(s.limits)); await save(); return { ok: true, qrPendingApproval: !!(isPanelAdmin(u) && req.panel && req.panel.pendingQrConfig) };
+  },
+  'POST /api/admin/2fa/setup': async (req, res, b, u) => {
+    needAdmin(u); const secret = base32Encode(crypto.randomBytes(20)); u.twoFactorPendingSecret = secret;
+    audit(u.email,'2fa-setup-started','Authenticator setup started'); await save();
+    const label = encodeURIComponent(`ReferKro:${u.email}`);
+    return { ok:true, secret, otpauthUrl:`otpauth://totp/${label}?secret=${secret}&issuer=ReferKro&algorithm=SHA1&digits=6&period=30`, instructions:'Add this account to an authenticator app, then confirm with the current 6-digit code.' };
+  },
+  'POST /api/admin/2fa/confirm': async (req, res, b, u) => {
+    needAdmin(u); if (!u.twoFactorPendingSecret || !verifyTotp(u.twoFactorPendingSecret,b.otp)) fail(400,'Authenticator code invalid. Setup not enabled.');
+    u.twoFactorSecret=u.twoFactorPendingSecret; delete u.twoFactorPendingSecret; u.twoFactorEnabled=true;
+    audit(u.email,'2fa-enabled','Authenticator-based 2FA enabled'); await save(); return {ok:true,enabled:true};
+  },
+  'POST /api/admin/2fa/disable': async (req, res, b, u) => {
+    needHead(u); const target = D.users.find(x=>x.id===b.userId && ['headAdmin','admin','panelAdmin'].includes(x.role));
+    if (!target || !verifyTotp(target.twoFactorSecret,b.otp) || !target.twoFactorEnabled) fail(400,'Target account and its valid OTP are required.');
+    delete target.twoFactorSecret; delete target.twoFactorPendingSecret; target.twoFactorEnabled=false;
+    audit(u.email,'2fa-disabled',`2FA disabled for ${target.email}`); await save(); return {ok:true};
+  },
+  'GET /api/admin/accounting/week': async (req,res,b,u) => {
+    needAdmin(u); const start=weekStart(now()), end=start+7*864e5, panels=isHead(u)?D.panels.filter(p=>!p.deleted):[req.panel];
+    return {start,end,settlements:D.weeklySettlements.filter(x=>isHead(u)||String(x.panelId)===String(req.panel.slug)).slice().sort((a,b)=>b.start-a.start).slice(0,60),items:panels.map(p=>({panelId:p.slug,panelName:p.name,sharePct:Number(p.adminSharePct ?? 30),headSharePct:100-Number(p.adminSharePct ?? 30),...calculatePanelWeek(p.slug,start,end),settlement:D.weeklySettlements.find(x=>x.key===panelWeekKey(p.slug,start))||null})), formula:'Net profit = settled game net + realized trade/position profit + withdrawal fees - recorded expenses + signed adjustments. Verify this accounting basis against your business ledger before production settlement.'};
+  },
+  'POST /api/admin/accounting/entry': async (req,res,b,u) => {
+    needHead(u); const panel=D.panels.find(p=>p.slug===String(b.panelId||'')&&!p.deleted); if(!panel) fail(404,'Panel not found.');
+    const type=String(b.type||''), amount=Number(b.amount), reason=str(b.reason,180);
+    if(!['expense','adjustment'].includes(type)) fail(400,'Entry type must be expense or adjustment.');
+    if(!Number.isFinite(amount)||amount<=0||amount>MAX_AMOUNT) fail(400,'Amount must be positive and at most 10,000,000.'); if(!reason) fail(400,'Reason is compulsory.');
+    const row={id:crypto.randomUUID(),ts:now(),panelId:panel.slug,type,amount:r2(amount),signedAmount:type==='adjustment'?(b.direction==='subtract'?-r2(amount):r2(amount)):-r2(amount),reason,by:u.email};
+    D.accountingEntries.push(row); audit(u.email,'accounting-'+type,`${panel.slug} ₹${amount}: ${reason}`); await save(); return {ok:true,item:row};
+  },
+  'POST /api/admin/accounting/settle-week': async (req,res,b,u) => {
+    needHead(u); const panel=D.panels.find(p=>p.slug===String(b.panelId||'')&&!p.deleted); if(!panel) fail(404,'Panel not found.');
+    const start=Number(b.start); if(!Number.isFinite(start)||start!==weekStart(start)) fail(400,'Provide a valid Monday 00:00 UTC week start timestamp.');
+    const end=start+7*864e5; if(end>weekStart(now())) fail(400,'Only completed weeks can be settled.');
+    const key=panelWeekKey(panel.slug,start); if(D.weeklySettlements.some(x=>x.key===key)) fail(409,'This week is already settled and locked.');
+    const calc=calculatePanelWeek(panel.slug,start,end); const pct=Number(panel.adminSharePct ?? 30); if(!Number.isFinite(pct)||pct<0||pct>100) fail(409,'Invalid admin share configuration.');
+    const item={id:crypto.randomUUID(),key,panelId:panel.slug,start,end,calculatedAt:now(),calculatedBy:u.email,...calc,adminSharePct:pct,headSharePct:100-pct,adminAmount:r2(Math.max(0,calc.netProfit)*pct/100),headAmount:r2(Math.max(0,calc.netProfit)*(100-pct)/100),status:'Pending',shareSnapshotAt:now(),paidAt:null,paidBy:null};
+    D.weeklySettlements.push(item); audit(u.email,'weekly-settlement-created',`${key}; net ₹${calc.netProfit}; admin ${pct}%`); await save(); return {ok:true,item};
+  },
+  'POST /api/admin/accounting/settlement-status': async (req,res,b,u) => {
+    needHead(u); const item=D.weeklySettlements.find(x=>x.id===b.id); if(!item) fail(404,'Settlement not found.');
+    if(b.status==='Paid'){if(item.status==='Paid') fail(409,'Settlement is already Paid.'); item.status='Paid'; item.paidAt=now(); item.paidBy=u.email; item.payoutRef=str(b.ref,100); if(!item.payoutRef) fail(400,'Settlement payout reference is required.');}
+    else if(b.status==='Pending'){if(item.status==='Paid') fail(409,'Paid settlements cannot be reopened.'); item.status='Pending';} else fail(400,'Status must be Pending or Paid.');
+    audit(u.email,'settlement-status',`${item.key} -> ${item.status}`); await save(); return {ok:true,item};
+  },
+  'GET /api/admin/alerts': async (req,res,b,u) => {
+    needAdmin(u); const deps=panelRows(req,D.deposits).filter(x=>x.status==='Pending'), wds=panelRows(req,D.withdrawals).filter(x=>x.status==='Pending');
+    return {items:[...deps.map(x=>({id:'deposit-'+x.id,type:'pending-deposit',recordId:x.id,ts:x.ts,message:`Deposit ₹${x.amount} awaiting review`})),...wds.map(x=>({id:'withdrawal-'+x.id,type:'pending-withdrawal',recordId:x.id,ts:x.ts,message:`Withdrawal ₹${x.amount} awaiting review`}))].sort((a,b)=>b.ts-a.ts).slice(0,100)};
+  },
+  'GET /api/admin/backup': async (req,res,b,u) => {
+    needHead(u); audit(u.email,'database-backup-export','Head Admin exported current database snapshot'); await save();
+    const backup=clone(D); for(const account of [...backup.users,...backup.demoUsers]){delete account.pass; delete account.twoFactorSecret; delete account.twoFactorPendingSecret;} return {__download:`referkro-backup-${new Date().toISOString().slice(0,10)}.json`,data:{createdAt:new Date().toISOString(),warning:'User passwords and 2FA secrets are intentionally excluded. Payment proof images and personal data remain sensitive.',database:backup}};
   },
   'GET /api/admin/panels': async (req, res, b, u) => {
     needHead(u);
@@ -1074,7 +1186,7 @@ const routes = {
       const deposits = D.deposits.filter(x => String(x.panelId || 'main') === p.slug);
       const withdrawals = D.withdrawals.filter(x => String(x.panelId || 'main') === p.slug);
       const admin = D.users.find(x => x.id === p.adminUserId);
-      return { id: p.id, name: p.name, slug: p.slug, active: p.active !== false, created: p.created, creditBalance: r2(p.creditBalance || 0), creditsAllocated: r2(p.creditsAllocated || 0), creditsUsed: r2(p.creditsUsed || 0), link: p.slug === 'main' ? '/' : '/p/' + p.slug, adminEmail: admin && admin.email || '', adminUid: admin && (admin.uid || String(admin.id)) || '', users: users.length, demoUsers: demos.length, wallets: r2(users.reduce((n, x) => n + Number(x.balance || 0), 0)), deposits: deposits.length, pendingDeposits: deposits.filter(x => x.status === 'Pending').length, withdrawals: withdrawals.length };
+      return { id: p.id, name: p.name, slug: p.slug, active: p.active !== false, created: p.created, adminSharePct: Number.isFinite(Number(p.adminSharePct)) ? Number(p.adminSharePct) : 30, pendingQrApproval: !!p.pendingQrConfig, creditBalance: r2(p.creditBalance || 0), creditsAllocated: r2(p.creditsAllocated || 0), creditsUsed: r2(p.creditsUsed || 0), link: p.slug === 'main' ? '/' : '/p/' + p.slug, adminEmail: admin && admin.email || '', adminUid: admin && (admin.uid || String(admin.id)) || '', users: users.length, demoUsers: demos.length, wallets: r2(users.reduce((n, x) => n + Number(x.balance || 0), 0)), deposits: deposits.length, pendingDeposits: deposits.filter(x => x.status === 'Pending').length, withdrawals: withdrawals.length };
     });
     return { panels, totalPanels: panels.length, totalUsers: D.users.filter(x => x.role === 'user').length, totalDemoUsers: D.demoUsers.length, totalWallets: r2(D.users.filter(x => x.role === 'user').reduce((n, x) => n + Number(x.balance || 0), 0)), totalCreditsAvailable: r2(panels.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), totalCreditsAllocated: r2(panels.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), totalCreditsUsed: r2(panels.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) };
   },
@@ -1117,6 +1229,31 @@ const routes = {
       }
       audit(u.email, 'panel-create', `${name} (${slug}) · admin ${email}`);
       return { ok: true, panel: { id: panel.id, name: panel.name, slug: panel.slug, link: '/p/' + panel.slug, adminLink: '/p/' + panel.slug + '/admin', adminEmail: email } };
+    }
+    if (action === 'set-share') {
+      const panel = D.panels.find(p => p.id === b.id && !p.deleted);
+      if (!panel) fail(404, 'Panel not found.');
+      const pct = Number(b.adminSharePct), reason = str(b.reason, 120);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) fail(400, 'Admin share must be between 0 and 100%.');
+      if (!reason) fail(400, 'A reason is required for changing profit share.');
+      const previous = Number.isFinite(Number(panel.adminSharePct)) ? Number(panel.adminSharePct) : 30;
+      panel.adminSharePct = Math.round(pct * 100) / 100;
+      panel.shareHistory = Array.isArray(panel.shareHistory) ? panel.shareHistory : [];
+      panel.shareHistory.push({ previousPct: previous, newPct: panel.adminSharePct, by: u.email, reason, effectiveAt: now() });
+      audit(u.email, 'panel-profit-share-change', `${panel.slug}: ${previous}% -> ${panel.adminSharePct}%; ${reason}`);
+      await save(); return { ok: true, previousPct: previous, adminSharePct: panel.adminSharePct, headAdminSharePct: 100 - panel.adminSharePct };
+    }
+    if (action === 'approve-qr') {
+      const panel = D.panels.find(p => p.id === b.id && !p.deleted);
+      if (!panel) fail(404, 'Panel not found.');
+      if (!panel.pendingQrConfig) fail(409, 'No pending QR change to approve.');
+      panel.settings = panel.settings || clone(D.settings);
+      Object.assign(panel.settings, panel.pendingQrConfig);
+      delete panel.pendingQrConfig;
+      panel.qrApprovalHistory = Array.isArray(panel.qrApprovalHistory) ? panel.qrApprovalHistory : [];
+      panel.qrApprovalHistory.push({ by: u.email, at: now(), action: 'approved' });
+      audit(u.email, 'panel-qr-approved', `${panel.slug} QR/payment details approved`);
+      await save(); return { ok: true };
     }
     if (action === 'allocate') {
       const panel = D.panels.find(p => p.id === b.id && !p.deleted);
@@ -1309,6 +1446,8 @@ async function seedAdmin() {
 if (require.main === module) {
   loadDB().then(seedAdmin).then(() => {
     setInterval(() => settleAndSave().catch(e => console.error(e.message)), 1000).unref();
+    setInterval(() => autoSettleCompletedWeeks().catch(e => console.error('Weekly settlement failed:', e.message)), 60_000).unref();
+    autoSettleCompletedWeeks().catch(e => console.error('Weekly settlement failed:', e.message));
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));
   }).catch(e => { console.error('Startup failed:', e.message); process.exit(1); });
 }
