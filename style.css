@@ -1042,3 +1042,48 @@ body:has(#headTailGame:not([hidden])){background:#f3f4fa}
 #bigSmallGame .bs-duration.active>span{color:#ff3f50!important}
 #bigSmallGame .bs-duration:not(.active) small{color:#8a909c!important}
 #bigSmallGame .bs-duration:not(.active)>span{color:#a3a8b3!important}
+
+/* ===== v2: toast, result popup, sound button, 2-col chooser, stable history height ===== */
+.cc-toast[hidden]{display:none}
+.cc-toast{position:fixed;left:50%;top:46%;transform:translateX(-50%);z-index:10000;background:#2b2323;color:#fff;font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px;box-shadow:0 6px 18px #0005;pointer-events:none;white-space:nowrap}
+.cc-betpop{display:none!important}
+.bs-speaker{border:0;background:none;padding:0;cursor:pointer;position:relative}
+.bs-speaker.off{opacity:.55}
+.bs-speaker.off:after{content:"";position:absolute;left:-1px;right:-1px;top:50%;height:2px;background:#ff5b61;transform:rotate(-45deg);border-radius:2px}
+/* win/lose popup */
+.cc-rp{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}
+.cc-rp-card{position:relative;width:min(290px,86vw);border-radius:20px;padding:58px 18px 16px;text-align:center;color:#fff;background:linear-gradient(180deg,#ff9b5f 0%,#ff5a3f 60%,#f0453a 100%);box-shadow:0 14px 40px #0006}
+.cc-rp.lose .cc-rp-card{background:linear-gradient(180deg,#c9d9f1 0%,#9db8e2 55%,#86a5d6 100%)}
+.cc-rp-badge{position:absolute;left:50%;top:-44px;transform:translateX(-50%);width:92px;height:92px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 35% 28%,#ffe9a8,#ffb23f 60%,#e8821c);border:5px solid #fff3d2;color:#ff5a3f;box-shadow:0 6px 16px #0004;z-index:2}
+.cc-rp.lose .cc-rp-badge{background:radial-gradient(circle at 35% 28%,#f3f8ff,#bcd0ec 60%,#8aa6d3);border-color:#eef4ff;color:#6f8fc4}
+.cc-rp-ribbon{position:absolute;left:-14px;right:-14px;top:22px;height:38px;border-radius:6px;background:linear-gradient(#ffb36b,#f07a3a);box-shadow:0 4px 8px #0003;z-index:1}
+.cc-rp.lose .cc-rp-ribbon{background:linear-gradient(#dde8f8,#a9c0e4)}
+.cc-rp-card h3{position:relative;margin:0 0 10px;font-size:19px;font-weight:900;letter-spacing:.3px;text-shadow:0 1px 3px #0003;z-index:3;padding-top:34px}
+.cc-rp.lose h3{color:#5d79a8;text-shadow:none}
+.cc-rp-res{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:5px;font-size:10.5px;margin-bottom:12px}
+.cc-rp.lose .cc-rp-res{color:#4b6692}
+.cc-chip{font-style:normal;font-weight:800;font-size:10.5px;padding:2px 8px;border-radius:5px;color:#fff;background:#ff4f58}
+.cc-chip.g{background:#16a765}.cc-chip.r{background:#ff4f58}.cc-chip.v{background:#9b43e8}.cc-chip.big{background:#ffad51}.cc-chip.small{background:#5d9bf4}
+.cc-chip.n{border-radius:50%;width:19px;height:19px;padding:0;display:inline-grid;place-items:center;background:#fff}
+.cc-chip.n.g,.cc-chip.n.v-g{color:#16a765}.cc-chip.n.r,.cc-chip.n.v-r{color:#ff4f58}.cc-chip.n.v-r,.cc-chip.n.v-g{color:#9b43e8}
+.cc-rp-paper{background:#fff;border-radius:10px 10px 4px 4px;padding:12px 8px 14px;color:#8a6a55;display:flex;flex-direction:column;gap:3px;align-items:center;box-shadow:0 3px 8px #0003}
+.cc-rp-paper b{color:#ff7a3a;font-size:14px}.cc-rp.lose .cc-rp-paper b{color:#6f8fc4;font-size:22px}
+.cc-rp-paper strong{color:#f0453a;font-size:26px;font-weight:900;line-height:1.1}
+.cc-rp-paper small{font-size:10px;color:#8b8b95;line-height:1.4}
+.cc-rp-auto{margin-top:12px;font-size:10.5px;text-align:left;display:flex;align-items:center;gap:5px}
+.cc-rp.lose .cc-rp-auto{color:#4b6692}
+.cc-rp-tick{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:#fff;color:#ff5a3f;font-size:10px}
+.cc-rp.lose .cc-rp-tick{color:#6f8fc4}
+.cc-rp-x{width:34px;height:34px;border-radius:50%;border:2px solid #fff;background:transparent;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:0 0 3px}
+/* Choose Game: two cards side by side */
+.cc-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cc-card-art{height:96px}
+.cc-card-body{padding:12px 11px 13px}
+.cc-card-body h3{font-size:17px}.cc-card-body p{font-size:12px;min-height:34px}
+.cc-coin-art{width:64px;height:64px;font-size:34px;border-width:5px}
+.cc-ball-art{gap:4px}.cc-ball-art i{width:30px;height:30px;font-size:15px}
+.cc-play{padding:10px;font-size:14px}
+/* history panel keeps its height when switching tabs (no page jump / shrink) */
+.bs-history-card,#flipResultsHistory,#flipMyBetsSection{min-height:560px}
+.bs-history-card[hidden],#flipResultsHistory[hidden],#flipMyBetsSection[hidden]{display:none}
+.flip-history-section{min-height:620px}

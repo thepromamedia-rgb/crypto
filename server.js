@@ -810,6 +810,20 @@ const routes = {
     }
     S(req).gameReturn = next; audit(u.email, 'game-return-settings', JSON.stringify(next)); await save(); return { returns: next };
   },
+  'GET /api/admin/big-small': async (req, res, b, u) => {
+    needAdmin(u); const rows = panelRows(req, D.bigSmallBets || []).slice().sort((a,b2) => b2.ts - a.ts);
+    const settled = rows.filter(x => x.status === 'Settled'), wager = r2(settled.reduce((n,x)=>n+Number(x.amount||0),0)), payout = r2(settled.reduce((n,x)=>n+Number(x.payout||0),0));
+    const ts = now(), pid = req.panelId || 'main', live = [];
+    for (const durationMs of [30000,60000,180000,300000]) {
+      const roundNo = Math.floor(ts / durationMs), t = { Green:0, Red:0, Violet:0, Big:0, Small:0 }, nums = Array(10).fill(0);
+      for (const x of (D.bigSmallBets || [])) {
+        if (Number(x.roundNo) !== roundNo || Number(x.durationMs || 30000) !== durationMs || !(isHead(u) || panelValueMatches(req.panel, x.panelId || 'main'))) continue;
+        const a = Number(x.amount || 0); if (x.type === 'number') nums[Number(x.pick)] = r2(nums[Number(x.pick)] + a); else if (t[x.pick] != null) t[x.pick] = r2(t[x.pick] + a);
+      }
+      live.push({ durationMs, roundNo, t, nums });
+    }
+    return { totalBets: settled.length, pendingBets: rows.length - settled.length, totalWager: wager, totalPayout: payout, platformNet: r2(wager - payout), live, items: rows.slice(0, 300), returns: gameReturns(req) };
+  },
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const rows = (D.flipCoinBets || []).filter(x => isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')).slice().sort((a,b) => b.ts-a.ts).slice(0,1000);
     const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>x.status==='Settled' && !x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); const currentRound=Math.floor(now()/30000);
