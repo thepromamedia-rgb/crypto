@@ -53,7 +53,7 @@ const stub = http.createServer((q, r) => {
   const mainForCredits = (await a('GET', '/api/admin/panels')).j.panels.find(p => p.slug === 'main');
   const mainAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: mainForCredits.id, amount: 9000000, reason: 'integration test starting credits' });
   assert.equal(mainAllocation.s, 200); assert.equal(mainAllocation.j.panel.creditBalance, 9000000); ok('Head Admin allocates credits to main panel');
-  assert.equal((await a('POST', '/api/admin/settings', { upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', notice: '', bonus: '' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/settings', { withdrawalWagerMultiplier: 0, upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', notice: '', bonus: '' })).s, 200);
   const d = await u('POST', '/api/deposit', { amount: 1000, utr: 'abcdefgh1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' }); assert.equal(d.s, 200);
   assert.equal((await u('POST', '/api/deposit', { amount: 2000, utr: 'ABCDEFGH1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 409); ok('duplicate UTR rejected');
   assert.equal((await u('GET', '/api/me')).j.user.balance, 0);
@@ -63,7 +63,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('GET', '/api/admin/overview')).j.creditBalance, 8999000); ok('deposit approval debits panel credits exactly once');
 
   // Set zero retry delay for this legacy withdrawal flow; cooldown enforcement is tested separately in production checks.
-  assert.equal((await a('POST', '/api/admin/settings', { withdrawalCooldownHours: 0, upi: '', payee: '', support: '', notice: '', bonus: '' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/settings', { withdrawalCooldownHours: 0, withdrawalWagerMultiplier: 0, upi: '', payee: '', support: '', notice: '', bonus: '' })).s, 200);
   // withdrawal rules
   assert.equal((await u('POST', '/api/withdraw', { amount: 299, upi: 'ravi@bank' })).s, 400); ok('withdraw < 300 rejected');
   assert.equal((await u('POST', '/api/withdraw', { amount: 1001, upi: 'ravi@bank' })).s, 400);
@@ -147,7 +147,7 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/coin', { action: 'remove', symbol: 'ETH' })).s, 409); ok('admin remove coin (blocked while users hold it)');
   assert.equal((await a('POST', '/api/admin/coin', { action: 'add', symbol: 'matic', name: 'Polygon', id: 'matic-network' })).s, 200); assert.equal((await anon('GET', '/api/config')).j.coins.length, 14);
   assert.equal((await anon('GET', '/api/prices')).j.prices.some(p => p.symbol === 'MATIC'), true); ok('admin add coin + appears in prices');
-  const sv = { upi: 'shop@upi', payee: 'CB', support: '', notice: '', bonus: '' };
+  const sv = { withdrawalWagerMultiplier: 0, upi: 'shop@upi', payee: 'CB', support: '', notice: '', bonus: '' };
   assert.equal((await a('POST', '/api/admin/settings', { ...sv, minDeposit: 0, minWithdraw: 300, minTrade: 100 })).s, 400);
   assert.equal((await u('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 403);
   assert.equal((await a('POST', '/api/admin/settings', { ...sv, minDeposit: 500, minWithdraw: 200, minTrade: 50 })).s, 200);

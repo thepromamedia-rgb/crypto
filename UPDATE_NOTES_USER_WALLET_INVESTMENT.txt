@@ -1,0 +1,27 @@
+CRYPTO BRIDGE - WALLET & INVESTMENT UPDATE
+
+Included / confirmed:
+- Home and protected account pages require login; an unauthenticated visitor is redirected to Login/Register before Home is shown.
+- Exactly two wallets: Main Wallet and Third Wallet.
+- Third Wallet receives only matured coin-investment profit.
+- Third Wallet can transfer to Main Wallet; there is no Main-to-Third transfer or direct Third Wallet withdrawal endpoint.
+- Investment principal is deducted from Main Wallet and deposit-eligible balance.
+- Investment eligibility is based on deposited funds only; trading/game winnings and Third Wallet transfers do not create deposit-eligible funds.
+- Admin can enable/disable investments and set deposit investment percentage, profit percentage, and holding days.
+- Active investments are shown in Holding; at maturity principal returns to Main Wallet and configured profit is credited to Third Wallet.
+- Investment limit accounts for active holdings when calculating the admin percentage cap.
+- Withdrawals are requested only from Main Wallet.
+
+Not included:
+- A compulsory game-betting/turnover condition before a user may withdraw. This update does not add or enforce that restriction. Existing game wagering can still occur as a user choice, but it is not a withdrawal prerequisite.
+- Live-money investment returns should not be treated as guaranteed. Before deployment, obtain appropriate legal/compliance review for the jurisdiction and payment/game model.
+
+Testing:
+- `node --check server.js`
+- `node --check app.js`
+- `node --check admin.js`
+- `npm test` (existing integration suite)
+
+Deployment reminder:
+- Keep existing production database and environment variables backed up before deployment.
+- Configure payment provider secrets only in the server environment, never in frontend files.
