@@ -1368,3 +1368,61 @@ body:has(#headTailGame:not([hidden])){background:#f3f4fa}
   #bigSmallGame .bs-modal-multipliers{gap:3px!important}
   #bigSmallGame .bs-modal-multipliers button{font-size:9px!important}
 }
+
+/* Requested bottom-entering compact bet sheet: keep the compact dimensions, change only its entrance/anchor. */
+#bigSmallGame .bs-modal{align-items:flex-end!important;justify-content:center!important;padding:0!important}
+#bigSmallGame .bs-modal-sheet{
+  width:min(300px,calc(100vw - 8px))!important;height:auto!important;min-height:0!important;
+  max-height:calc(100dvh - 8px)!important;max-width:300px!important;flex:0 1 auto!important;
+  margin:0 auto!important;overflow:hidden!important;border-radius:19px 19px 0 0!important;
+  padding:0 0 env(safe-area-inset-bottom)!important;
+  animation:bsSheetRise .28s cubic-bezier(.2,.75,.25,1) both!important;
+}
+#bigSmallGame .bs-modal-footer button:first-child{border-radius:0!important}
+#bigSmallGame .bs-modal-footer button:last-child{border-radius:0!important}
+@keyframes bsSheetRise{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+/* Dark-mode control in the website corner and game header. */
+.theme-toggle{width:34px;height:34px;display:inline-grid;place-items:center;border:1px solid var(--line);border-radius:50%;background:#fff;color:#25314a;font-size:21px;line-height:1;cursor:pointer;flex:0 0 auto}
+.cc-bar{grid-template-columns:44px 1fr 116px}
+.cc-bar-icons{gap:3px}
+.cc-bar-icons button[data-theme-toggle]{font-size:21px;font-weight:700;border:1px solid #ffffff66;background:#ffffff18}
+body.dark-mode{--navy:#e7edf8;--muted:#a4afc3;--bg:#101725;--line:#29364c;--white:#182235;background:var(--bg);color:var(--navy)}
+body.dark-mode .topbar,body.dark-mode .bottom-nav,body.dark-mode .language,body.dark-mode .theme-toggle,
+body.dark-mode .market-card,body.dark-mode .asset-list,body.dark-mode .content-card,body.dark-mode .balance-card,
+body.dark-mode .modal,body.dark-mode .actions button,body.dark-mode .promo-grid .promo,
+body.dark-mode .flip-bet-panel,body.dark-mode .flip-history-section>.content-card,
+body.dark-mode .bs-history-card,body.dark-mode .bs-duration-strip,body.dark-mode .flip-notice{
+  background:#182235!important;color:#e7edf8!important;border-color:#2b3850!important;
+}
+body.dark-mode .topbar,body.dark-mode .bottom-nav{box-shadow:0 4px 18px #0003}
+body.dark-mode .topbar .brand,body.dark-mode .topbar .brand b,body.dark-mode .actions span,
+body.dark-mode .asset-name strong,body.dark-mode .asset-price,body.dark-mode .section-head h2,
+body.dark-mode .market-card strong,body.dark-mode .modal h2,body.dark-mode .asset-row,
+body.dark-mode .flip-bet-panel label,body.dark-mode .bs-chart-item b{color:#e7edf8!important}
+body.dark-mode .asset-row,body.dark-mode .asset-list,body.dark-mode .content-card,
+body.dark-mode .flip-history-section>.content-card{border-color:#2b3850!important}
+body.dark-mode input,body.dark-mode select,body.dark-mode textarea,body.dark-mode .search-wrap input,
+body.dark-mode .copy-row code,body.dark-mode .flip-quick-amounts button{
+  background:#101827!important;color:#e7edf8!important;border-color:#35435b!important;
+}
+body.dark-mode .asset-row,body.dark-mode .tbl tr,body.dark-mode .asset-list .asset-row{border-bottom-color:#2b3850!important}
+body.dark-mode .promo{background:#1c2a40!important}
+body.dark-mode .promo.orange{background:#33283a!important}
+body.dark-mode .bottom-nav button{color:#a8b4ca}
+body.dark-mode .bottom-nav button.active{color:#83a4ff}
+body.dark-mode #bigSmallGame .bs-duration-strip,body.dark-mode #bigSmallGame .bs-numbers{background:#182235!important}
+body.dark-mode #bigSmallGame .bs-duration{color:#c1cadd!important}
+body.dark-mode #bigSmallGame .bs-numbers.bs-number-image-grid{background:#182235!important}
+body.dark-mode #bigSmallGame .bs-history-card{background:#182235!important}
+body.dark-mode #bigSmallGame .bs-modal-sheet{background:#182235!important;color:#e7edf8!important}
+body.dark-mode #bigSmallGame .bs-modal-body{background:#182235!important;color:#e7edf8!important}
+body.dark-mode #bigSmallGame .bs-modal-balance,body.dark-mode #bigSmallGame .bs-modal-quantity{border-bottom-color:#2c3a52!important}
+body.dark-mode #bigSmallGame .bs-modal-amounts button,body.dark-mode #bigSmallGame .bs-modal-multipliers button{background:#26334a;color:#dce5f6}
+body.dark-mode #bigSmallGame .bs-modal-quantity input{background:#101827!important;color:#e7edf8!important}
+body.dark-mode #bigSmallGame .bs-modal-footer button:first-child{background:#26334a!important;color:#e7edf8!important}
+body.dark-mode #bigSmallGame .bs-modal-footer{border-top-color:#2c3a52!important}
+body.dark-mode .flip-wallet-head .bs-wallet-card{background:#182235!important;color:#e7edf8!important}
+body.dark-mode .flip-wallet-head .bs-bal-row strong,body.dark-mode .flip-wallet-head .bs-bal-label{color:#e7edf8!important}
+body.dark-mode .flip-notice{color:#cbd5e5!important}
+@media(max-width:480px){.cc-bar{grid-template-columns:36px 1fr 108px}.cc-bar-icons button{width:32px;height:32px}}

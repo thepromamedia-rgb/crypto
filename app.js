@@ -24,7 +24,13 @@ const ccPct = n => String(Number(Number(n).toFixed(2)));
 const ccLogo = (cls = '') => `<span class="cc-logo ${cls}"><span class="cc-logo-mark">₿</span><b>Crypto<span>Club</span></b></span>`;
 const CC_HEADSET = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20c0 1.2-1.6 2-4 2h-2"/></svg>';
 const CC_INFO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>';
-const ccBar = () => `<div class="cc-bar"><button type="button" class="cc-bar-back" data-game-back aria-label="Back to games">‹</button>${ccLogo()}<span class="cc-bar-icons"><button type="button" data-page="Service" aria-label="Support">${CC_HEADSET}</button><button type="button" data-cc-info aria-label="Game information">${CC_INFO}</button></span></div>`;
+const ccBar = () => `<div class="cc-bar"><button type="button" class="cc-bar-back" data-game-back aria-label="Back to games">‹</button>${ccLogo()}<span class="cc-bar-icons"><button type="button" data-theme-toggle aria-label="Switch theme" title="Toggle dark mode">☾</button><button type="button" data-page="Service" aria-label="Support">${CC_HEADSET}</button><button type="button" data-cc-info aria-label="Game information">${CC_INFO}</button></span></div>`;
+const ccTheme = {
+  dark: (() => { try { return localStorage.getItem('cryptoClubTheme') === 'dark'; } catch { return false; } })(),
+  apply() { document.body.classList.toggle('dark-mode', this.dark); try { localStorage.setItem('cryptoClubTheme', this.dark ? 'dark' : 'light'); } catch {} this.syncButtons(); },
+  syncButtons() { document.querySelectorAll('[data-theme-toggle]').forEach(b => { b.textContent = this.dark ? '☀' : '☾'; b.setAttribute('aria-label', this.dark ? 'Switch to light mode' : 'Switch to dark mode'); b.title = this.dark ? 'Light mode' : 'Dark mode'; }); }
+};
+
 // Small dark "Bet Successful" toast (like the reference), auto-hides.
 let ccPopT = null;
 function ccBetPopup() {
@@ -685,6 +691,7 @@ function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = fal
 
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-coin]')) { e.preventDefault(); e.target.click(); } });
 document.addEventListener('click', e => {
+  const theme = e.target.closest('[data-theme-toggle]'); if (theme) { ccTheme.dark = !ccTheme.dark; ccTheme.apply(); return; }
   const eye = e.target.closest('[data-eye]'); if (eye) { const i = document.getElementById(eye.dataset.eye), show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.innerHTML = show ? EYE_OFF : EYE; eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
   const cn = e.target.closest('[data-coin]'); if (cn) { state.coin = cn.dataset.coin; renderPage('Coin'); return; } const b = e.target.closest('[data-page]'); if (b) { e.preventDefault(); renderPage(b.dataset.page); } });
 $('#closeModal').addEventListener('click', hideModal);
@@ -694,6 +701,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal
 $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 'Auth'));
 
 (async function init() {
+  ccTheme.apply();
   const ref = new URLSearchParams(location.search).get('ref');
   await loadMe();
   const route = decodeURIComponent(location.hash.slice(1) || 'Home');
