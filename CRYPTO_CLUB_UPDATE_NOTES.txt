@@ -12,3 +12,4 @@ UPDATE 2
 - Choose Game: two cards left/right. WinGo speaker icon toggles sound.
 - Admin: single "Games" section (Win Returns, Coin Game, WinGo bets/live totals).
 - Fixed: repeated WinGo polling timers piling up on every visit to the Games page.
+- Number balls restyled to match reference (0 red+violet, 5 green+violet, white glossy centre).

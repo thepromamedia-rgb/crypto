@@ -1087,3 +1087,12 @@ body:has(#headTailGame:not([hidden])){background:#f3f4fa}
 .bs-history-card,#flipResultsHistory,#flipMyBetsSection{min-height:560px}
 .bs-history-card[hidden],#flipResultsHistory[hidden],#flipMyBetsSection[hidden]{display:none}
 .flip-history-section{min-height:620px}
+
+/* ===== number balls: match reference (0 = red/violet, 5 = green/violet, white glossy centre, 4 edge notches) ===== */
+#bigSmallGame .bs-numbers button.bs-chip.g,#headTailGame .bs-numbers button.bs-chip.g{--c1:#26c47a!important;--c2:#12a25f!important;--num:#16a765!important;--tint:#c4efd9!important}
+#bigSmallGame .bs-numbers button.bs-chip.r,#headTailGame .bs-numbers button.bs-chip.r{--c1:#ff6a70!important;--c2:#ee3640!important;--num:#ff4f58!important;--tint:#fcc9cd!important}
+#bigSmallGame .bs-numbers button.bs-chip.v-r,#headTailGame .bs-numbers button.bs-chip.v-r{--c1:#ff5b61!important;--c2:#a645ee!important;--num:#a645ee!important;--tint:#ead3fb!important}
+#bigSmallGame .bs-numbers button.bs-chip.v-g,#headTailGame .bs-numbers button.bs-chip.v-g{--c1:#2bc57d!important;--c2:#a645ee!important;--num:#a645ee!important;--tint:#ead3fb!important}
+#bigSmallGame .bs-numbers button.bs-chip,#headTailGame .bs-numbers button.bs-chip{background:repeating-conic-gradient(from -5deg,rgba(255,255,255,.9) 0 10deg,transparent 10deg 90deg),linear-gradient(135deg,var(--c1) 0 50%,var(--c2) 50% 100%)!important;box-shadow:0 4px 7px rgba(40,40,70,.22),inset 0 -3px 6px rgba(0,0,0,.14),inset 0 2px 4px rgba(255,255,255,.55)!important}
+#bigSmallGame .bs-numbers button.bs-chip:before,#headTailGame .bs-numbers button.bs-chip:before{inset:15%!important;background:linear-gradient(180deg,#fff 0,#fff 38%,var(--tint) 100%)!important;box-shadow:inset 0 1px 2px rgba(255,255,255,.9),0 0 0 2px rgba(255,255,255,.35)!important}
+#bigSmallGame .bs-numbers button.bs-chip span,#headTailGame .bs-numbers button.bs-chip span{color:var(--num)!important;font-weight:900}
