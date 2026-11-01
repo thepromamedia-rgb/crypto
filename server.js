@@ -69,6 +69,10 @@ const S = req => (req && req.panel && req.panel.settings) || D.settings;
 const isHead = u => !!u && u.role === 'headAdmin';
 const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
 const FLIP_MODES = ['heads','tails','lower','random'];
+// Admin-configurable "win return %" (profit % on a winning bet; 80% => Rs100 bet pays Rs180 back). Per panel.
+const GAME_RETURN_DEFAULT = { coin: 100, number: 780, color: 80, size: 80 };
+const gameReturns = req => { const g = (S(req) || {}).gameReturn || {}, o = {}; for (const k of Object.keys(GAME_RETURN_DEFAULT)) { const n = Number(g[k]); o[k] = Number.isFinite(n) && n >= 0 && n <= 10000 ? n : GAME_RETURN_DEFAULT[k]; } return o; };
+const returnMult = pct => +(1 + Number(pct) / 100).toFixed(4);
 const flipMode = panelId => {
   const panel = (D.panels || []).find(p=>p.slug===panelId);
   const cfg = panel?.settings?.flipCoin || (panelId==='main' ? D.settings.flipCoin : {});
@@ -682,9 +686,9 @@ const routes = {
       if (!resultRound) continue;
       const owner = [...D.users, ...D.demoUsers].find(x => String(x.id) === String(bet.userId));
       if (!owner) { bet.status = 'Settled'; bet.result = resultRound.result; bet.won = resultRound.result === bet.side; bet.net = 0; bet.ts = resultRound.endTs; changed = true; continue; }
-      const won = resultRound.result === bet.side, payout = won ? r2(bet.amount * 2) : 0;
+      const won = resultRound.result === bet.side, bm = Number(bet.multiplier) > 1 ? Number(bet.multiplier) : 2, payout = won ? r2(bet.amount * bm) : 0;
       const beforeSettle = Number(owner.balance || 0); owner.balance = r2(beforeSettle + payout);
-      bet.result = resultRound.result; bet.won = won; bet.payout = payout; bet.lossAmount = won ? 0 : bet.amount; bet.net = r2((won ? bet.amount : -bet.amount) - Number(bet.fee || 0)); bet.balanceAfter = owner.balance; bet.status = 'Settled'; bet.ts = resultRound.endTs; changed = true;
+      bet.result = resultRound.result; bet.won = won; bet.payout = payout; bet.lossAmount = won ? 0 : bet.amount; bet.net = r2((won ? bet.amount * (bm - 1) : -bet.amount) - Number(bet.fee || 0)); bet.balanceAfter = owner.balance; bet.status = 'Settled'; bet.ts = resultRound.endTs; changed = true;
       audit(bet.email, 'flip-coin-settlement', `round #${bet.roundNo} ${bet.result}; ${won ? 'won' : 'lost'}; payout ${payout}`);
     }
     if (changed) await save();
@@ -693,7 +697,7 @@ const routes = {
       gameSession = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: ts, startBalance: r2(Number(u.balance || 0)), timeProfitResetTs: ts, timeLossResetTs: ts, betProfitCount: 0, betLossCount: 0, lastActivityTs: ts };
       D.flipCoinSessions = D.flipCoinSessions.filter(x => !(x.userId === u.id && String(x.panelId || 'main') === String(panelId))); D.flipCoinSessions.push(gameSession); await save();
     } else { gameSession.lastActivityTs = ts; }
-    return { config: { winningMode:flipMode(panelId), enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: 2, feePct: Number(cfg.feePct || 0) },
+    return { config: { winningMode:flipMode(panelId), enabled: true, minBet: Number(cfg.minBet || 10), maxBet: Number(cfg.maxBet || 10000), multiplier: returnMult(gameReturns(req).coin), returnPct: gameReturns(req).coin, feePct: Number(cfg.feePct || 0) },
       round: { number: roundNo, startTs, endTs, remainingMs: Math.max(0, endTs-ts), bettingOpen: endTs-ts > 5000 },
       resultsHistory: D.flipCoinRounds.filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) < roundNo && x.outcomeLocked).slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,10).map(x=>({roundNo:x.roundNo,result:x.result,endTs:x.endTs})),
       currentBets: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo).map(x=>({id:x.id,side:x.side,amount:x.amount,status:x.status})),
@@ -716,7 +720,7 @@ const routes = {
     const feePct = Number(cfg.feePct || 0), fee = r2(amount*feePct/100), debit = r2(amount+fee), before = r2(Number(u.balance||0));
     if (debit > before) fail(400, 'Not enough wallet credits for this bet and fee.');
     u.balance = r2(before-debit);
-    const row = { id: crypto.randomUUID(), userId:u.id, uid:String(u.uid||u.id), email:u.email, panelId, roundNo, amount:r2(amount), side, status:'Pending', result:null, won:null, multiplier:2, feePct, fee, payout:0, lossAmount:0, net:0, balanceAfter:u.balance, ts, roundEndTs:endTs };
+    const row = { id: crypto.randomUUID(), userId:u.id, uid:String(u.uid||u.id), email:u.email, panelId, roundNo, amount:r2(amount), side, status:'Pending', result:null, won:null, multiplier:returnMult(gameReturns(req).coin), returnPct:gameReturns(req).coin, feePct, fee, payout:0, lossAmount:0, net:0, balanceAfter:u.balance, ts, roundEndTs:endTs };
     if (!Array.isArray(D.flipCoinBets)) D.flipCoinBets=[]; D.flipCoinBets.push(row);
     audit(u.email, 'flip-coin', `bet ${amount} ${side}; round #${roundNo}; pending result; fee ${fee}`);
     await save(); return { bet: row, balance:u.balance, round:{number:roundNo,endTs,remainingMs,bettingOpen:remainingMs>5000} };
@@ -747,8 +751,9 @@ const routes = {
     const lastKnown=knownRounds.length?Math.max(...knownRounds):null;
     // Create at least the latest 20 rounds and fill any gap after the last stored round,
     // bounded to 2,000 rounds per request to avoid runaway writes after very long downtime.
-    const earliest=Math.max(0,roundNo-1999,lastKnown===null?roundNo-20:Math.min(roundNo-20,lastKnown+1));
-    for(let n=earliest;n<=roundNo;n++) if(!D.bigSmallRounds.some(x=>Number(x.roundNo)===n&&String(x.panelId||'main')===String(panelId)&&isDuration(x))){D.bigSmallRounds.push({roundNo:n,panelId,durationMs,startTs:n*durationMs,endTs:(n+1)*durationMs,result:null,createdTs:ts,outcomeLocked:false});changed=true;}
+    const earliest=Math.max(0,roundNo-1999,lastKnown===null?roundNo-500:Math.min(roundNo-500,lastKnown+1));
+    const knownSet=new Set(knownRounds);
+    for(let n=earliest;n<=roundNo;n++) if(!knownSet.has(n)){D.bigSmallRounds.push({roundNo:n,panelId,durationMs,startTs:n*durationMs,endTs:(n+1)*durationMs,result:null,createdTs:ts,outcomeLocked:false});changed=true;}
     for(const r of D.bigSmallRounds){ if(String(r.panelId||'main')!==String(panelId)||!isDuration(r)||Number(r.roundNo)>=roundNo||r.outcomeLocked) continue;
       // Preserve the ZIP's existing result-selection rules for every duration.
       const roundBets=D.bigSmallBets.filter(x=>Number(x.roundNo)===Number(r.roundNo)&&String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
@@ -779,7 +784,7 @@ const routes = {
     const round=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingRounds=D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingBets=D.bigSmallBets.filter(x=>String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
-    return {config:{durationMs,minBet:10,maxBet:10000,multipliers:{size:1.8,color:1.8,number:8.8}},round:{number:roundNo,startTs,endTs,remainingMs:Math.max(0,endTs-ts),bettingOpen:endTs-ts>5000},resultsHistory:matchingRounds.filter(x=>x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,20).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:matchingBets.filter(x=>String(x.userId)===String(u.id)&&Number(x.roundNo)===roundNo),history:matchingBets.filter(x=>String(x.userId)===String(u.id)).sort((a,b)=>b.ts-a.ts).slice(0,500)};
+    return {config:{durationMs,minBet:10,maxBet:10000,returns:gameReturns(req),multipliers:{size:returnMult(gameReturns(req).size),color:returnMult(gameReturns(req).color),number:returnMult(gameReturns(req).number)}},round:{number:roundNo,startTs,endTs,remainingMs:Math.max(0,endTs-ts),bettingOpen:endTs-ts>5000},resultsHistory:matchingRounds.filter(x=>x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,500).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:matchingBets.filter(x=>String(x.userId)===String(u.id)&&Number(x.roundNo)===roundNo),history:matchingBets.filter(x=>String(x.userId)===String(u.id)).sort((a,b)=>b.ts-a.ts).slice(0,500)};
   },
   'POST /api/games/big-small': async (req,res,b,u) => {
     needUser(u); if(u.role!=='user')fail(403,'Only user accounts can play this game.');
@@ -791,10 +796,20 @@ const routes = {
     if(!Array.isArray(D.bigSmallBets))D.bigSmallBets=[];if(!Array.isArray(D.bigSmallRounds))D.bigSmallRounds=[];
     const panelId=req.panelId||'main';let rr=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
     if(!rr){rr={roundNo,panelId,durationMs,startTs,endTs,result:null,outcomeLocked:false,createdTs:ts};D.bigSmallRounds.push(rr);}
-    const multiplier=type==='number'?8.8:1.8,debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);
-    const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
+    const rets=gameReturns(req),returnPct=type==='number'?rets.number:type==='size'?rets.size:rets.color,multiplier=returnMult(returnPct),debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);
+    const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,returnPct,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
   },
   // ----- admin -----
+  'GET /api/admin/game-returns': async (req, res, b, u) => { needAdmin(u); return { returns: gameReturns(req), defaults: GAME_RETURN_DEFAULT }; },
+  'POST /api/admin/game-returns': async (req, res, b, u) => {
+    needAdmin(u); const cur = gameReturns(req), next = { ...cur };
+    for (const [k, label] of [['coin','Coin Game'],['number','WinGo Number'],['color','WinGo Color'],['size','WinGo Big/Small']]) {
+      if (b[k] === undefined) continue; const n = Number(b[k]);
+      if (!Number.isFinite(n) || n < 0 || n > 10000) fail(400, `${label} win return % must be between 0 and 10000.`);
+      next[k] = Math.round(n * 100) / 100;
+    }
+    S(req).gameReturn = next; audit(u.email, 'game-return-settings', JSON.stringify(next)); await save(); return { returns: next };
+  },
   'GET /api/admin/flip-coin': async (req, res, b, u) => {
     needAdmin(u); const rows = (D.flipCoinBets || []).filter(x => isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')).slice().sort((a,b) => b.ts-a.ts).slice(0,1000);
     const totalWager = r2(rows.reduce((n,x)=>n+Number(x.amount||0),0)); const totalPayout = r2(rows.reduce((n,x)=>n+Number(x.payout||0),0)); const losses = r2(rows.filter(x=>x.status==='Settled' && !x.won).reduce((n,x)=>n+Number(x.amount||0),0)); const winningProfit = r2(rows.filter(x=>x.won).reduce((n,x)=>n+Math.max(0,Number(x.payout||0)-Number(x.amount||0)),0)); const fees = r2(rows.reduce((n,x)=>n+Number(x.fee||0),0)); const platformNet = r2(losses - winningProfit + fees); const currentRound=Math.floor(now()/30000);
