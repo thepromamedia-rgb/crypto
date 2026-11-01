@@ -539,3 +539,17 @@ body.bs-modal-open{overflow:hidden}
 }
 @media(max-width:350px){#bigSmallGame .bs-color-picks{gap:12px}#bigSmallGame .bs-numbers button{font-size:20px}#bigSmallGame .bs-multiplier-row{gap:3px}}
 @media(max-width:350px){body:has(#bigSmallGame:not([hidden])) main{padding-left:14px!important;padding-right:42px!important}}
+
+
+/* Precise WinGo reference alignment: keep the full timer content inside its card. */
+#bigSmallGame .flip-timer-panel{height:78px;min-height:78px;padding:8px 10px;overflow:hidden}
+#bigSmallGame .flip-timer-top{height:18px;margin:0 0 3px;align-items:center}
+#bigSmallGame .bs-timer-row{height:39px;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+#bigSmallGame .bs-timer-left{display:flex;flex-direction:column;justify-content:center;min-width:0;gap:3px}
+#bigSmallGame .bs-round-label{font-size:9px;line-height:1.1;margin:0}
+#bigSmallGame .bs-mini-results{height:16px;margin:0;gap:3px}
+#bigSmallGame .bs-mini-results i{width:14px;height:14px;font-size:9px}
+#bigSmallGame .bs-timer-right{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;max-width:60%;min-width:0;padding:0;align-self:center}
+#bigSmallGame .flip-digits{display:block;min-width:91px;box-sizing:border-box;padding:3px 5px;background:#fff;color:#111827;border-radius:2px;text-align:center;font-size:15px;line-height:1.05;font-weight:900;letter-spacing:3px;white-space:nowrap}
+#bigSmallGame .flip-period{max-width:100%;font-size:9px;line-height:1.1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:350px){#bigSmallGame .flip-timer-panel{height:78px;min-height:78px}#bigSmallGame .flip-digits{min-width:84px;font-size:14px;letter-spacing:2px}}
