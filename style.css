@@ -1692,3 +1692,22 @@ body.dark-mode #bigSmallGame .bs-modal-footer button:first-child{background:#f4f
 @media(min-width:600px){
   #bigSmallGame .bs-modal-sheet{width:min(420px,100vw)!important}
 }
+
+/* Final footer touch-up: slightly larger actions, preserving the exact sheet outer size. */
+#bigSmallGame .bs-modal-body{padding-bottom:7px!important}
+#bigSmallGame .bs-modal-footer{
+  flex:0 0 38px!important;
+  height:38px!important;
+  min-height:38px!important;
+}
+#bigSmallGame .bs-modal-footer button{
+  height:38px!important;
+  min-height:38px!important;
+  padding:0 5px!important;
+  font-size:13px!important;
+  line-height:1!important;
+  font-weight:500!important;
+}
+@media(max-width:380px){
+  #bigSmallGame .bs-modal-body{padding-bottom:7px!important}
+}
