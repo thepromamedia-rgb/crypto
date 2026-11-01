@@ -1130,3 +1130,118 @@ body:has(#headTailGame:not([hidden])){background:#f3f4fa}
 #bigSmallGame.big-small-game .bs-numbers.bs-number-image-grid button.bs-number-hit:disabled{
   opacity:1;cursor:not-allowed;
 }
+
+
+/* ===== Exact reference-style WinGo Big / Small bet sheets ===== */
+#bigSmallGame .bs-modal{align-items:flex-end;justify-content:center;padding:0}
+#bigSmallGame .bs-modal-scrim{background:rgba(16,17,23,.76)}
+#bigSmallGame .bs-modal-sheet{
+  --pick-color:#ffad51;
+  width:min(100%,700px);height:min(83dvh,726px);max-height:83dvh;
+  display:flex;flex-direction:column;overflow:hidden;
+  border-radius:28px 28px 0 0;background:#fff;
+  padding:0 0 env(safe-area-inset-bottom);box-shadow:0 -8px 30px rgba(0,0,0,.14);
+  animation:bsSheetIn .18s ease-out;
+}
+#bigSmallGame .bs-modal-head{
+  position:relative;flex:0 0 178px;height:178px;box-sizing:border-box;
+  display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+  gap:16px;padding:26px 24px 0;border:0;border-radius:28px 28px 0 0;
+  color:#fff;background:var(--pick-color);
+  clip-path:polygon(0 0,100% 0,100% 70%,50% 100%,0 70%);
+}
+#bigSmallGame .bs-modal-head strong{font-size:22px;line-height:1.2;font-weight:500;color:#fff}
+#bigSmallGame .bs-modal-pick{
+  width:min(100%,522px);height:48px;box-sizing:border-box;margin:0;
+  display:grid;place-items:center;padding:0 12px;border-radius:10px;
+  background:#fff!important;color:#080808!important;font-size:23px;font-weight:500;
+}
+#bigSmallGame .bs-modal-pick[data-kind="number"]{border:0;font-size:23px}
+#bigSmallGame .bs-modal-body{
+  flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;
+  gap:20px;padding:54px 24px 16px;background:#fff;
+}
+#bigSmallGame .bs-modal-return{display:none!important}
+#bigSmallGame .bs-modal-balance{
+  display:grid;grid-template-columns:minmax(80px,1fr) auto;align-items:center;gap:12px;
+  padding:0;border:0;font-size:29px;color:#111827;min-height:52px;
+}
+#bigSmallGame .bs-modal-balance>span,#bigSmallGame .bs-modal-quantity>span{
+  font-size:29px;font-weight:400;color:#111827;white-space:nowrap
+}
+#bigSmallGame .bs-modal-balance strong{display:none}
+#bigSmallGame .bs-modal-amounts{
+  display:grid;grid-template-columns:repeat(4,minmax(54px,1fr));gap:7px;
+  width:min(100%,326px);margin:0;
+}
+#bigSmallGame .bs-modal-amounts button{
+  height:52px;padding:0 5px;border:0;border-radius:11px;background:#f4f4f4;
+  color:#778195;font-size:19px;font-weight:500;
+}
+#bigSmallGame .bs-modal-amounts button.active{
+  background:var(--pick-color);color:#fff;
+}
+#bigSmallGame .bs-modal-quantity{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:0;border:0;min-height:52px;
+}
+#bigSmallGame .bs-modal-quantity>div{display:flex;align-items:center;gap:22px}
+#bigSmallGame .bs-modal-quantity button{
+  width:41px;height:52px;border:0;border-radius:11px;background:var(--pick-color);
+  color:#fff;font-size:27px;font-weight:400;line-height:1;
+}
+#bigSmallGame .bs-modal-quantity input{
+  width:147px;height:52px;border:0;border-radius:0;background:#f5f6fb;
+  color:#111827;text-align:center;font-size:24px;
+}
+#bigSmallGame .bs-modal-multipliers{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;
+  width:min(100%,552px);margin:0 0 0 auto;
+}
+#bigSmallGame .bs-modal-multipliers button{
+  height:53px;padding:0 4px;border:0;border-radius:11px;background:#f4f4f4;
+  color:#778195;font-size:19px;font-weight:500;
+}
+#bigSmallGame .bs-modal-multipliers button.active{background:var(--pick-color);color:#fff}
+#bigSmallGame .bs-modal-agree{
+  display:flex;align-items:center;gap:12px;margin:0;color:#8790a2;font-size:19px;
+}
+#bigSmallGame .bs-modal-agree input{width:34px;height:34px;margin:0;accent-color:#ff5a61}
+#bigSmallGame .bs-modal-agree span{color:#ff5963;font-size:19px}
+#bigSmallGame #bsModalError{min-height:0;margin:0;color:#ff5963;font-size:13px}
+#bigSmallGame .bs-modal-footer{
+  flex:0 0 58px;display:grid;grid-template-columns:1fr 2fr;
+  border:0;margin-top:auto;
+}
+#bigSmallGame .bs-modal-footer button{min-height:58px;border:0;border-radius:0;font-size:22px;font-weight:400}
+#bigSmallGame .bs-modal-footer button:first-child{background:#f4f4f4;color:#758096}
+#bigSmallGame .bs-modal-footer button:last-child{background:var(--pick-color);color:#fff;font-weight:500}
+#bigSmallGame .bs-modal-footer button:disabled{opacity:.6}
+@media(max-width:520px){
+  #bigSmallGame .bs-modal-sheet{width:100%;height:min(83dvh,726px);border-radius:24px 24px 0 0}
+  #bigSmallGame .bs-modal-head{flex-basis:164px;height:164px;padding-top:23px;gap:14px}
+  #bigSmallGame .bs-modal-head strong{font-size:19px}
+  #bigSmallGame .bs-modal-pick{height:44px;font-size:19px}
+  #bigSmallGame .bs-modal-body{padding:43px 16px 14px;gap:17px}
+  #bigSmallGame .bs-modal-balance>span,#bigSmallGame .bs-modal-quantity>span{font-size:21px}
+  #bigSmallGame .bs-modal-balance{grid-template-columns:minmax(65px,1fr) auto;gap:7px}
+  #bigSmallGame .bs-modal-amounts{width:min(100%,250px);grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+  #bigSmallGame .bs-modal-amounts button{height:43px;font-size:15px;border-radius:8px}
+  #bigSmallGame .bs-modal-quantity>div{gap:8px}
+  #bigSmallGame .bs-modal-quantity button{width:35px;height:44px;font-size:23px}
+  #bigSmallGame .bs-modal-quantity input{width:clamp(70px,28vw,120px);height:44px;font-size:20px}
+  #bigSmallGame .bs-modal-multipliers{gap:6px}
+  #bigSmallGame .bs-modal-multipliers button{height:44px;font-size:14px;border-radius:8px}
+  #bigSmallGame .bs-modal-agree{font-size:15px;gap:8px}
+  #bigSmallGame .bs-modal-agree input{width:23px;height:23px}
+  #bigSmallGame .bs-modal-agree span{font-size:15px}
+  #bigSmallGame .bs-modal-footer{flex-basis:54px}
+  #bigSmallGame .bs-modal-footer button{min-height:54px;font-size:17px}
+}
+@media(max-width:350px){
+  #bigSmallGame .bs-modal-body{padding-left:11px;padding-right:11px;gap:14px}
+  #bigSmallGame .bs-modal-balance>span,#bigSmallGame .bs-modal-quantity>span{font-size:18px}
+  #bigSmallGame .bs-modal-amounts button{font-size:13px}
+  #bigSmallGame .bs-modal-quantity input{width:66px}
+  #bigSmallGame .bs-modal-multipliers button{font-size:12px}
+}
