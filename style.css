@@ -553,3 +553,129 @@ body.bs-modal-open{overflow:hidden}
 #bigSmallGame .flip-digits{display:block;min-width:91px;box-sizing:border-box;padding:3px 5px;background:#fff;color:#111827;border-radius:2px;text-align:center;font-size:15px;line-height:1.05;font-weight:900;letter-spacing:3px;white-space:nowrap}
 #bigSmallGame .flip-period{max-width:100%;font-size:9px;line-height:1.1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:350px){#bigSmallGame .flip-timer-panel{height:78px;min-height:78px}#bigSmallGame .flip-digits{min-width:84px;font-size:14px;letter-spacing:2px}}
+
+/* ===== WinGo / Big Small — reference layout (final override) ===== */
+body:has(#bigSmallGame:not([hidden])){background:#f3f4fa}
+#bigSmallGame.big-small-game{gap:0!important;max-width:430px;margin:0 auto;color:#232a3b;font-family:inherit}
+@media(max-width:480px){#bigSmallGame.big-small-game{max-width:100%}body:has(#bigSmallGame:not([hidden])) main{padding:0 0 18px!important}}
+
+/* wallet header */
+#bigSmallGame.big-small-game .bs-head{display:block;padding:8px 10px 10px;margin:0;background:linear-gradient(135deg,#ff6b70 0%,#ff8a82 100%);border-radius:0 0 26px 26px;box-shadow:none}
+#bigSmallGame.big-small-game .bs-wallet-card{background:#fff;border-radius:16px;padding:14px 14px 14px;text-align:center;box-shadow:0 2px 8px rgba(255,90,100,.18)}
+#bigSmallGame.big-small-game .bs-bal-row{display:flex;align-items:center;justify-content:center;gap:10px}
+#bigSmallGame.big-small-game .bs-bal-row strong{font-size:20px;font-weight:800;color:#1f2433;line-height:1.1}
+#bigSmallGame.big-small-game .flip-refresh{margin:0;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;background:transparent;color:#c3c6cf;cursor:pointer}
+#bigSmallGame.big-small-game .flip-refresh.spin svg{animation:bsSpin .6s linear}
+@keyframes bsSpin{to{transform:rotate(360deg)}}
+#bigSmallGame.big-small-game .bs-bal-label{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;color:#6b7284;margin-top:3px}
+#bigSmallGame.big-small-game .bs-wicon{color:#ff5b61;display:grid}
+#bigSmallGame.big-small-game .flip-wallet-actions{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+#bigSmallGame.big-small-game .flip-wallet-actions button{height:36px;min-height:36px;border:0;border-radius:999px;color:#fff;font-size:13px;font-weight:800;letter-spacing:.2px;box-shadow:0 2px 6px rgba(0,0,0,.12);cursor:pointer}
+#bigSmallGame.big-small-game .flip-wallet-actions .flip-withdraw{background:#ff5b61}
+#bigSmallGame.big-small-game .flip-wallet-actions .flip-deposit{background:#14b86a}
+
+/* notice */
+#bigSmallGame.big-small-game .flip-notice{display:flex;align-items:center;gap:7px;margin:10px 10px 10px;padding:6px 7px 6px 10px;background:#fff;border:1px solid #ffd3d6;border-radius:999px;font-size:10px;color:#4f566a;min-height:32px;box-shadow:none}
+#bigSmallGame.big-small-game .flip-notice>.bs-speaker{color:#ff5b61;display:grid;font-size:inherit}
+#bigSmallGame.big-small-game .flip-notice #bsNotice{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bigSmallGame.big-small-game .bs-notice-detail{display:inline-flex;align-items:center;gap:3px;margin-left:auto;border:0;background:linear-gradient(110deg,#ff5b61,#ff7a7f);color:#fff;border-radius:999px;padding:5px 10px;font-size:10px;font-weight:800}
+
+/* duration tabs */
+#bigSmallGame.big-small-game .bs-duration-strip{background:#fff;border-radius:16px;margin:0 10px 12px;padding:12px 4px 9px;min-height:0;gap:2px;box-shadow:0 1px 6px rgba(30,40,80,.05)}
+#bigSmallGame.big-small-game .bs-duration-strip:after{display:none}
+#bigSmallGame.big-small-game .bs-duration{min-height:0;gap:5px;padding:0}
+#bigSmallGame.big-small-game .bs-duration>span{width:34px;height:34px;border:3px solid #e6e8ec;background:linear-gradient(#fdfdfd,#cfd3da);color:#8e939e;box-shadow:inset 0 1px 2px #fff,0 1px 3px rgba(0,0,0,.12)}
+#bigSmallGame.big-small-game .bs-duration.active>span{border-color:#ffc4c8;background:radial-gradient(circle at 35% 28%,#ff9ea2,#ff3f50 70%);color:#fff;box-shadow:0 2px 6px rgba(255,70,85,.45)}
+#bigSmallGame.big-small-game .bs-duration small{font-size:10px;line-height:1.15;color:#6c7385}
+#bigSmallGame.big-small-game .bs-duration.active small{color:#ff4a58;font-weight:800}
+
+/* timer card */
+#bigSmallGame.big-small-game .flip-timer-panel{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:0;margin:0 10px 12px;padding:14px 14px 12px;border-radius:14px;background:linear-gradient(120deg,#ff5762 0%,#ff7a7e 100%);color:#fff;box-shadow:0 3px 10px rgba(255,87,98,.28);overflow:visible}
+#bigSmallGame.big-small-game .flip-timer-panel:before{content:"";position:absolute;left:46%;top:10px;bottom:10px;border-left:1.5px dashed rgba(255,255,255,.65)}
+#bigSmallGame.big-small-game .flip-timer-panel:after{content:"";position:absolute;left:calc(46% - 6px);top:0;bottom:0;width:12px;pointer-events:none;background:radial-gradient(circle at 50% 0,#f3f4fa 0 5.5px,transparent 6px),radial-gradient(circle at 50% 100%,#f3f4fa 0 5.5px,transparent 6px)}
+#bigSmallGame.big-small-game .bs-tp-left{display:flex;flex-direction:column;align-items:flex-start;min-width:0;padding-right:8px}
+#bigSmallGame.big-small-game .flip-howto{display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.9);border-radius:999px;padding:4px 10px;font-size:10.5px;font-weight:700;color:#fff;background:transparent}
+#bigSmallGame.big-small-game .bs-round-label{font-size:11px;font-weight:800;margin:9px 0 6px;color:#fff}
+#bigSmallGame.big-small-game .bs-mini-results{display:flex;gap:4px;height:20px;align-items:center;margin:0}
+#bigSmallGame.big-small-game .bs-mini-results i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;font-weight:800;color:#fff;border:1.5px solid rgba(255,255,255,.9);box-shadow:inset 0 -2px 3px rgba(0,0,0,.2),inset 0 2px 2px rgba(255,255,255,.55);background:#ff5b61}
+#bigSmallGame.big-small-game .bs-mini-results i.g{background:#18b86a}
+#bigSmallGame.big-small-game .bs-mini-results i.r{background:#ff4a55}
+#bigSmallGame.big-small-game .bs-mini-results i.v-r{background:linear-gradient(135deg,#b65df4 50%,#ff4a55 50%)}
+#bigSmallGame.big-small-game .bs-mini-results i.v-g{background:linear-gradient(135deg,#b65df4 50%,#18b86a 50%)}
+#bigSmallGame.big-small-game .bs-tp-right{display:flex;flex-direction:column;align-items:flex-end;justify-content:flex-start;padding-left:8px;min-width:0}
+#bigSmallGame.big-small-game .flip-time-label{font-size:11px;font-weight:800;color:#fff;margin-bottom:8px}
+#bigSmallGame.big-small-game .flip-digits{display:flex;align-items:center;gap:3px;letter-spacing:0;font-size:inherit;line-height:1}
+#bigSmallGame.big-small-game .flip-digits b{display:grid;place-items:center;width:20px;height:30px;background:#fff;color:#2a2f3d;border-radius:4px;font-size:21px;font-weight:800;box-shadow:inset 0 -2px 0 rgba(0,0,0,.08)}
+#bigSmallGame.big-small-game .flip-digits em{font-style:normal;font-weight:800;color:#fff;font-size:18px;padding:0 1px}
+#bigSmallGame.big-small-game .flip-period{max-width:none;font-size:11px;font-weight:800;color:#fff;text-align:right;margin-top:10px;letter-spacing:.2px;white-space:nowrap}
+#bigSmallGame.big-small-game.bs-closed .flip-digits b{color:#ff3f50}
+
+/* bet card */
+#bigSmallGame.big-small-game .bs-bet-panel{background:#fff;border-radius:16px;padding:12px 10px 10px;margin:0 10px 12px;box-shadow:0 1px 6px rgba(30,40,80,.05)}
+#bigSmallGame.big-small-game .bs-options{display:flex;flex-direction:column;gap:12px}
+#bigSmallGame.big-small-game .bs-color-picks{order:1;gap:10px}
+#bigSmallGame.big-small-game .bs-color-picks button{height:32px;min-height:32px;border-radius:7px;font-size:12.5px;font-weight:800;box-shadow:0 2px 0 rgba(0,0,0,.08)}
+#bigSmallGame.big-small-game .bs-green{background:#14b068!important}
+#bigSmallGame.big-small-game .bs-violet{background:#c05cf6!important}
+#bigSmallGame.big-small-game .bs-red{background:#ff5b61!important}
+#bigSmallGame.big-small-game .bs-numbers{order:2;display:grid;grid-template-columns:repeat(5,1fr);gap:8px 6px;padding:10px 8px;background:#f1f2f9;border-radius:12px;margin:0}
+#bigSmallGame.big-small-game .bs-multiplier-row{order:3}
+#bigSmallGame.big-small-game .bs-size-picks{order:4}
+
+/* glossy chips */
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip{--c1:#ff5b61;--c2:#ff5b61;--num:#ff4f58;position:relative;width:100%;aspect-ratio:1;padding:0;border:0;border-radius:50%;cursor:pointer;color:var(--num);font-size:23px;font-weight:800;line-height:1;
+  background:repeating-conic-gradient(from -9deg,#fff 0 9deg,transparent 9deg 30deg),linear-gradient(135deg,var(--c1) 0 50%,var(--c2) 50% 100%);
+  box-shadow:0 3px 4px rgba(40,40,70,.28),inset 0 -3px 5px rgba(0,0,0,.22),inset 0 2px 3px rgba(255,255,255,.7)}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip.g{--c1:#18b86a;--c2:#18b86a;--num:#14b068}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip.r{--c1:#ff5b61;--c2:#ff5b61;--num:#ff4f58}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip.v-r{--c1:#b65df4;--c2:#ff5b61;--num:#b65df4}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip.v-g{--c1:#b65df4;--c2:#18b86a;--num:#b65df4}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip:before{content:"";position:absolute;inset:15%;border-radius:50%;background:radial-gradient(circle at 50% 35%,#fff 0,#f7f7fa 60%,#e9eaf1 100%);box-shadow:inset 0 2px 4px rgba(0,0,0,.28),0 1px 1px rgba(255,255,255,.6)}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip:after{content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;background:radial-gradient(ellipse 60% 38% at 32% 16%,rgba(255,255,255,.75),rgba(255,255,255,0) 70%)}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip span{position:relative;z-index:2}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip:active{transform:scale(.94)}
+
+/* multiplier + big/small */
+#bigSmallGame.big-small-game .bs-multiplier-row{display:grid;grid-template-columns:1.35fr repeat(6,1fr);gap:5px}
+#bigSmallGame.big-small-game .bs-multiplier-row button{height:28px;padding:0;border-radius:4px;background:#fff;border:1px solid #e3e6ee;color:#5d6578;font-size:10px;font-weight:800}
+#bigSmallGame.big-small-game .bs-multiplier-row .bs-random{border-color:#ff5b61;color:#ff5b61;font-size:11px;font-weight:600}
+#bigSmallGame.big-small-game .bs-multiplier-row button.active{background:#14b068;border-color:#14b068;color:#fff}
+#bigSmallGame.big-small-game .bs-size-picks{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:999px;overflow:hidden}
+#bigSmallGame.big-small-game .bs-size-picks button{height:34px;min-height:34px;border-radius:0;font-size:14px;font-weight:800;color:#fff}
+#bigSmallGame.big-small-game .bs-size-picks .bs-big{background:#ffae4f!important}
+#bigSmallGame.big-small-game .bs-size-picks .bs-small{background:#6ba2f5!important}
+#bigSmallGame.big-small-game .bs-message{margin:6px 2px 0;font-size:10px}
+
+/* history */
+#bigSmallGame.big-small-game .bs-history-section{margin:0 10px}
+#bigSmallGame.big-small-game .bs-history-tabs{display:grid;grid-template-columns:1.2fr 1fr 1.2fr;gap:8px;margin:0 0 10px}
+#bigSmallGame.big-small-game .bs-history-tabs button{height:36px;padding:0 4px;border:0;border-radius:10px;background:#fff;color:#6c7385;font-size:11px;font-weight:600;box-shadow:0 1px 5px rgba(30,40,80,.08)}
+#bigSmallGame.big-small-game .bs-history-tabs button.active{background:linear-gradient(110deg,#ff5b61,#ff8c8c);color:#fff;font-weight:800}
+#bigSmallGame.big-small-game .bs-history-card{background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 5px rgba(30,40,80,.06)}
+#bigSmallGame.big-small-game #bsResults table,#bigSmallGame.big-small-game #bsMyHistory table{font-size:10px}
+#bigSmallGame.big-small-game #bsResults th,#bigSmallGame.big-small-game #bsMyHistory th{background:#ff5b61;color:#fff;font-size:10px;font-weight:800;padding:12px 3px;text-align:center}
+#bigSmallGame.big-small-game #bsResults td,#bigSmallGame.big-small-game #bsMyHistory td{padding:12px 3px;font-size:10px;text-align:center;border-bottom:1px solid #f0f1f6;color:#2a3042}
+#bigSmallGame.big-small-game #bsResults td:first-child{white-space:nowrap;letter-spacing:.1px}
+#bigSmallGame.big-small-game #bsResults th:first-child,#bigSmallGame.big-small-game #bsResults td:first-child{width:46%}
+#bigSmallGame.big-small-game #bsResults th:nth-child(2),#bigSmallGame.big-small-game #bsResults td:nth-child(2){width:15%}
+#bigSmallGame.big-small-game #bsResults th:nth-child(3),#bigSmallGame.big-small-game #bsResults td:nth-child(3){width:22%}
+#bigSmallGame.big-small-game #bsResults th:nth-child(4),#bigSmallGame.big-small-game #bsResults td:nth-child(4){width:17%}
+#bigSmallGame.big-small-game #bsResults td b.bs-n{font-size:18px;font-weight:800}
+#bigSmallGame.big-small-game #bsResults td b.bs-n.r{color:#ff4f58}
+#bigSmallGame.big-small-game #bsResults td b.bs-n.g{color:#14b068}
+#bigSmallGame.big-small-game #bsResults td b.bs-n.v-r,#bigSmallGame.big-small-game #bsResults td b.bs-n.v-g{color:#b65df4}
+#bigSmallGame.big-small-game .bs-dots{white-space:nowrap}
+#bigSmallGame.big-small-game .bs-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 2px;vertical-align:middle}
+#bigSmallGame.big-small-game .bs-dot.r{background:#ff4f58}
+#bigSmallGame.big-small-game .bs-dot.g{background:#14b068}
+#bigSmallGame.big-small-game .bs-dot.v{background:#c05cf6}
+#bigSmallGame.big-small-game #bsMyHistory,#bigSmallGame.big-small-game #bsResults{overflow-x:auto}
+
+/* fixes: let header / timer grow, calmer chip ring */
+#bigSmallGame.big-small-game .flip-wallet-head.bs-head{height:auto;min-height:0;overflow:visible;display:block;padding:8px 10px 12px}
+#bigSmallGame.big-small-game .flip-timer-panel{height:auto;min-height:0;overflow:visible}
+#bigSmallGame.big-small-game #bsResults td{height:auto;white-space:normal}
+#bigSmallGame.big-small-game #bsResults td:first-child{white-space:nowrap}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip{background:repeating-conic-gradient(from -4deg,rgba(255,255,255,.95) 0 8deg,transparent 8deg 45deg),linear-gradient(135deg,var(--c1) 0 50%,var(--c2) 50% 100%)}
+#bigSmallGame.big-small-game .bs-numbers button.bs-chip:before{inset:12%}
+#bigSmallGame.big-small-game .bs-amount-label,#bigSmallGame.big-small-game .bs-bet-title,#bigSmallGame.big-small-game #bsAmount{display:none!important}
