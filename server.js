@@ -1255,7 +1255,8 @@ async function handleApi(req, res, pathname) {
 // ---------- static (whitelist only: never expose server.js / data) ----------
 const STATIC = {
   '/index.html': ['text/html; charset=utf-8', 'no-cache'], '/admin.html': ['text/html; charset=utf-8', 'no-cache'],
-  '/style.css': ['text/css; charset=utf-8', 'no-cache'], '/app.js': ['text/javascript; charset=utf-8', 'no-cache'], '/admin.js': ['text/javascript; charset=utf-8', 'no-cache']
+  '/style.css': ['text/css; charset=utf-8', 'no-cache'], '/app.js': ['text/javascript; charset=utf-8', 'no-cache'], '/admin.js': ['text/javascript; charset=utf-8', 'no-cache'],
+  '/number-balls.png': ['image/png', 'public, max-age=31536000, immutable']
 };
 const server = http.createServer((req, res) => {
   req.ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
