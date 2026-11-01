@@ -1586,3 +1586,109 @@ body.dark-mode #bigSmallGame .bs-modal-amounts button,body.dark-mode #bigSmallGa
 body.dark-mode #bigSmallGame .bs-modal-amounts button.active,body.dark-mode #bigSmallGame .bs-modal-multipliers button.active{background:var(--pick-color)!important;color:#fff!important}
 body.dark-mode #bigSmallGame .bs-modal-quantity input{background:#f5f6fb!important;color:#111827!important}
 body.dark-mode #bigSmallGame .bs-modal-footer button:first-child{background:#f4f4f4!important;color:#758096!important}
+
+/* Final WinGo bottom-sheet sizing: page-width, natural compact height on every screen. */
+#bigSmallGame .bs-modal{
+  align-items:flex-end!important;
+  justify-content:center!important;
+  padding:0!important;
+}
+#bigSmallGame .bs-modal-sheet{
+  box-sizing:border-box!important;
+  width:min(420px,100vw)!important;
+  max-width:100vw!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:calc(100dvh - env(safe-area-inset-top, 0px))!important;
+  flex:0 1 auto!important;
+  margin:0 auto!important;
+  padding:0 0 env(safe-area-inset-bottom)!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  border-radius:18px 18px 0 0!important;
+  animation:bsSheetRise .28s cubic-bezier(.2,.75,.25,1) both!important;
+}
+#bigSmallGame .bs-modal-head{
+  flex:0 0 91px!important;
+  height:91px!important;
+  min-height:91px!important;
+  gap:9px!important;
+  padding:12px 14px 0!important;
+  border-radius:18px 18px 0 0!important;
+  clip-path:polygon(0 0,100% 0,100% 70%,50% 100%,0 70%)!important;
+}
+#bigSmallGame .bs-modal-head strong{font-size:13px!important;line-height:17px!important}
+#bigSmallGame .bs-modal-pick{
+  width:min(76%,270px)!important;
+  height:24px!important;min-height:24px!important;
+  padding:0 8px!important;border-radius:5px!important;
+  font-size:12px!important;line-height:24px!important;
+}
+#bigSmallGame .bs-modal-pick[data-kind="number"]{font-size:12px!important}
+#bigSmallGame .bs-modal-body{
+  flex:0 0 auto!important;
+  min-height:0!important;
+  overflow:visible!important;
+  gap:9px!important;
+  padding:27px 12px 10px!important;
+}
+#bigSmallGame .bs-modal-balance{
+  grid-template-columns:minmax(64px,1fr) auto!important;
+  gap:6px!important;min-height:25px!important;
+}
+#bigSmallGame .bs-modal-balance>span,#bigSmallGame .bs-modal-quantity>span{
+  font-size:14px!important;line-height:19px!important;white-space:nowrap!important;
+}
+#bigSmallGame .bs-modal-amounts{
+  width:auto!important;max-width:170px!important;
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important;
+}
+#bigSmallGame .bs-modal-amounts button{
+  height:25px!important;min-height:25px!important;
+  padding:0 2px!important;border-radius:5px!important;font-size:11px!important;
+}
+#bigSmallGame .bs-modal-quantity{gap:6px!important;min-height:27px!important}
+#bigSmallGame .bs-modal-quantity>div{gap:7px!important}
+#bigSmallGame .bs-modal-quantity button{
+  width:22px!important;min-width:22px!important;height:27px!important;min-height:27px!important;
+  border-radius:6px!important;font-size:15px!important;
+}
+#bigSmallGame .bs-modal-quantity input{
+  width:82px!important;height:27px!important;min-height:27px!important;font-size:13px!important;
+}
+#bigSmallGame .bs-modal-multipliers{
+  width:100%!important;max-width:none!important;
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:5px!important;
+}
+#bigSmallGame .bs-modal-multipliers button{
+  height:26px!important;min-height:26px!important;
+  padding:0 1px!important;border-radius:5px!important;font-size:11px!important;
+}
+#bigSmallGame .bs-modal-agree{gap:6px!important;font-size:11px!important;line-height:16px!important}
+#bigSmallGame .bs-modal-agree input{width:17px!important;height:17px!important}
+#bigSmallGame .bs-modal-agree span{font-size:11px!important}
+#bigSmallGame #bsModalError{font-size:10px!important;line-height:12px!important}
+#bigSmallGame .bs-modal-footer{
+  flex:0 0 35px!important;height:35px!important;min-height:35px!important;
+  grid-template-columns:1fr 2fr!important;
+}
+#bigSmallGame .bs-modal-footer button{
+  height:35px!important;min-height:35px!important;
+  padding:0 5px!important;font-size:12px!important;line-height:35px!important;
+}
+#bigSmallGame .bs-modal-footer button:first-child,
+#bigSmallGame .bs-modal-footer button:last-child{border-radius:0!important}
+@media(max-width:380px){
+  #bigSmallGame .bs-modal-sheet{width:100vw!important}
+  #bigSmallGame .bs-modal-body{padding-left:11px!important;padding-right:11px!important;gap:8px!important}
+  #bigSmallGame .bs-modal-amounts{max-width:168px!important;gap:3px!important}
+  #bigSmallGame .bs-modal-quantity>div{gap:5px!important}
+  #bigSmallGame .bs-modal-quantity input{width:clamp(66px,22vw,82px)!important}
+  #bigSmallGame .bs-modal-multipliers{gap:4px!important}
+  #bigSmallGame .bs-modal-multipliers button{font-size:10px!important}
+}
+@media(min-width:600px){
+  #bigSmallGame .bs-modal-sheet{width:min(420px,100vw)!important}
+}
