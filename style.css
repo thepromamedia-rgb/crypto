@@ -464,3 +464,78 @@
 #bigSmallGame .bs-modal-footer button:disabled{opacity:.6}
 body.bs-modal-open{overflow:hidden}
 @media(max-width:360px){#bigSmallGame .bs-modal-body{padding:12px}#bigSmallGame .bs-modal-amounts,#bigSmallGame .bs-modal-multipliers{gap:4px}#bigSmallGame .bs-modal-amounts button,#bigSmallGame .bs-modal-multipliers button{font-size:10px;padding:9px 1px}}
+
+/* WinGo reference layout: compact glossy mobile card arrangement */
+#bigSmallGame.big-small-game{gap:7px;padding:0;max-width:420px;margin:0 auto;color:#26324a}
+#bigSmallGame>.game-back{display:none!important}
+#bigSmallGame .flip-wallet-head{height:108px;box-sizing:border-box;padding:0 16px 12px;gap:0;display:flex;flex-direction:column;justify-content:flex-end;border-radius:15px;background:linear-gradient(120deg,#ff6269,#ff8d86);position:relative;overflow:hidden}
+#bigSmallGame .flip-wallet-balance{position:absolute;left:0;right:0;top:0;height:63px;min-height:0;box-sizing:border-box;padding:10px 16px;background:linear-gradient(110deg,#fff,#f8f8f8);border-radius:15px;gap:8px;align-items:center}
+#bigSmallGame .flip-wallet-balance strong{font-size:13px;color:#111827;font-weight:800}
+#bigSmallGame .flip-wallet-balance small{font-size:9px;color:#27344b;margin-top:3px}
+#bigSmallGame .flip-wallet-icon{font-size:13px;color:#ff5963}
+#bigSmallGame .flip-refresh{margin-left:auto;color:#c7cbd2;font-size:16px}
+#bigSmallGame .flip-wallet-actions{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:39px;padding:0;}
+#bigSmallGame .flip-wallet-actions button{height:28px;min-height:28px;border-radius:18px;font-size:11px;font-weight:800}
+#bigSmallGame .flip-withdraw{background:#ff5260!important}
+#bigSmallGame .flip-deposit{background:#12b96b!important}
+#bigSmallGame .flip-notice{height:31px;min-height:31px;box-sizing:border-box;padding:4px 8px;border-radius:18px;background:#fff;border:1px solid #ffd7da;display:flex;align-items:center;gap:6px;font-size:9px;color:#676b78;white-space:nowrap;overflow:hidden}
+#bigSmallGame .flip-notice>span:nth-child(2){overflow:hidden;text-overflow:clip;white-space:normal;line-height:1.25}
+#bigSmallGame .flip-notice>span:first-child{font-size:12px;color:#ff6269;flex:0 0 auto}
+#bigSmallGame .bs-notice-detail{padding:4px 8px;font-size:9px;border:0;background:#ff5b65;border-radius:20px}
+#bigSmallGame .bs-duration-strip{height:73px;min-height:73px;box-sizing:border-box;margin:0;padding:5px 0 2px;background:#fff;border-radius:12px;display:grid;grid-template-columns:repeat(4,1fr);align-items:center;position:relative;box-shadow:0 2px 8px #202b4308}
+#bigSmallGame .bs-duration-strip:after{bottom:-5px;width:12px;height:7px}
+#bigSmallGame button.bs-duration{height:64px;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0}
+#bigSmallGame .bs-duration>span{width:29px;height:29px;display:grid;place-items:center;border-radius:50%;background:radial-gradient(circle at 35% 25%,#fff 0 18%,#e7e9ed 45%,#c7cbd1 75%,#f7f8fa 100%);border:2px solid #e1e3e7;color:#9ca3af;font-size:13px;box-shadow:inset 0 1px 3px #fff}
+#bigSmallGame .bs-duration.active>span{background:radial-gradient(circle at 35% 25%,#fff 0 14%,#ff9aa0 34%,#ff4d5c 72%,#d92d43 100%);border-color:#ff6873;color:#fff;box-shadow:0 0 0 2px #ffd8db,inset 0 1px 4px #fff8}
+#bigSmallGame .bs-duration small{font-size:8px;line-height:1.05;color:#596477}
+#bigSmallGame .bs-duration.active small{color:#ff4f5d}
+#bigSmallGame .flip-timer-panel{height:76px;min-height:76px;box-sizing:border-box;padding:8px 10px;border-radius:10px;background:linear-gradient(110deg,#ff666c,#ff4b60);box-shadow:none;position:relative;overflow:visible}
+#bigSmallGame .flip-timer-panel:before,#bigSmallGame .flip-timer-panel:after{content:"";position:absolute;left:calc(50% - 6px);width:12px;height:7px;background:#f5f6fb;border-radius:0 0 8px 8px}
+#bigSmallGame .flip-timer-panel:before{top:-1px}
+#bigSmallGame .flip-timer-panel:after{bottom:-1px;transform:rotate(180deg)}
+#bigSmallGame .flip-timer-top{margin:0 0 5px}
+#bigSmallGame .flip-howto{padding:3px 9px;border-radius:14px;font-size:9px}
+#bigSmallGame .flip-time-label{font-size:9px}
+#bigSmallGame .bs-timer-row{align-items:center}
+#bigSmallGame .bs-round-label{font-size:9px;font-weight:700;color:#fff;margin-bottom:3px}
+#bigSmallGame .bs-mini-results{display:flex;gap:3px;height:15px;align-items:center;margin-bottom:1px}
+#bigSmallGame .bs-mini-results i{width:14px;height:14px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:10px;color:#fff;background:linear-gradient(145deg,#fff,#ff6672);border:1px solid #fff8;box-shadow:0 1px 3px #a9233544}
+#bigSmallGame .bs-mini-results i:nth-child(even){background:linear-gradient(145deg,#fff,#23c783);color:#fff}
+#bigSmallGame .flip-digits{font-size:22px;line-height:1;font-weight:900;letter-spacing:3px;color:#fff}
+#bigSmallGame .bs-timer-right{align-self:flex-end;max-width:58%;padding-bottom:1px}
+#bigSmallGame .flip-period{max-width:none;font-size:9px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bigSmallGame .bs-bet-panel{padding:3px 6px 0;background:transparent;border:0;box-shadow:none;border-radius:0}
+#bigSmallGame .bs-options{gap:7px;margin:0}
+#bigSmallGame .bs-color-picks{order:1;gap:12px}
+#bigSmallGame .bs-color-picks button{height:33px;min-height:33px;border-radius:7px;font-size:11px}
+#bigSmallGame .bs-numbers{order:2;gap:6px;margin:0;padding:8px 7px;background:#f3f4fa;border-radius:10px}
+#bigSmallGame .bs-numbers button{width:100%;aspect-ratio:1;border-radius:50%;font-size:22px;font-weight:800;background:radial-gradient(circle at 35% 23%,#fff 0 35%,#f6f7fa 70%,#e9edf4 100%);border:1px solid #e4e7ef;box-shadow:inset 0 -4px 0 #ff5963,0 1px 2px #1d2c4810;position:relative}
+#bigSmallGame .bs-numbers button:nth-child(1),#bigSmallGame .bs-numbers button:nth-child(6){color:#b65df4;box-shadow:inset 0 -4px 0 #b65df4,0 1px 2px #1d2c4810}
+#bigSmallGame .bs-numbers button:nth-child(2),#bigSmallGame .bs-numbers button:nth-child(4),#bigSmallGame .bs-numbers button:nth-child(8),#bigSmallGame .bs-numbers button:nth-child(10){color:#20b879;box-shadow:inset 0 -4px 0 #20b879,0 1px 2px #1d2c4810}
+#bigSmallGame .bs-numbers button:nth-child(3),#bigSmallGame .bs-numbers button:nth-child(5),#bigSmallGame .bs-numbers button:nth-child(7),#bigSmallGame .bs-numbers button:nth-child(9){color:#ff5963;box-shadow:inset 0 -4px 0 #ff5963,0 1px 2px #1d2c4810}
+#bigSmallGame .bs-multiplier-row{order:3;grid-template-columns:1.25fr repeat(6,minmax(0,1fr));gap:4px}
+#bigSmallGame .bs-multiplier-row button{height:27px;padding:3px 1px;font-size:9px;border-radius:7px}
+#bigSmallGame .bs-size-picks{order:4;gap:0;border-radius:20px;overflow:hidden}
+#bigSmallGame .bs-size-picks button{height:32px;min-height:32px;font-size:12px;border-radius:0}
+#bigSmallGame .bs-message{margin:2px 2px 0}
+#bigSmallGame .bs-history-section{margin:0}
+#bigSmallGame .bs-history-tabs{display:grid;grid-template-columns:1.15fr 1fr 1.15fr;gap:7px;margin:0 0 10px}
+#bigSmallGame .bs-history-tabs button{height:30px;padding:5px 3px;font-size:9px;white-space:nowrap;border-radius:7px;background:#fff;color:#697386;box-shadow:0 2px 4px #1c2b4615;overflow:hidden}
+#bigSmallGame .bs-history-tabs button.active{background:linear-gradient(110deg,#ff5964,#ff9291);color:#fff}
+#bigSmallGame .bs-history-card{padding:0;border-radius:5px;overflow:hidden;background:#fff}
+#bigSmallGame #bsResults table,#bigSmallGame #bsMyHistory table{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:9px}
+#bigSmallGame #bsResults th,#bigSmallGame #bsMyHistory th{height:32px;padding:5px 2px;background:#ff5963;color:#fff;font-size:8px}
+#bigSmallGame #bsResults td,#bigSmallGame #bsMyHistory td{height:31px;padding:5px 2px;font-size:9px;text-align:center;border-bottom:1px solid #f0f1f5;white-space:nowrap}
+#bigSmallGame #bsResults td:nth-child(2) b{font-size:17px;color:#ff5963}
+#bigSmallGame #bsResults tr:nth-child(2n) td:nth-child(2) b{color:#20b879}
+#bigSmallGame .bs-color-dot{width:8px;height:8px;margin:0 2px}
+@media(max-width:480px){
+ body:has(#bigSmallGame:not([hidden])) .topbar{display:none!important}
+ body:has(#bigSmallGame:not([hidden])) main{padding:7px 14px 16px!important;margin:0 auto!important}
+ body:has(#bigSmallGame:not([hidden])) .bottom-nav,body:has(#bigSmallGame:not([hidden])) #siteFooter{display:none!important}
+ body:has(#bigSmallGame:not([hidden])){padding-bottom:0!important}
+ #bigSmallGame.big-small-game{width:100%;max-width:420px;margin:0 auto;gap:7px}
+ #bigSmallGame .bs-numbers{gap:6px;padding:8px 7px}
+}
+@media(max-width:350px){#bigSmallGame .bs-color-picks{gap:12px}#bigSmallGame .bs-numbers button{font-size:20px}#bigSmallGame .bs-multiplier-row{gap:3px}}
+@media(max-width:350px){body:has(#bigSmallGame:not([hidden])) main{padding-left:14px!important;padding-right:42px!important}}
