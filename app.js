@@ -2,7 +2,13 @@
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
+const savedLanguage = (() => { try { return localStorage.getItem('cryptoBridgeLanguage') || 'en'; } catch { return 'en'; } })();
+const state = { language: savedLanguage, page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
+const UI_HI = {
+  'Home':'होम','Quotes':'कॉइन्स','Team':'टीम','Games':'गेम्स','Assets':'एसेट्स','Login':'लॉगिन','Register':'रजिस्टर','Login / Register':'लॉगिन / रजिस्टर','Create account':'खाता बनाएं','Full name':'पूरा नाम','Email':'ईमेल','Mobile (optional)':'मोबाइल (वैकल्पिक)','Password':'पासवर्ड','Invite code (optional)':'इनवाइट कोड (वैकल्पिक)','Already have an account? Login':'पहले से खाता है? लॉगिन करें','New here? Create an account':'नए हैं? खाता बनाएं','Forgot password?':'पासवर्ड भूल गए?','Minimum deposit':'न्यूनतम जमा','Minimum withdrawal':'न्यूनतम निकासी','Deposit':'जमा करें','Withdrawal':'निकासी','Recharge':'रिचार्ज','Wallet':'वॉलेट','Holdings':'होल्डिंग्स','History':'इतिहास','Available balance':'उपलब्ध बैलेंस','Market value':'मार्केट वैल्यू','Buy':'खरीदें','Sell':'बेचें','Search':'खोजें','Save settings':'सेटिंग सेव करें','Settings':'सेटिंग्स','Contact support':'सपोर्ट से संपर्क करें','Recent Winners':'हाल के विजेता','DEMO':'डेमो','Latest':'नवीनतम','Candles':'कैंडल','Line':'लाइन','My Bets':'मेरे दांव','My History':'मेरा इतिहास','My assets':'मेरे एसेट्स','Your holdings':'आपकी होल्डिंग्स','No coins yet. Tap any coin in Quotes to buy.':'अभी कोई कॉइन नहीं है। खरीदने के लिए Quotes में कॉइन चुनें।','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Account':'खाता','ACCOUNT':'खाता','WALLET':'वॉलेट','Available':'उपलब्ध','Amount':'राशि','Amount (₹)':'राशि (₹)','Request withdrawal':'निकासी का अनुरोध करें','Request deposit':'जमा अनुरोध भेजें','Submit':'जमा करें','Confirm':'पुष्टि करें','Cancel':'रद्द करें','Back to assets':'एसेट्स पर वापस जाएं','Customer support':'ग्राहक सहायता','Help Center':'सहायता केंद्र','Service':'सहायता','Price':'कीमत','Change':'बदलाव','24h Volume':'24 घंटे का वॉल्यूम','Portfolio':'पोर्टफोलियो','Total balance':'कुल बैलेंस','Transaction history':'लेन-देन का इतिहास','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास'
+};
+function applyLanguage(root=document){ const lang=state.language; if(lang==='en') return; const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[]; while(w.nextNode()) nodes.push(w.currentNode); nodes.forEach(n=>{const t=n.nodeValue.trim(); if(UI_HI[t]) n.nodeValue=n.nodeValue.replace(t,UI_HI[t]);}); }
+function initLanguage(){const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>{state.language=sel.value;try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};applyLanguage(document.querySelector('#appMain'));};} if(state.language==='hi'){const target=document.querySelector('#appMain');if(target){applyLanguage(target);new MutationObserver(()=>applyLanguage(target)).observe(target,{childList:true,subtree:true,characterData:true});}}}
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -284,7 +290,7 @@ function renderHome() {
 
 function authPage() {
   const reg = state.authMode === 'register', ref = new URLSearchParams(location.search).get('ref') || '';
-  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><div class="auth-language"><label for="authLanguage">Language / भाषा</label><select id="authLanguage"><option value="en">English</option><option value="hi">हिन्दी</option></select></div><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
   <form id="authForm" class="demo-form" autocomplete="on">
     ${reg ? '<label for="aName">Full name</label><input id="aName" autocomplete="name" required maxlength="60">' : ''}
     <label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" required>
@@ -297,6 +303,7 @@ function authPage() {
     ${!reg ? '<button class="link-btn" type="button" id="forgotPassword">Forgot password?</button>' : ''}
     ${supportButtonsHtml()}
   </form>`;
+  if ($('#authLanguage')) { $('#authLanguage').value=state.language; $('#authLanguage').onchange=()=>{state.language=$('#authLanguage').value;try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};authPage();}; }
   $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
   if (!reg && $('#forgotPassword')) $('#forgotPassword').onclick = forgotPasswordPage;
   $('#authForm').onsubmit = async e => {
@@ -470,7 +477,7 @@ function drawChart() {
       if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
       if (drag.moved) {
         // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
-        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + Math.round(dx / Math.max(1, pw) * view.count * -1)));
+        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + (dx / Math.max(1, pw) * view.count * -1)));
         if (svg) svg.style.transform = `translate3d(${dx}px,0,0)`;
       }
       return;
@@ -569,7 +576,7 @@ async function renderPage(page, quiet) {
   else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
   else if (page === 'Profile') {
     const u = state.me; if (!u) return needLogin('Profile');
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p><p class="fine-print">Account UID: <code>${esc(u.uid || u.id)}</code></p></section>
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><div class="auth-language"><label for="authLanguage">Language / भाषा</label><select id="authLanguage"><option value="en">English</option><option value="hi">हिन्दी</option></select></div><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p><p class="fine-print">Account UID: <code>${esc(u.uid || u.id)}</code></p></section>
     ${u.role === 'admin' ? '<article class="content-card"><h2>Admin</h2><p class="fine-print">You are signed in as an administrator.</p><a class="primary-btn" style="display:block;text-align:center;text-decoration:none" href="/admin">Open Admin Panel</a></article>' : ''}
     <form id="pwForm" class="demo-form"><h2 style="margin-top:0;font-size:16px">Change password</h2><label for="pwC">Current password</label>${pwField('pwC', 'current-password', 'required')}<label for="pwN">New password (min 8)</label>${pwField('pwN', 'new-password', 'minlength="8" required')}<p class="msg-err" id="pwErr"></p><button class="primary-btn" type="submit">Update password</button></form>
     <div class="demo-form" style="margin-top:14px"><button class="secondary-btn" id="logout" type="button">Logout</button></div>`;
@@ -898,3 +905,6 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
   window.addEventListener('pagehide', () => { clearInterval(winningActivityTimer); clearTimeout(dailyEarningsTimer); }, { once: true });
   setInterval(syncWallet, 15000);
 })();
+
+// Persisted language preference is shared by the public pages on this device.
+document.addEventListener('DOMContentLoaded', initLanguage);

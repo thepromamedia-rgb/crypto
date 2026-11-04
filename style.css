@@ -1814,3 +1814,16 @@ body.dark-mode #bigSmallGame .bs-modal-footer button:first-child{background:#f4f
 body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,body.dark-mode .wl-chips button{background:#182235}body.dark-mode .wl-chips button.on{background:var(--blue)}body.dark-mode .wl-menu span,body.dark-mode .wl-tiles i{background:#24324d}body.dark-mode .wl-kpi{background:#101725}
 @media(min-width:760px){#appMain:has(.wl-hero){max-width:620px}}
 @media(max-width:360px){.wl-quick button{font-size:10px}.wl-grid{grid-template-columns:1fr}}
+
+/* Refined demo leaderboard podium */
+.earnings-podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:end;gap:12px;padding:20px 12px 14px;background:radial-gradient(ellipse at 50% 0%,rgba(102,145,255,.13),transparent 68%);border-radius:16px}
+.podium-place{position:relative;display:flex;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:18px 8px 14px;border:1px solid rgba(132,154,190,.24);border-radius:15px;background:linear-gradient(155deg,#fff,#f2f6ff);box-shadow:0 8px 22px rgba(27,52,92,.08);text-align:center;animation:podiumRise .55s ease both}
+.podium-place.rank-1{min-height:150px;transform:translateY(-10px);border-color:#e9c76b;background:linear-gradient(155deg,#fff9df,#fff 70%);box-shadow:0 12px 28px rgba(183,142,44,.16)}
+.podium-place.rank-2{min-height:126px}.podium-place.rank-3{min-height:112px}
+.podium-medal{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#fff;box-shadow:0 3px 12px rgba(30,50,80,.1);font-size:25px}
+.podium-place b{font-size:clamp(11px,2vw,14px);color:#263b5c;overflow-wrap:anywhere}.podium-place strong{font-size:clamp(13px,2.3vw,19px);color:#183b70;font-variant-numeric:tabular-nums}
+.podium-place.rank-1 strong{color:#9a6a09}
+.earnings-list>div{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid #edf0f6}.earnings-list>div:last-child{border-bottom:0}.earnings-list>div>b{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#f0f4fb;color:#536985}.earnings-list>div>span{overflow:hidden;text-overflow:ellipsis}.earnings-list>div>strong{font-variant-numeric:tabular-nums;color:#29466f}
+@keyframes podiumRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.lang-wrap select,.auth-language select{border:1px solid #d7dfeb;border-radius:8px;padding:7px 9px;background:#fff;color:#253b5b;font-weight:650}.auth-language{display:flex;align-items:center;gap:8px;margin-top:10px}.auth-language label{font-size:12px;color:#718096}
+@media(max-width:480px){.earnings-podium{gap:6px;padding:14px 4px}.podium-place{padding:13px 4px 10px}.podium-place.rank-1{min-height:130px}.podium-place.rank-2{min-height:110px}.podium-place.rank-3{min-height:98px}.podium-medal{width:34px;height:34px;font-size:21px}}
