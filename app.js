@@ -169,26 +169,41 @@ function makeWinningDemoBatch() {
   const games = ['WinGo', 'Coin Flip', 'Head/Tail', 'BTC', 'ETH', 'SOL'];
   const aliases = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana','Reyansh','Kiara'];
   const countries = [
-    {flag:'🇮🇳',name:'India',currency:'INR',locale:'en-IN'},
-    {flag:'🇸🇬',name:'Singapore',currency:'SGD',locale:'en-SG'},
-    {flag:'🇲🇾',name:'Malaysia',currency:'MYR',locale:'en-MY'},
-    {flag:'🇵🇭',name:'Philippines',currency:'PHP',locale:'en-PH'},
-    {flag:'🇹🇭',name:'Thailand',currency:'THB',locale:'en-TH'},
-    {flag:'🇺🇸',name:'United States',currency:'USD',locale:'en-US'},
-    {flag:'🇬🇧',name:'United Kingdom',currency:'GBP',locale:'en-GB'}
+    {flag:'🇮🇳',code:'IN',name:'India',currency:'INR',locale:'en-IN'},
+    {flag:'🇸🇬',code:'SG',name:'Singapore',currency:'SGD',locale:'en-SG'},
+    {flag:'🇲🇾',code:'MY',name:'Malaysia',currency:'MYR',locale:'en-MY'},
+    {flag:'🇵🇭',code:'PH',name:'Philippines',currency:'PHP',locale:'en-PH'},
+    {flag:'🇹🇭',code:'TH',name:'Thailand',currency:'THB',locale:'en-TH'},
+    {flag:'🇺🇸',code:'US',name:'United States',currency:'USD',locale:'en-US'},
+    {flag:'🇬🇧',code:'GB',name:'United Kingdom',currency:'GBP',locale:'en-GB'}
   ];
   const country = countries[Math.floor(Math.random()*countries.length)];
   const uid = String(10000 + Math.floor(Math.random()*89999));
   const ts = Date.now();
   const amount = Math.round((2000 + Math.random()*98000)*100)/100;
   const formatted = new Intl.NumberFormat(country.locale,{style:'currency',currency:country.currency,maximumFractionDigits:2}).format(amount);
-  winningDemoRows.unshift({ game: games[Math.floor(Math.random()*games.length)], name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount, formatted, currency:country.currency, country:country.flag, countryName:country.name, winType:['Big Win','Lucky Win','Bonus Win'][Math.floor(Math.random()*3)], mode:['Classic','Quick','Turbo'][Math.floor(Math.random()*3)], ts, key: `${ts}-${Math.random()}` });
+  winningDemoRows.unshift({ game: games[Math.floor(Math.random()*games.length)], name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2),  amount, formatted, currency:country.currency, country:country.flag, countryCode:country.code, countryName:country.name, winType:['Big Win','Lucky Win','Bonus Win'][Math.floor(Math.random()*3)], mode:['Classic','Quick','Turbo'][Math.floor(Math.random()*3)], ts, key: `${ts}-${Math.random()}` });
   winningDemoRows = winningDemoRows.slice(0, 10);
   const host = $('#winningDemoRows');
-  if (host) host.innerHTML = winningDemoRows.map((r,i)=>`<div class="winning-demo-row ${i===0?'is-new':''}"><span class="winning-country" title="${r.countryName} · ${r.currency}">${r.country}</span><span class="winning-person"><b>${esc(r.name)} ${esc(r.uid)}</b><small>${esc(r.game)} · ${esc(r.currency)}</small></span><strong class="winning-win">+${esc(r.formatted)}</strong><span class="winning-type">${esc(r.winType)}</span><span class="winning-mode">${esc(r.mode)}</span><time>${new Date(r.ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})}</time></div>`).join('');
+  if (host) host.innerHTML = winningDemoRows.map((r,i)=>`<div class="kiss-row ${i===0?'is-new':''}"><span class="kiss-country" title="${esc(r.countryName)} · ${esc(r.currency)}"><span class="kiss-flag">${r.country}</span><b>${esc(r.countryCode)}</b></span><span class="kiss-user">${esc(r.name.slice(0,2).toLowerCase())}***${esc(r.uid.slice(-2))}</span><span class="kiss-game"><i>${esc(r.game)}</i></span><strong class="kiss-bonus">${esc(r.formatted)}</strong><span class="kiss-type"><i>${esc(r.winType)}</i></span><span class="kiss-mode">${esc(r.mode)}</span><time>${gmtStamp(r.ts)}</time></div>`).join('');
   const updated=$('#winningUpdated'), next=$('#winningNext');
-  if(updated) updated.textContent=new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})+' IST';
-  if(next) next.textContent=new Date(ts+2000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})+' IST';
+  if(updated) updated.textContent=gmtStamp(ts);
+  if(next) next.textContent=gmtStamp(ts+2000);
+}
+function gmtStamp(ts){
+  const d=new Date(ts), p=n=>String(n).padStart(2,'0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+function bindWinnersActions(){
+  const card=$('#kissBoard'); if(!card) return;
+  const share=$('#kissShare'), full=$('#kissFull');
+  if(share) share.onclick=async()=>{
+    const data={title:'Recent Winners',text:'Recent Winners',url:location.href};
+    try{ if(navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(location.href); showToast('Link copied.'); } }catch{}
+  };
+  if(full) full.onclick=()=>{
+    try{ if(document.fullscreenElement) document.exitFullscreen(); else if(card.requestFullscreen) card.requestFullscreen(); }catch{}
+  };
 }
 function startWinningDemo() {
   // Keep a single timer and do not animate a detached/hidden Home page.
@@ -259,10 +274,11 @@ function renderHome() {
     <section class="market-cards" id="marketCards">${marketCards()}</section>
     <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
     <section class="asset-list" id="assetList">${renderAssetRows()}</section>
-    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Recent Winners · Winning Information</h2></div><span class="activity-demo-tag">DEMO / SIMULATED</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> SIMULATED ACTIVITY ONLY — not verified payouts and not real financial transactions</div><div class="winning-demo-meta"><span>Last Updated <b id="winningUpdated">—</b></span><span>Next Update <b id="winningNext">—</b></span><span>Time Zone <b>Asia/Kolkata (IST)</b></span></div><div class="winning-demo-table-head"><span>Country</span><span>User / Game</span><span>Bonus Amount</span><span>Win Type</span><span>Last Mode</span><span>Date &amp; Time</span></div><div id="winningDemoRows" aria-live="polite"></div></article>
+    <article class="kiss-board" id="kissBoard"><div class="kiss-tools"><button type="button" id="kissShare" aria-label="Share" title="Share"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button><button type="button" id="kissFull" aria-label="Fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div><div class="kiss-logo"><span class="kiss-logo-mark">B</span><span class="kiss-logo-text">Crypto Bridge</span></div><h2 class="kiss-title">Recent Winners</h2><div class="kiss-info"><div><small>Last Updated</small><b id="winningUpdated">—</b></div><div><small>Next Update</small><b id="winningNext">—</b></div><div><small>Time Zone</small><b>GMT</b></div></div><div class="kiss-scroll"><div class="kiss-head"><span>Country</span><span>Username</span><span>Game</span><span>Bonus</span><span>Type</span><span>Last Mode</span><span>Date Time</span></div><div id="winningDemoRows" aria-live="polite"></div></div><div class="kiss-foot"><span>Currency: INR · SGD · MYR · PHP · THB · USD · GBP</span><span>Time Zone: GMT (UTC+0)</span></div><p class="kiss-demo-note">DEMO / SIMULATED — display-only sample activity, not verified payouts or real transactions.</p></article>
     ${demoEarningsChart()}
     <section class="section-head"><div><span class="eyebrow">PLAY SAFELY</span><h2>18+ Rules &amp; Responsible Play</h2></div></section><article class="responsible-card"><p><b>18+ only.</b> Participation is restricted to adults aged 18 or above.</p><ul><li>Provide accurate account information.</li><li>Read game rules and winning conditions before participating.</li><li>There are no guaranteed winnings.</li><li>Never risk money you cannot afford to lose.</li><li>Follow all applicable local laws and regulations.</li><li>Contact Support for account-related issues.</li></ul><p class="responsible-foot">Set limits, take breaks, and stop playing if it no longer feels recreational.</p></article>`;
   startWinningDemo();
+  bindWinnersActions();
   scheduleDailyLeaderboardRefresh();
 }
 
