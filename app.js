@@ -5,10 +5,33 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const savedLanguage = (() => { try { return localStorage.getItem('cryptoBridgeLanguage') || 'en'; } catch { return 'en'; } })();
 const state = { language: savedLanguage, page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
 const UI_HI = {
-  'Home':'होम','Quotes':'कॉइन्स','Team':'टीम','Games':'गेम्स','Assets':'एसेट्स','Login':'लॉगिन','Register':'रजिस्टर','Login / Register':'लॉगिन / रजिस्टर','Create account':'खाता बनाएं','Full name':'पूरा नाम','Email':'ईमेल','Mobile (optional)':'मोबाइल (वैकल्पिक)','Password':'पासवर्ड','Invite code (optional)':'इनवाइट कोड (वैकल्पिक)','Already have an account? Login':'पहले से खाता है? लॉगिन करें','New here? Create an account':'नए हैं? खाता बनाएं','Forgot password?':'पासवर्ड भूल गए?','Minimum deposit':'न्यूनतम जमा','Minimum withdrawal':'न्यूनतम निकासी','Deposit':'जमा करें','Withdrawal':'निकासी','Recharge':'रिचार्ज','Wallet':'वॉलेट','Holdings':'होल्डिंग्स','History':'इतिहास','Available balance':'उपलब्ध बैलेंस','Market value':'मार्केट वैल्यू','Buy':'खरीदें','Sell':'बेचें','Search':'खोजें','Save settings':'सेटिंग सेव करें','Settings':'सेटिंग्स','Contact support':'सपोर्ट से संपर्क करें','Recent Winners':'हाल के विजेता','DEMO':'डेमो','Latest':'नवीनतम','Candles':'कैंडल','Line':'लाइन','My Bets':'मेरे दांव','My History':'मेरा इतिहास','My assets':'मेरे एसेट्स','Your holdings':'आपकी होल्डिंग्स','No coins yet. Tap any coin in Quotes to buy.':'अभी कोई कॉइन नहीं है। खरीदने के लिए Quotes में कॉइन चुनें।','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Account':'खाता','ACCOUNT':'खाता','WALLET':'वॉलेट','Available':'उपलब्ध','Amount':'राशि','Amount (₹)':'राशि (₹)','Request withdrawal':'निकासी का अनुरोध करें','Request deposit':'जमा अनुरोध भेजें','Submit':'जमा करें','Confirm':'पुष्टि करें','Cancel':'रद्द करें','Back to assets':'एसेट्स पर वापस जाएं','Customer support':'ग्राहक सहायता','Help Center':'सहायता केंद्र','Service':'सहायता','Price':'कीमत','Change':'बदलाव','24h Volume':'24 घंटे का वॉल्यूम','Portfolio':'पोर्टफोलियो','Total balance':'कुल बैलेंस','Transaction history':'लेन-देन का इतिहास','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास'
+  'Home':'होम','Quotes':'कॉइन्स','Team':'टीम','Games':'गेम्स','Assets':'एसेट्स','Login':'लॉगिन','Register':'रजिस्टर','Login / Register':'लॉगिन / रजिस्टर','Create account':'खाता बनाएं','Full name':'पूरा नाम','Email':'ईमेल','Mobile (optional)':'मोबाइल (वैकल्पिक)','Password':'पासवर्ड','Invite code (optional)':'इनवाइट कोड (वैकल्पिक)','Already have an account? Login':'पहले से खाता है? लॉगिन करें','New here? Create an account':'नए हैं? खाता बनाएं','Forgot password?':'पासवर्ड भूल गए?','Minimum deposit':'न्यूनतम जमा','Minimum withdrawal':'न्यूनतम निकासी','Deposit':'जमा करें','Withdrawal':'निकासी','Recharge':'रिचार्ज','Wallet':'वॉलेट','Holdings':'होल्डिंग्स','History':'इतिहास','Available balance':'उपलब्ध बैलेंस','Market value':'मार्केट वैल्यू','Buy':'खरीदें','Sell':'बेचें','Search':'खोजें','Save settings':'सेटिंग सेव करें','Settings':'सेटिंग्स','Contact support':'सपोर्ट से संपर्क करें','Recent Winners':'हाल के विजेता','DEMO':'डेमो','Latest':'नवीनतम','Candles':'कैंडल','Line':'लाइन','My Bets':'मेरे दांव','My History':'मेरा इतिहास','My assets':'मेरे एसेट्स','Your holdings':'आपकी होल्डिंग्स','No coins yet. Tap any coin in Quotes to buy.':'अभी कोई कॉइन नहीं है। खरीदने के लिए Quotes में कॉइन चुनें।','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Account':'खाता','ACCOUNT':'खाता','WALLET':'वॉलेट','Available':'उपलब्ध','Amount':'राशि','Amount (₹)':'राशि (₹)','Request withdrawal':'निकासी का अनुरोध करें','Request deposit':'जमा अनुरोध भेजें','Submit':'जमा करें','Confirm':'पुष्टि करें','Cancel':'रद्द करें','Back to assets':'एसेट्स पर वापस जाएं','Customer support':'ग्राहक सहायता','Help Center':'सहायता केंद्र','Service':'सहायता','Price':'कीमत','Change':'बदलाव','24h Volume':'24 घंटे का वॉल्यूम','Portfolio':'पोर्टफोलियो','Total balance':'कुल बैलेंस','Transaction history':'लेन-देन का इतिहास','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास','Explore digital markets':'डिजिटल मार्केट देखें','Live digital asset prices, updated every 20 seconds.':'डिजिटल एसेट की कीमतें हर 20 सेकंड में अपडेट होती हैं।','Open wallet':'वॉलेट खोलें','Login to your Crypto Bridge wallet.':'अपने Crypto Bridge वॉलेट में लॉगिन करें।','Register to deposit, withdraw and track your wallet.':'जमा, निकासी और वॉलेट ट्रैक करने के लिए रजिस्टर करें।','Your Market at a glance':'एक नज़र में आपका मार्केट','Trending assets':'ट्रेंडिंग एसेट्स','Live market data':'लाइव मार्केट डेटा','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Send email OTP':'ईमेल OTP भेजें','Forgot password':'पासवर्ड भूल गए','Enter OTP':'OTP दर्ज करें','Reset password':'पासवर्ड रीसेट करें','New password':'नया पासवर्ड','Confirm new password':'नया पासवर्ड कन्फर्म करें','Update password':'पासवर्ड अपडेट करें','Customer support':'ग्राहक सहायता','Answers and support.':'सवालों के जवाब और सहायता।','Available balance':'उपलब्ध बैलेंस','Main Wallet':'मुख्य वॉलेट','Third Wallet':'तीसरा वॉलेट','Transfer':'ट्रांसफर','Transfer history':'ट्रांसफर इतिहास','My portfolio':'मेरा पोर्टफोलियो','Investment':'निवेश','Active':'सक्रिय','Completed':'पूरा हुआ','Pending':'लंबित','Approved':'स्वीकृत','Rejected':'अस्वीकृत','Search coins':'कॉइन खोजें','Market':'मार्केट','Buy crypto':'क्रिप्टो खरीदें','Sell crypto':'क्रिप्टो बेचें','Confirm purchase':'खरीद की पुष्टि करें','Confirm sale':'बिक्री की पुष्टि करें','Transaction details':'लेन-देन का विवरण','Account settings':'अकाउंट सेटिंग्स','Profile':'प्रोफ़ाइल','Logout':'लॉगआउट','Help Center':'सहायता केंद्र','Contact support':'सपोर्ट से संपर्क करें','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास'
 };
-function applyLanguage(root=document){ const lang=state.language; if(lang==='en') return; const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[]; while(w.nextNode()) nodes.push(w.currentNode); nodes.forEach(n=>{const t=n.nodeValue.trim(); if(UI_HI[t]) n.nodeValue=n.nodeValue.replace(t,UI_HI[t]);}); }
-function initLanguage(){const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>{state.language=sel.value;try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};applyLanguage(document.querySelector('#appMain'));};} if(state.language==='hi'){const target=document.querySelector('#appMain');if(target){applyLanguage(target);new MutationObserver(()=>applyLanguage(target)).observe(target,{childList:true,subtree:true,characterData:true});}}}
+const languageOriginalText = new WeakMap();
+function applyLanguage(root=document){
+  if(!root) return;
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node=>{
+    if(!languageOriginalText.has(node)) languageOriginalText.set(node,node.nodeValue);
+    const original=languageOriginalText.get(node); const trimmed=original.trim();
+    if(!trimmed) return;
+    const translated=state.language==='hi' ? (UI_HI[trimmed] || trimmed) : trimmed;
+    node.nodeValue=original.replace(trimmed,translated);
+  });
+  const attrs=['placeholder','title','aria-label'];
+  root.querySelectorAll?.('*').forEach(el=>attrs.forEach(attr=>{
+    const val=el.getAttribute(attr); if(!val) return;
+    const key='data-lang-original-'+attr;
+    if(!el.hasAttribute(key)) el.setAttribute(key,val);
+    const original=el.getAttribute(key); el.setAttribute(attr,state.language==='hi'?(UI_HI[original]||original):original);
+  }));
+}
+function setLanguage(lang){state.language=lang==='hi'?'hi':'en';try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};const main=document.querySelector('#appMain');if(main)applyLanguage(main);const head=document.querySelector('#languageSelect');if(head)head.value=state.language;const auth=document.querySelector('#authLanguage');if(auth)auth.value=state.language;}
+function initLanguage(){
+  const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>setLanguage(sel.value);}
+  const target=document.querySelector('#appMain'); if(target){applyLanguage(target);if(!target.dataset.languageObserver){new MutationObserver(()=>applyLanguage(target)).observe(target,{childList:true,subtree:true,characterData:true});target.dataset.languageObserver='1';}}
+}
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -303,7 +326,7 @@ function authPage() {
     ${!reg ? '<button class="link-btn" type="button" id="forgotPassword">Forgot password?</button>' : ''}
     ${supportButtonsHtml()}
   </form>`;
-  if ($('#authLanguage')) { $('#authLanguage').value=state.language; $('#authLanguage').onchange=()=>{state.language=$('#authLanguage').value;try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};authPage();}; }
+  if ($('#authLanguage')) { $('#authLanguage').value=state.language; $('#authLanguage').onchange=()=>setLanguage($('#authLanguage').value); }
   $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
   if (!reg && $('#forgotPassword')) $('#forgotPassword').onclick = forgotPasswordPage;
   $('#authForm').onsubmit = async e => {
@@ -418,7 +441,7 @@ function drawChart() {
   const info = i => { const x = d[i], ch = (x[4] - x[1]) / (x[1] || 1) * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span><span>Vol <b>${vf(x[5] || 0)}</b></span>` + (candle ? '<span class="ma-row">' + MAS.map(m => m.v[i] == null ? '' : `<span style="color:${m.col}">MA${m.p} <b style="color:${m.col}">${pFmt(m.v[i])}</b></span>`).join('') + '</span>' : ''); };
   info(n - 1); const xh = $('#xh'), ov = $('#ov'), svg = box.querySelector('svg'); if (svg) { svg.style.transformOrigin = 'center center'; svg.style.willChange = 'transform'; } let drag = null;
   const point = e => { const r = ov.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H; return { i: Math.max(0, Math.min(n - 1, Math.floor((px - L) / pw * n))), price: hi - (py - T) / PH * (hi - lo) }; };
-  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false;
+  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false; let dragVelocity = 0; let lastDragSample = null; let inertiaFrame = 0;
   const finishGesture = () => {
     state.chartGestureActive = false;
     if (svg) svg.style.transform = '';
@@ -458,7 +481,7 @@ function drawChart() {
       }
       return;
     }
-    drag = { x: e.clientX, offset: view.offset, moved: false };
+    drag = { x: e.clientX, offset: view.offset, moved: false }; dragVelocity = 0; lastDragSample = {x:e.clientX,t:performance.now()}; if(inertiaFrame) cancelAnimationFrame(inertiaFrame);
     ov.style.cursor = 'grabbing';
   });
   ov.addEventListener('pointermove', e => {
@@ -473,7 +496,7 @@ function drawChart() {
     }
     if (drag && !state.drawMode) {
       e.preventDefault();
-      const dx = e.clientX - drag.x;
+      const dx = e.clientX - drag.x; const sampleNow=performance.now(); if(lastDragSample){const elapsed=Math.max(1,sampleNow-lastDragSample.t);dragVelocity=(e.clientX-lastDragSample.x)/elapsed;} lastDragSample={x:e.clientX,t:sampleNow};
       if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
       if (drag.moved) {
         // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
@@ -494,9 +517,14 @@ function drawChart() {
     const moved = !!(drag && drag.moved);
     drag = null;
     if (activePointers.size === 0) {
-      if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
+      if(moved && Math.abs(dragVelocity)>.08 && !state.drawMode){
+        state.chartGestureActive=false; if(svg)svg.style.transform='';
+        let velocity=dragVelocity; let previous=performance.now();
+        const coast=now=>{const dt=Math.min(32,now-previous);previous=now;const delta=-(velocity*dt/1000)*total/Math.max(1,pw);view.offset=Math.max(0,Math.min(total-view.count,view.offset+delta));drawChart();velocity*=Math.pow(.90,dt/16);if(Math.abs(velocity)>.025 && (view.offset>0 || velocity<0 && view.offset<total-view.count))inertiaFrame=requestAnimationFrame(coast);else{inertiaFrame=0;state.chartPendingRedraw=false;}};
+        inertiaFrame=requestAnimationFrame(coast);
+      } else if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
       else { state.chartGestureActive = false; if (svg) svg.style.transform = ''; if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }
-      gestureChanged = false;
+      gestureChanged = false; lastDragSample=null;
     }
   };
   ov.addEventListener('pointerup', endPointer);
