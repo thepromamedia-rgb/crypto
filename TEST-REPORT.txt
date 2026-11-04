@@ -1,37 +1,45 @@
 CRYPTO BRIDGE — AUTOMATED TEST REPORT
-Delivery: 2026-11-04
+Delivery: 2026-11-04 (bug-fix rebuild)
 
 CHECKS RUN
 - node --check server.js — PASS
 - node --check app.js — PASS
 - node --check admin.js — PASS
 - node --check test-server.js — PASS
-- npm test — PASS
+- npm test — PASS (all server integration tests)
+- python test-site.py — PASS (18 static smoke checks)
 
-INTEGRATION COVERAGE
-- Health endpoint and static-file protection
-- Registration, duplicate registration and login
-- Authentication required for protected APIs
-- Deposit / withdrawal rules and approval flows
-- Wallet transfers in both directions
-- Wallet transfer idempotency and transaction history
-- Insufficient wallet balance rejection
-- Investment / bonus and referral calculations
-- Demo account isolation
-- Razorpay order, signature verification and duplicate webhook handling
-- Head Admin / Panel Admin permissions and panel scoping
-- Panel support-button settings isolation
-- Password recovery does not report success when SMTP delivery is unavailable
-- Persistence and panel URL routing
+BUG FIXED
+- Fixed a critical language MutationObserver loop: the previous implementation
+  rewrote unchanged text nodes while observing characterData changes, which
+  could continuously retrigger the observer and freeze the page. Text nodes are
+  now only written when their translated value actually changes.
+- Language application/observation now covers the full app body, including the
+  public navigation and dynamically rendered pages.
+- Added a language selector inside the Assets account menu, in addition to the
+  header and login/register selector. The preference remains device-local.
+
+FEATURE CHECKS
+- Panel-wise support buttons/settings are present and covered by server tests.
+- Winners leaderboard includes a DEMO / SIMULATED disclosure.
+- Chart has pointer drag, momentum coast, pinch/wheel zoom, and Latest control.
+- Admin page and script load from the expected routes.
 
 IMPORTANT LIMITATIONS
-- SMTP was not tested against a real provider. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM, then perform a real email-delivery test before production use.
-- Password-reset challenges are short-lived in-process state. A server restart invalidates pending OTP challenges; use a single application instance for this implementation.
-- Wallet transfers are protected against duplicate submissions from the current UI and are serialized by the single Node event loop. The current JSON / Upstash snapshot storage is not a cross-instance transactional database. Do not scale to multiple application instances or claim multi-instance atomicity without migrating these operations to transactional storage.
-- No headless browser was available for visual interaction testing. Verify desktop, tablet and mobile layouts in a real browser before release.
-- Live production deployment, real SMTP, and production database backup/restore were not tested.
+- No successful headless-browser visual interaction test was available in this
+  environment. Verify desktop, tablet and mobile layouts in a real browser.
+- Hindi dictionary coverage is still partial; untranslated labels remain in
+  English. This rebuild fixes the page-freezing language observer, not a full
+  professional translation of every dynamic screen.
+- SMTP was not tested against a real provider. Configure SMTP and perform a
+  real email-delivery test before production use.
+- JSON / snapshot storage is not a cross-instance transactional database. Do
+  not scale to multiple application instances without transactional storage.
+- Live production deployment and production backup/restore were not tested.
 
 DATA SAFETY
-- The supplied db.json was not modified by this build process.
-- No production user, deposit, withdrawal, trade, wallet balance or historical record was intentionally deleted or reset.
-- Winning Information and Today's Earnings are explicitly simulated display-only content. They do not write to wallets or financial ledgers.
+- The supplied db.json was preserved.
+- No user, wallet, deposit, withdrawal, trade, or historical record was
+  intentionally deleted or reset during this rebuild.
+- Simulated winner/earnings content remains display-only and is not credited
+  to wallets or financial ledgers.
