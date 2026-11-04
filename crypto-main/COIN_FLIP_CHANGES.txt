@@ -1,0 +1,1 @@
+Original v15 base preserved. Coin reveal stays within game card, five-second animation synced to existing round deadline with late-join phase, sound from existing Web Audio engine, responsive coin and backend-only result. Test in browser before deployment.

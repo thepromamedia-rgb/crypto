@@ -1,0 +1,8 @@
+Panel Admin login repair:
+- A Panel Admin who enters correct credentials at /admin is now authenticated and automatically redirected to their own /p/<slug>/admin page.
+- Head Admin signing in on a subpanel URL redirects to /admin.
+- A stale cross-panel session now attempts to route the panel admin to the correct panel login/dashboard.
+- Wrong passwords still fail. Blocked accounts remain blocked. Other panel access stays restricted.
+- Existing panel creation and reset-password flows preserved.
+- Automated tests: all existing tests passed, including new wrong-URL redirect checks.
+Note: Tested locally; production deployment and browser login on the actual host still need verification. Use the panel-specific URL for each admin.

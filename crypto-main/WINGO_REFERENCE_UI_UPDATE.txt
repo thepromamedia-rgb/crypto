@@ -1,0 +1,10 @@
+WinGo reference UI update
+
+- Kept the existing Crypto Club brand header, wallet, WinGo durations, timer, history, number image, and backend structure.
+- Reworked the Big / Small bet sheet to match the supplied orange Big and blue Small screenshots.
+- The modal heading shows the selected WinGo duration; the selected choice appears in the white label.
+- Added amount presets 1 / 10 / 100 / 1000, quantity controls, X1 / X5 / X10 / X20 / X50 / X100, rules agreement, and bottom Cancel / Total amount bar.
+- The selected Big / Small color controls the modal header, quantity controls, selected amount/multiplier and total button.
+- Preserved real betting actions and existing wallet balance updates.
+- Minimum Big / Small bet is now 1 credit to match the reference modal.
+- Validation: Node syntax checks passed; npm test passed.

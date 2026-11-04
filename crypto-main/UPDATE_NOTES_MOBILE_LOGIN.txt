@@ -1,0 +1,13 @@
+UPDATE NOTES — MOBILE + GAME UI + ADMIN LOGIN
+
+Base preserved: existing app files and architecture remain in place.
+
+Changes in this update:
+1. Coin Flip game: removed the visible rule/payout sentence (“Lower total stake wins · Equal stakes: random tie-break · 2× payout”). The server-side game settlement and admin-configured rules are unchanged; this is a display-only change.
+2. Coin sound toggle: preserved the existing ON/OFF control and local preference; sound can be toggled independently on each device/browser.
+3. Mobile-friendly layout: added responsive styles for phones (compact header, smaller hero, 2–3 column action tiles, single-column cards, less crowded asset rows, smaller game controls, and safe-area-aware bottom navigation). Desktop styling is retained.
+4. Admin login review: existing login code normalizes email and verifies against all matching stored records; panel-admin logins on the wrong admin URL are redirected to their assigned panel. Existing tests cover panel login redirect and Head Admin password reset.
+5. Validation: node syntax checks passed for app.js, server.js and admin.js; npm test passed.
+
+Important limit for “same Gmail on another device”:
+This ZIP cannot verify or repair the live deployment's database/environment by itself. Cross-device login requires the same account record to exist in the same persistent database and the correct panel URL. On Render, configure durable storage (Upstash REST URL + token, or a persistent disk) and keep CB_DB_KEY stable. If credentials are still rejected, Head Admin should use the panel-login diagnostics/reset flow after confirming persistent storage. Never share storage tokens or passwords in chat.

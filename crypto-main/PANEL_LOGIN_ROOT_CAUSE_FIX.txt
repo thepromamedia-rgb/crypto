@@ -1,0 +1,6 @@
+PANEL ADMIN LOGIN – TARGETED CODE AUDIT
+Confirmed behavior in local integration tests: create panel -> account stored with valid password hash -> login succeeds using correct panel URL or redirects from /admin. Password reset also works.
+Identified reliability bug: failed persistent storage writes could leave a panel in memory without durable account storage. Fixed with rollback and explicit 503 error. Account hash is verified before saving.
+Added Head Admin-only GET /api/admin/panel-login-diagnostics. It reports each panel's admin account presence, hash format, blocked status, panel assignment, correct URL and storage type; it does NOT disclose passwords or hashes.
+When 'Wrong email or password' persists on the deployed site, check whether that specific account exists in the deployed database and that the latest ZIP was deployed. On ephemeral Render storage, use Upstash Redis or persistent disk. Missing old accounts cannot be recreated from source code; Head Admin must recreate/reset them.
+All automated tests passed including a new admin account diagnostic test. Live hosted login was not tested.

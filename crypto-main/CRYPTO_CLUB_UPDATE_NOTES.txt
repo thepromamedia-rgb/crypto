@@ -1,0 +1,15 @@
+CRYPTO CLUB UPDATE
+1. Brand bar "Crypto Club" (logo + back arrow + icons) on both game screens; Coin Game coin shows ₿.
+2. WinGo tabs restyled; history paginated 10 rows/page, up to 50 pages (500 rounds per duration).
+3. Bet popup ("Bet placed ✓", amount, side, 5s timer). Last-5-second digits no longer blink/pulse.
+4. New Choose Game page with Crypto Club header and 2 game cards (Coin Game, WinGo).
+5. Admin > "Game Returns" tab: Coin Game / WinGo Number / WinGo Color / WinGo Big-Small win return % (profit %; 80% => Rs100 bet pays Rs180).
+   Defaults 100 / 780 / 80 / 80. Stored per panel. A bet settles at the return it was placed with.
+
+UPDATE 2
+- Win/Lose "Congratulations / Sorry" popup (3s auto close) for WinGo and Coin Game; small dark "Bet Successful" toast.
+- Coin Game: History tabs keep fixed height (no shrinking); Head/Tail and reveal coins use crypto symbols.
+- Choose Game: two cards left/right. WinGo speaker icon toggles sound.
+- Admin: single "Games" section (Win Returns, Coin Game, WinGo bets/live totals).
+- Fixed: repeated WinGo polling timers piling up on every visit to the Games page.
+- Number balls restyled to match reference (0 red+violet, 5 green+violet, white glossy centre).

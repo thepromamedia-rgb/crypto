@@ -1,0 +1,1 @@
+RULE: At the end of each 30-second round, HEADS and TAILS total wager amounts are compared. Lower amount side wins. Equal amounts use cryptographically secure random tie-break. Results are finalized and stored on backend before settlement. Users must see this rule clearly. Existing wallet payout logic unchanged. Existing rounds with outcomeLocked are never recalculated.

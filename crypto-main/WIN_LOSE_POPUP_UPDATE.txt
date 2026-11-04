@@ -1,0 +1,9 @@
+WIN / LOSE POPUP UPDATE
+
+- Removed player-facing Win return percentages from the Coin Game and WinGo screens, bet popup, and game information notice. The configured return values and backend settlement calculations remain unchanged.
+- Reworked the shared result popup into a smaller responsive card inspired by the supplied win/lose references.
+- Kept the warm orange/red win treatment and cool blue lose treatment, with result chips, payout/period details, close control, and 3-second auto-close.
+- Added a light confetti burst and party-popper accents for wins only. The shared popup is used by both WinGo and Coin Game results.
+- No backend routes, database schema, account balances, betting settlement logic, or admin return settings were changed.
+
+Validation: node --check app.js and npm test passed.

@@ -1,0 +1,8 @@
+BIG SMALL / WINGO GAME NOTES
+
+- Existing result-selection and settlement rules are preserved.
+- Supported independent round durations: 30 seconds, 1 minute, 3 minutes, and 5 minutes.
+- Each duration has its own round clock, round identifiers, pending bets, settlement, results history, and personal bet history.
+- Betting closes during the final 5 seconds of each selected duration.
+- The UI duration tabs switch the selected mode and update the countdown, round label, and displayed history.
+- Results remain server-generated and are saved using the existing persistence mechanism.

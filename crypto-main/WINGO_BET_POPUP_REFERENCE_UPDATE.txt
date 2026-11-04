@@ -1,0 +1,7 @@
+WinGo bet popup reference update
+
+- Rebuilt the existing Big/Small bet sheet styling to match the latest supplied orange reference screenshot.
+- Widened the popup to 88vw (capped at 700px) while retaining a compact bottom-sheet height (80dvh, capped at 604px).
+- Restored the larger title/pick header, balance denominations, quantity controls, multiplier row, agreement line and Cancel/Total footer.
+- Preserved existing popup markup, selected-pick color logic, quantity/multiplier calculations, API submission, timer and result/history logic.
+- Kept the popup white in both light and dark site themes to match the reference.

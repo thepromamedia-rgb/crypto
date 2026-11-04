@@ -1,0 +1,13 @@
+WinGo Bet Popup Width Update — 2026-11-01
+
+- Widened the existing bet popup to use almost the full mobile viewport (88vw), up to 700px.
+- Removed the previous 300px width cap that caused large empty side gutters.
+- Kept the compact sheet's existing content height, bottom-sheet positioning, header/pick styling, and controls.
+- Used the extra width to spread the balance presets, quantity controls, and multipliers more naturally.
+- Added a narrow-screen fallback so the popup remains inside the viewport.
+- Preserved existing bet submission, amount calculation, multiplier, quantity, timer, results, and history logic.
+
+Validation:
+- node --check app.js: PASS
+- node --check server.js: PASS
+- npm test: ALL TESTS PASSED

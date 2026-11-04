@@ -1,0 +1,755 @@
+'use strict';
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
+const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const qtyFmt = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 8 });
+const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.9 10.9 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
+const pwField = (id, ac, extra = '') => `<div class="pw-wrap"><input id="${id}" type="password" autocomplete="${ac}" ${extra}><button type="button" class="eye" data-eye="${id}" aria-label="Show password">${EYE}</button></div>`;
+const usd = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 4 : 2, minimumFractionDigits: n < 1 ? 4 : 2 });
+const dt = ts => new Date(ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const BSI = {
+  clock: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  wallet: '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H18a1 1 0 0 1 0 2H6.5a.5.5 0 0 0 0 1H19a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6.5A2.5 2.5 0 0 1 4 17.5zm12.5 7.2a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></svg>',
+  speaker: '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M3 9.5v5h3.5L11 19V5L6.5 9.5zM14 8.5a5 5 0 0 1 0 7l-1.1-1.1a3.4 3.4 0 0 0 0-4.8zM16.5 6a8.5 8.5 0 0 1 0 12l-1.1-1.1a7 7 0 0 0 0-9.8z"/></svg>',
+  fire: '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor"><path d="M13 2s1 4-2 7c-2 2-4 4-4 8a6 6 0 0 0 12 0c0-3-1.5-5-3-6 0 2-1 3-2 3 1-3 0-8-1-12z"/></svg>',
+  book: '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h8"/></svg>'
+};
+const ccPct = n => String(Number(Number(n).toFixed(2)));
+const ccLogo = (cls = '') => `<span class="cc-logo ${cls}"><span class="cc-logo-mark">₿</span><b>Crypto<span>Club</span></b></span>`;
+const CC_HEADSET = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/><path d="M19 20c0 1.2-1.6 2-4 2h-2"/></svg>';
+const CC_INFO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>';
+const ccBar = () => `<div class="cc-bar"><button type="button" class="cc-bar-back" data-game-back aria-label="Back to games">‹</button>${ccLogo()}<span class="cc-bar-icons"><button type="button" data-theme-toggle aria-label="Switch theme" title="Toggle dark mode">☾</button><button type="button" data-page="Service" aria-label="Support">${CC_HEADSET}</button><button type="button" data-cc-info aria-label="Game information">${CC_INFO}</button></span></div>`;
+const ccTheme = {
+  dark: (() => { try { return localStorage.getItem('cryptoClubTheme') === 'dark'; } catch { return false; } })(),
+  apply() { document.body.classList.toggle('dark-mode', this.dark); try { localStorage.setItem('cryptoClubTheme', this.dark ? 'dark' : 'light'); } catch {} this.syncButtons(); },
+  syncButtons() { document.querySelectorAll('[data-theme-toggle]').forEach(b => { b.textContent = this.dark ? '☀' : '☾'; b.setAttribute('aria-label', this.dark ? 'Switch to light mode' : 'Switch to dark mode'); b.title = this.dark ? 'Light mode' : 'Dark mode'; }); }
+};
+
+// Small dark "Bet Successful" toast (like the reference), auto-hides.
+let ccPopT = null;
+function ccBetPopup() {
+  let el = $('#ccBetPop');
+  if (!el) { el = document.createElement('div'); el.id = 'ccBetPop'; el.className = 'cc-toast'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
+  el.textContent = 'Bet Successful'; el.hidden = false; clearTimeout(ccPopT); ccPopT = setTimeout(() => { el.hidden = true; }, 2000);
+  ccSnd.play('bet');
+}
+// Sound (WinGo speaker icon toggles it; Coin Game keeps its own existing button).
+const ccSnd = {
+  on: (() => { try { return localStorage.getItem('cryptoClubSound') !== 'off'; } catch { return true; } })(), ctx: null,
+  set(v) { this.on = !!v; try { localStorage.setItem('cryptoClubSound', this.on ? 'on' : 'off'); } catch {} },
+  async play(kind) {
+    if (!this.on) return;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      this.ctx = this.ctx || new AC(); if (this.ctx.state === 'suspended') await this.ctx.resume();
+      const t0 = this.ctx.currentTime, seq = kind === 'win' ? [[660, 0], [880, .12], [1175, .24]] : kind === 'lose' ? [[330, 0], [247, .16]] : [[740, 0]];
+      seq.forEach(([f, d]) => { const o = this.ctx.createOscillator(), g = this.ctx.createGain(); o.type = 'sine'; o.frequency.value = f; g.gain.setValueAtTime(.0001, t0 + d); g.gain.exponentialRampToValueAtTime(.08, t0 + d + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d + .2); o.connect(g); g.connect(this.ctx.destination); o.start(t0 + d); o.stop(t0 + d + .22); });
+    } catch {}
+  }
+};
+// Win / lose result popup (ribbon card, 3 second auto close).
+const CC_ROCKET = '<svg viewBox="0 0 48 48" width="46" height="46"><path d="M24 4c7 5 10 13 8 24l-4 4H20l-4-4C14 17 17 9 24 4z" fill="#fff"/><circle cx="24" cy="18" r="4.5" fill="currentColor"/><path d="M16 28l-6 6 2 4 6-3zM32 28l6 6-2 4-6-3z" fill="#ffe3b5"/><path d="M21 33h6l-3 9z" fill="#ffd04d"/></svg>';
+let ccRpT = null, ccRpI = null;
+function ccResultPop({ won, chips = [], amount = 0, game = '', period = '' }) {
+  let el = $('#ccResPop'); if (el) el.remove();
+  el = document.createElement('div'); el.id = 'ccResPop'; el.className = 'cc-rp ' + (won ? 'win' : 'lose'); el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  const confettiColors = ['#ffdf57','#ff5d6c','#36c98a','#6ca7ff','#b66cff','#ffffff','#ff9b45','#32c7d8','#f45aa5','#9be36b','#ffd166','#8d7cff'];
+  const confetti = won ? `<div class="cc-rp-celebration" aria-hidden="true"><span class="cc-rp-popper left">🎉</span><span class="cc-rp-popper right">🎊</span>${Array.from({length:24},(_,i)=>`<i style="--dx:${((i*37)%241)-120}px;--dy:${-35-((i*29)%155)}px;--rot:${(i*53)%360}deg;--delay:${(i%6)*.045}s;--confetti:${confettiColors[i%confettiColors.length]}"></i>`).join('')}</div>` : '';
+  el.innerHTML = `${confetti}<div class="cc-rp-card"><div class="cc-rp-badge">${CC_ROCKET}</div><div class="cc-rp-ribbon"></div><h3>${won ? 'Congratulations' : 'Sorry'}</h3><div class="cc-rp-res"><span>Lottery results:</span>${chips.map(c => `<i class="cc-chip ${esc(c.c)}">${esc(c.t)}</i>`).join('')}</div><div class="cc-rp-paper"><b>${won ? 'Bonus' : 'Lose'}</b>${won ? `<strong>${inr(amount)}</strong>` : ''}<small>Period: ${esc(game)}${period ? '<br>' + esc(period) : ''}</small></div><div class="cc-rp-auto"><span class="cc-rp-tick">✓</span> <span id="ccRpSec">3</span> seconds auto close</div></div><button type="button" class="cc-rp-x" aria-label="Close">×</button>`;
+  document.body.appendChild(el);
+  const close = () => { clearTimeout(ccRpT); clearInterval(ccRpI); el.remove(); };
+  el.querySelector('.cc-rp-x').onclick = close; el.onclick = e => { if (e.target === el) close(); };
+  let left = 3; clearTimeout(ccRpT); clearInterval(ccRpI);
+  ccRpI = setInterval(() => { left = Math.max(0, left - 1); const t = $('#ccRpSec'); if (t) t.textContent = left; }, 1000); ccRpT = setTimeout(close, 3000);
+  ccSnd.play(won ? 'win' : 'lose');
+}
+const bsDurLabel = ms => ({ 30000: '30sec', 60000: '1 Min', 180000: '3 Min', 300000: '5 Min' }[Number(ms)] || '30sec');
+const BS_CODES = { 30000: '10005', 60000: '10001', 180000: '10002', 300000: '10003' };
+const bsPeriodId = (n, dur) => { const d = Number(dur) || 30000, start = Number(n) * d, ist = new Date(start + 19800000), p2 = x => String(x).padStart(2, '0'); const day = ist.getUTCFullYear() + p2(ist.getUTCMonth() + 1) + p2(ist.getUTCDate()); const idx = Math.floor(((start + 19800000) % 86400000) / d) + 1; return day + (BS_CODES[d] || '10005') + String(idx).padStart(4, '0'); };
+const BS_NUM_CLASS = n => ({0:'v-r',5:'v-g'}[n] || (n % 2 ? 'g' : 'r'));
+const bsDots = c => String(c || '').split('+').map(x => `<i class="bs-dot ${x === 'Green' ? 'g' : x === 'Violet' ? 'v' : 'r'}"></i>`).join('');
+const PROTECTED = new Set(['Home', 'Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite', 'Games']);
+let winningActivityTimer = null;
+function syncBottomNav() { const nav = $('.bottom-nav'); if (nav) nav.style.display = state.me ? '' : 'none'; }
+
+function activePanelSlug() { const m = location.pathname.match(/^\/p\/([a-z0-9-]+)/i); return m ? m[1] : 'main'; }
+async function api(path, body) {
+  const headers = { 'X-Panel-Slug': activePanelSlug() };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const r = await fetch('/api/' + path, body === undefined ? { credentials: 'same-origin', headers } : { method: 'POST', credentials: 'same-origin', headers, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || 'Request failed'); e.status = r.status; throw e; }
+  return j;
+}
+
+// ---------- prices ----------
+function coinIcon(a, i) {
+  const tone = a.symbol === 'ETH' || a.symbol === 'ADA' ? 'eth' : (a.symbol === 'ETC' || a.symbol === 'TRX' ? 'etc' : '');
+  return `<span class="coin ${tone}" style="--coin-bg:${colors[i % colors.length]}" aria-hidden="true">${esc(a.mark)}</span>`;
+}
+function sparkline(a) {
+  const s = a.spark || []; if (s.length < 2) return '';
+  const min = Math.min(...s), max = Math.max(...s), span = max - min || 1;
+  const pts = s.map((v, i) => `${(i / (s.length - 1) * 100).toFixed(1)},${(34 - (v - min) / span * 30).toFixed(1)}`).join(' ');
+  return `<svg class="sparkline" viewBox="0 0 100 38" preserveAspectRatio="none" aria-label="7-day price trend"><polyline points="${pts}" fill="none" stroke="${a.change < 0 ? '#e16b78' : '#2bb78a'}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+const changeLabel = v => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`;
+function assetRow(a, i) {
+  return `<div class="asset-row" data-coin="${esc(a.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name">${coinIcon(a, i)}<div><strong>${esc(a.symbol)}</strong><small>${esc(a.name)}</small></div></div><div class="asset-price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</div>`;
+}
+const bonusCoins = () => (state.cfg && Array.isArray(state.cfg.bonusCoins) ? state.cfg.bonusCoins : ((state.cfg && state.cfg.bonusCoin && state.cfg.bonusCoin.enabled) ? [state.cfg.bonusCoin] : []));
+const bonusCfg = (symbol = state.coin) => bonusCoins().find(c => c.symbol === symbol) || (state.cfg && state.cfg.bonusCoin) || { enabled: false };
+const bonusSeconds = b => Number(b.lockSeconds ?? (Number(b.lockHours || 0) * 3600));
+const bonusWaitLabel = b => bonusSeconds(b) <= 0 ? 'Instant' : bonusSeconds(b) + ' sec';
+function bonusRow(q = '') {
+  return bonusCoins().filter(b => b.enabled && (!q || (b.symbol + ' ' + b.name).toLowerCase().includes(q))).map(b => `<div class="asset-row bonus-row" data-coin="${esc(b.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin bonus-coin" aria-hidden="true">★</span><div><strong>${esc(b.symbol)}</strong><small>${esc(b.name)} · promotional coin</small></div></div><div class="asset-price">+${b.returnPct}% reward</div><div class="asset-change positive">${bonusWaitLabel(b)}</div></div>`).join('');
+}
+function renderAssetRows(q = '') {
+  q = q.trim().toLowerCase(); const br = bonusRow(q);
+  if (!state.prices.length) return br + `<div class="empty-state">${state.priceErr ? 'Live prices could not load. Retrying… <br><small>' + esc(state.priceErr) + '</small>' : 'Loading live prices…'}</div>`;
+  const f = state.prices.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q));
+  return br + (f.length ? f.map(assetRow).join('') : (br ? '' : '<div class="empty-state">No assets match that search.</div>'));
+}
+const staleNote = () => state.prices.length ? `<p class="stale">${state.stale ? '⚠ Showing last known prices — live feed delayed. ' : ''}Updated ${new Date(state.updated).toLocaleTimeString('en-IN')} · ${state.source || 'live'} · refreshes every 20s</p>` : '';
+let COINS = [['BTC','Bitcoin','bitcoin','₿'],['ETH','Ethereum','ethereum','Ξ'],['ETC','Ethereum Classic','ethereum-classic','E'],['TRX','TRON','tron','T'],['DOGE','Dogecoin','dogecoin','Ð'],['BCH','Bitcoin Cash','bitcoin-cash','B'],['COMP','Compound','compound-governance-token','C'],['DASH','Dash','dash','D'],['ADA','Cardano','cardano','A'],['LINK','Chainlink','chainlink','L'],['LTC','Litecoin','litecoin','Ł'],['BNB','BNB','binancecoin','B'],['XRP','XRP','ripple','X'],['SOL','Solana','solana','S']];
+async function getJSON(url) { const r = await fetch(url, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+// Backup: browser fetches the public price APIs directly (both allow CORS) when our server can't.
+async function directPrices() {
+  const errs = [];
+  try {
+    const rows = await getJSON('https://api.binance.com/api/v3/ticker/24hr?symbols=' + encodeURIComponent(JSON.stringify(COINS.map(c => c[0] + 'USDT'))));
+    return { prices: rows.map(x => { const c = COINS.find(k => k[0] + 'USDT' === x.symbol); return { symbol: c[0], name: c[1], mark: c[3], price: Number(x.lastPrice), change: Number(x.priceChangePercent), spark: [] }; }), source: 'Binance' };
+  } catch (e) { errs.push('Binance ' + e.message); }
+  try {
+    const rows = await getJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=' + COINS.map(c => c[2]).join(',') + '&sparkline=true');
+    return { prices: COINS.map(([symbol, name, id, mark]) => { const x = rows.find(r => r.id === id); if (!x) return null; const sp = x.sparkline_in_7d?.price || [], st = Math.max(1, Math.floor(sp.length / 28)); return { symbol, name, mark, price: x.current_price, change: x.price_change_percentage_24h || 0, spark: sp.filter((_, i) => i % st === 0) }; }).filter(Boolean), source: 'CoinGecko' };
+  } catch (e) { errs.push('CoinGecko ' + e.message); }
+  throw new Error(errs.join(' | '));
+}
+async function pullPrices() {
+  let serverErr = '';
+  try { const j = await api('prices'); state.prices = j.prices; state.updated = j.updated; state.stale = j.stale; state.source = j.source; if (j.fx) state.fx = j.fx; state.priceErr = ''; }
+  catch (e) {
+    serverErr = e.message;
+    try { const j = await directPrices(); state.prices = j.prices; state.updated = Date.now(); state.stale = false; state.source = j.source + ' (direct)'; state.priceErr = ''; }
+    catch (e2) { state.priceErr = 'Server: ' + serverErr + ' | Browser: ' + e2.message; }
+  }
+  if (state.page === 'Coin') updateCoinLive();
+  else if (['Home', 'Quotes', 'Signal'].includes(state.page) && document.activeElement !== $('#assetSearch')) refreshPriceViews();
+}
+function refreshPriceViews() {
+  const L = $('#assetList') || $('#quoteList') || $('#moverList'); if (!L) return;
+  if (state.page === 'Quotes') L.innerHTML = renderAssetRows(state.query);
+  else if (state.page === 'Home') { L.innerHTML = renderAssetRows(); const m = $('#marketCards'); if (m) m.innerHTML = marketCards(); }
+  else if (state.page === 'Signal') renderPage('Signal', true);
+  const s = $('#staleNote'); if (s) s.innerHTML = staleNote();
+}
+const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class="market-card" data-coin="${esc(a.symbol)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-top">${coinIcon(a, i)}<div><strong>${esc(a.name)}</strong><small>${esc(a.symbol)} / USD</small></div></div><div class="price">${usd(a.price)}</div><div class="asset-change ${a.change < 0 ? 'negative' : 'positive'}">${changeLabel(a.change)}</div>${sparkline(a)}</article>`).join('');
+
+// ---------- session ----------
+async function loadMe() {
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
+  catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; updateFooter(); } catch {} }
+  $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login'; syncBottomNav();
+}
+const updateFooter = () => { const el = $('#siteFooter'); if (el) el.textContent = (state.cfg && state.cfg.footerText) || 'India-focused platform'; };
+const noticeBar = () => `${state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : ''}`;
+const needLogin = page => { state.after = page; renderPage('Auth'); };
+
+// ---------- pages ----------
+function makeWinningDemoBatch() {
+  const aliases = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana','Reyansh','Kiara'];
+  const rows = Array.from({length:10}, (_,i) => {
+    const uid = String(10000 + Math.floor(Math.random()*89999));
+    return { name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount: Math.round((150 + Math.random()*9850)*100)/100, key: `${Date.now()}-${i}-${Math.random()}` };
+  }).sort((a,b)=>b.amount-a.amount);
+  const host = $('#winningDemoRows');
+  if (host) host.innerHTML = rows.map((r,i)=>`<div class="winning-demo-row"><span class="winning-rank">${i+1}</span><span class="winning-person"><b>${esc(r.name)}</b><small>${esc(r.uid)}</small></span><span class="winning-win">WIN</span><strong>+${inr(r.amount)}</strong></div>`).join('');
+}
+function startWinningDemo() {
+  clearInterval(winningActivityTimer); makeWinningDemoBatch();
+  winningActivityTimer = setInterval(makeWinningDemoBatch, 10000);
+}
+
+function renderHome() {
+  const hello = state.me ? `Welcome, ${esc(state.me.name.split(' ')[0])}` : 'Explore digital markets';
+  $('#appMain').innerHTML = `${noticeBar()}
+    <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>${hello}</h1><p>Live digital asset prices, updated every 20 seconds.</p><button class="welcome-cta" data-page="${state.me ? 'Assets' : 'Auth'}">${state.me ? 'Open wallet' : 'Login / Register'} <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
+    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
+    <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
+    <section class="section-head home-games-head"><div><span class="eyebrow">PLAY ZONE</span><h2>Games</h2></div><button class="text-btn" data-page="Games">All games ↗</button></section><section class="home-games-grid"><article class="home-game-card"><span class="home-game-icon">🪙</span><div><b>Coin Flip / Head Tail</b><small>Pick Heads or Tails</small></div><button data-page="Games">Play ↗</button></article><article class="home-game-card"><span class="home-game-icon">🎯</span><div><b>WinGo</b><small>Number and colour game</small></div><button data-page="Games">Play ↗</button></article></section>
+    <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
+    <section class="market-cards" id="marketCards">${marketCards()}</section>
+    <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
+    <section class="asset-list" id="assetList">${renderAssetRows()}</section>
+    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Live Winning Activity</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> Illustrative activity · refreshes every 10 seconds · not real payouts</div><div id="winningDemoRows" aria-live="polite"></div></article>
+    <section class="section-head"><div><span class="eyebrow">PLAY SAFELY</span><h2>18+ Rules &amp; Responsible Play</h2></div></section><article class="responsible-card"><p><b>18+ only.</b> Participation is restricted to adults aged 18 or above.</p><ul><li>Provide accurate account information.</li><li>Read game rules and winning conditions before participating.</li><li>There are no guaranteed winnings.</li><li>Never risk money you cannot afford to lose.</li><li>Follow all applicable local laws and regulations.</li><li>Contact Support for account-related issues.</li></ul><p class="responsible-foot">Set limits, take breaks, and stop playing if it no longer feels recreational.</p></article>`;
+  startWinningDemo();
+}
+
+function authPage() {
+  const reg = state.authMode === 'register', ref = new URLSearchParams(location.search).get('ref') || '';
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
+  <form id="authForm" class="demo-form" autocomplete="on">
+    ${reg ? '<label for="aName">Full name</label><input id="aName" autocomplete="name" required maxlength="60">' : ''}
+    <label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" required>
+    ${reg ? '<label for="aPhone">Mobile (optional)</label><input id="aPhone" type="tel" autocomplete="tel" maxlength="20">' : ''}
+    <label for="aPass">Password ${reg ? '(min 8 characters)' : ''}</label>${pwField('aPass', reg ? 'new-password' : 'current-password', `required minlength="${reg ? 8 : 1}"`)}
+    ${reg ? `<label for="aRef">Invite code (optional)</label><input id="aRef" value="${esc(ref)}" maxlength="20">` : ''}
+    <p class="msg-err" id="authErr" role="alert"></p>
+    <button class="primary-btn" type="submit">${reg ? 'Register' : 'Login'}</button>
+    <button class="link-btn" type="button" id="swapAuth">${reg ? 'Already have an account? Login' : 'New here? Create an account'}</button>
+  </form>`;
+  $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
+  $('#authForm').onsubmit = async e => {
+    e.preventDefault(); const btn = e.submitter; btn.disabled = true; $('#authErr').textContent = '';
+    try {
+      await api(reg ? 'register' : 'login', reg ? { name: $('#aName').value, email: $('#aEmail').value, phone: $('#aPhone').value, password: $('#aPass').value, ref: $('#aRef').value } : { email: $('#aEmail').value, password: $('#aPass').value });
+      await loadMe(); const go = state.after || 'Assets'; state.after = null; showToast(reg ? 'Account created.' : 'Welcome back.'); renderPage(go);
+    } catch (err) { $('#authErr').textContent = err.message; btn.disabled = false; }
+  };
+}
+
+function txList() {
+  const bc = bonusCfg(), rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
+  if (!rows.length) return '<div class="empty-state">No transactions yet.</div>';
+  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★' }, plus = { Deposit: 1, Sell: 1 };
+  return `<div class="activity-list">${rows.map(r => {
+    const rw = r.kind === 'Reward', val = rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
+    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
+    return `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${rw ? esc(r.symbol) : r.kind}${!rw && r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${rw ? ' · ' : ''}${sub}</small></span><strong class="${cls}">${val}</strong></div>`;
+  }).join('')}</div>`;
+}
+
+function holdingsList() {
+  const h = Object.entries(state.me.holdings || {}); if (!h.length) return '<div class="empty-state">No coins yet. Tap any coin in Quotes to buy.</div>';
+  return `<div class="asset-list">${h.map(([sym, q]) => {
+    const a = state.prices.find(x => x.symbol === sym), fx = Number(state.fx || 0), value = a && fx ? q * a.price * fx : null;
+    const cost = Number((state.me.cost || {})[sym] || 0), pnl = value == null ? null : value - cost;
+    const pnlText = pnl == null ? 'P/L unavailable' : `${pnl >= 0 ? '+' : '−'}${inr(Math.abs(pnl))} unrealized`;
+    const pnlClass = pnl == null ? '' : pnl >= 0 ? 'positive' : 'negative';
+    return `<div class="asset-row" data-coin="${esc(sym)}" role="button" tabindex="0" style="cursor:pointer"><div class="asset-name"><span class="coin" aria-hidden="true">${esc(a ? a.mark : sym[0])}</span><div><strong>${esc(sym)}</strong><small>${qtyFmt(q)} · Cost ${inr(cost)}</small><small class="${pnlClass}">${pnlText}</small></div></div><div class="asset-price">${value == null ? '—' : inr(value)}<small style="display:block">Market value</small></div></div>`;
+  }).join('')}</div>`;
+}
+
+function bonusBody() {
+  const b = bonusCfg(state.coin), u = state.me; if (!b.enabled) return '<div class="empty-state">This coin is not open right now.</div>';
+  const mine = state.positions.filter(p => p.status === 'Active');
+  return `<article class="balance-card"><span>${esc(b.name)} · ${esc(b.symbol)}</span><strong>+${b.returnPct}% return</strong><small>${bonusSeconds(b) ? 'Countdown: ' + bonusSeconds(b) + ' seconds' : 'Paid instantly'} · Trade ${inr(b.minAmount)} – ${inr(b.maxAmount)}</small>${u ? `<div class="stat-grid"><div><small>Wallet</small><b>${inr(u.balance)}</b></div><div><small>Active trades</small><b>${mine.length} · ${inr(mine.reduce((s, p) => s + p.amount, 0))}</b></div></div>` : ''}</article>
+  <article class="content-card chart-card"><div class="chart-bar"><div class="seg">${[['candle','Candles'],['line','Line']].map(([k,l])=>`<button type="button" data-ct="${k}" class="${state.chartType===k?'on':''}">${l}</button>`).join('')}</div><div class="seg">${[['1m','1m'],['3m','3m'],['5m','5m'],['15m','15m'],['1h','1H'],['1d','1D']].map(([k,l])=>`<button type="button" data-iv="${k}" class="${state.interval===k?'on':''}">${l}</button>`).join('')}</div><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Zoom in">＋</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-chart-home>Latest</button><button type="button" data-draw-line class="draw-tool">↗ Trend line</button><button type="button" data-draw-horizontal>— Price line</button><button type="button" data-clear-lines>Clear lines</button></div></div><div class="chart-hint" id="chartHint">Pinch or scroll to zoom · Drag to view older candles</div><div class="chart-info" id="chartInfo"></div><div class="chart-box" id="chartBox"></div></article>${u ? `<form id="bonusForm" class="demo-form"><label for="bAmt">Amount to trade (₹)</label><input id="bAmt" type="number" inputmode="numeric" step="1" min="${b.minAmount}" max="${b.maxAmount}" required placeholder="min ${b.minAmount}"><div class="quick">${[25, 50, 100].map(p => `<button type="button" data-bpct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div><p class="fine-print" id="bEst"></p><p class="fine-print">Wallet: <b>${inr(u.balance)}</b> · Your amount plus the ${b.returnPct}% return is credited to your wallet ${bonusSeconds(b) ? 'after ' + bonusSeconds(b) + ' seconds' : 'immediately'}.</p><p class="msg-err" id="bErr" role="alert"></p><button class="primary-btn" type="submit">Trade ${esc(b.symbol)}</button></form>`
+  : `<div class="demo-form"><p class="fine-print">Login to trade ${esc(b.symbol)}.</p><button class="primary-btn" data-page="Auth">Login / Register</button></div>`}`;
+}
+function bindBonus() {
+  const f = $('#bonusForm'); if (!f) return; const b = bonusCfg();
+  const est = () => { const v = Number($('#bAmt').value); $('#bEst').textContent = v > 0 ? `You will receive ${inr(v + v * b.returnPct / 100)} (profit ${inr(v * b.returnPct / 100)})` : ''; };
+  $$('[data-bpct]').forEach(x => x.onclick = () => { $('#bAmt').value = Math.min(b.maxAmount, Math.floor(state.me.balance * Number(x.dataset.bpct) / 100)); est(); });
+  $('#bAmt').oninput = est;
+  f.onsubmit = async e => {
+    e.preventDefault(); $('#bErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+    try { const j = await api('bonus/trade', { symbol: b.symbol, amount: Number($('#bAmt').value) }); await loadMe(); const p = j.position; showModal('Trade placed', `${inr(p.amount)} promotional position started for ${p.symbol}. Principal + ${p.returnPct}% promotional reward is scheduled after ${p.lockSeconds} seconds.`); renderPage('Coin', true); }
+    catch (x) { $('#bErr').textContent = x.message; btn.disabled = false; }
+  };
+}
+
+// ---------- candlestick / line chart (own SVG, no libraries) ----------
+async function fetchKlines(sym, iv) {
+  try { return (await api(`klines?symbol=${sym}&interval=${iv}`)).candles; }
+  catch (e) { const rows = await getJSON(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=${iv}&limit=130`); return rows.map(r => [r[0], +r[1], +r[2], +r[3], +r[4], +r[5]]); }
+}
+async function loadChart(initial) {
+  const sym = state.coin, iv = state.interval, key = sym + ':' + iv, c = state.kl[key];
+  if (initial) drawChart();
+  if (c && Date.now() - c.ts < 5e3) return;
+  try { state.kl[key] = { ts: Date.now(), candles: await fetchKlines(sym, iv) }; state.klErr = ''; } catch { if (!c) state.klErr = 'Chart data is not available right now.'; }
+  if (state.page === 'Coin' && state.coin === sym && state.interval === iv) { if (state.chartGestureActive) state.chartPendingRedraw = true; else drawChart(); }
+}
+const pFmt = v => v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v >= 1 ? v.toFixed(2) : v.toFixed(4);
+function maSeries(d, p) { const o = []; let s = 0; d.forEach((x, i) => { s += x[4]; if (i >= p) s -= d[i - p][4]; o.push(i >= p - 1 ? s / p : null); }); return o; }
+function drawChart() {
+  const box = $('#chartBox'); if (!box) return; const key = state.coin + ':' + state.interval, c = state.kl[key];
+  if (!c || c.candles.length < 2) { box.innerHTML = `<div class="empty-state">${state.klErr || 'Loading chart…'}</div>`; $('#chartInfo').innerHTML = ''; return; }
+  const all = c.candles, total = all.length, view = state.chartView[key] || (state.chartView[key] = { count: 42, offset: 0 });
+  view.count = Math.max(12, Math.min(total, view.count)); view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+  const end = total - view.offset, begin = Math.max(0, end - view.count), d = all.slice(begin, end), n = d.length, candle = state.chartType === 'candle';
+  const MAS = [[5, '#f5a623'], [10, '#7b61ff'], [30, '#00a3d7']].map(([p, col]) => ({ p, col, v: maSeries(all, p).slice(begin, end) }));
+  const W = Math.max(260, box.clientWidth || 340), L = 8, R = 62, T = 12, PH = 205, VG = 10, VH = 44, B = 24, H = T + PH + VG + VH + B, pw = W - L - R, vTop = T + PH + VG;
+  let lo = Math.min(...d.map(x => candle ? x[3] : x[4])), hi = Math.max(...d.map(x => candle ? x[2] : x[4])); const pad = (hi - lo || hi * .01) * .08; lo -= pad; hi += pad;
+  const vmax = Math.max(...d.map(x => x[5] || 0)) || 1;
+  const X = i => L + (i + .5) * pw / n, Y = v => T + (hi - v) / (hi - lo) * PH, last = d[n - 1], up = last[4] >= d[0][4], col = up ? '#2bb78a' : '#e16b78';
+  const tf = t => new Date(t).toLocaleString('en-IN', state.interval === '1d' ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
+  let g = '';
+  for (let k = 0; k <= 4; k++) { const v = lo + (hi - lo) * k / 4, y = Y(v); g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#eef1f7"/><text x="${W - R + 5}" y="${y + 3}" font-size="10" fill="#8b94a9">${pFmt(v)}</text>`; }
+  g += `<line x1="${L}" x2="${W - R}" y1="${vTop + VH}" y2="${vTop + VH}" stroke="#eef1f7"/><text x="${W - R + 5}" y="${vTop + 9}" font-size="9" fill="#8b94a9">VOL</text>`;
+  [0, Math.floor((n - 1) / 2), n - 1].forEach((i, k) => { g += `<text x="${k === 0 ? L : k === 2 ? W - R : X(i)}" y="${H - 6}" font-size="10" fill="#8b94a9" text-anchor="${k === 0 ? 'start' : k === 2 ? 'end' : 'middle'}">${tf(d[i][0])}</text>`; });
+  let body = ''; const bw = Math.max(2, Math.min(12, pw / n * .66));
+  d.forEach((x, i) => { const cc = x[4] >= x[1] ? '#2bb78a' : '#e16b78', h = (x[5] || 0) / vmax * VH; body += `<rect x="${X(i) - bw / 2}" y="${vTop + VH - h}" width="${bw}" height="${h}" fill="${cc}" opacity=".55"/>`; });
+  if (candle) {
+    d.forEach((x, i) => { const cc = x[4] >= x[1] ? '#2bb78a' : '#e16b78', yt = Y(Math.max(x[1], x[4])), yb = Y(Math.min(x[1], x[4])); body += `<line x1="${X(i)}" x2="${X(i)}" y1="${Y(x[2])}" y2="${Y(x[3])}" stroke="${cc}" stroke-width="1.2"/><rect x="${X(i) - bw / 2}" y="${yt}" width="${bw}" height="${Math.max(1, yb - yt)}" fill="${cc}"/>`; });
+    MAS.forEach(m => { const pts = m.v.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join(' '); if (pts) body += `<polyline points="${pts}" fill="none" stroke="${m.col}" stroke-width="1.2" stroke-linejoin="round" opacity=".8"/>`; });
+  } else { const pts = d.map((x, i) => `${X(i).toFixed(1)},${Y(x[4]).toFixed(1)}`).join(' '); body += `<defs><linearGradient id="lg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".22"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs><polygon points="${X(0)},${T + PH} ${pts} ${X(n - 1)},${T + PH}" fill="url(#lg)"/><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`; }
+  const drawings = state.chartDrawings[key] || [];
+  drawings.forEach(line => { if (line.horizontal) { body += `<line x1="${L}" y1="${Y(line.p1)}" x2="${W-R}" y2="${Y(line.p1)}" stroke="#4263eb" stroke-width="2" stroke-dasharray="5 3"/>`; return; } const ia = d.findIndex(x => x[0] === line.t1), ib = d.findIndex(x => x[0] === line.t2); if (ia >= 0 && ib >= 0) body += `<line x1="${X(ia)}" y1="${Y(line.p1)}" x2="${X(ib)}" y2="${Y(line.p2)}" stroke="#4263eb" stroke-width="2" stroke-linecap="round"/><circle cx="${X(ia)}" cy="${Y(line.p1)}" r="3" fill="#4263eb"/><circle cx="${X(ib)}" cy="${Y(line.p2)}" r="3" fill="#4263eb"/>`; });
+  const ly = Y(last[4]);
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart"><rect x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="#fff"/>${g}${body}<line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${vTop + VH}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="transparent" style="touch-action:none;cursor:${state.drawMode ? 'crosshair' : 'grab'}"/></svg>`;
+  const vf = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toFixed(1);
+  const info = i => { const x = d[i], ch = (x[4] - x[1]) / (x[1] || 1) * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span><span>Vol <b>${vf(x[5] || 0)}</b></span>` + (candle ? '<span class="ma-row">' + MAS.map(m => m.v[i] == null ? '' : `<span style="color:${m.col}">MA${m.p} <b style="color:${m.col}">${pFmt(m.v[i])}</b></span>`).join('') + '</span>' : ''); };
+  info(n - 1); const xh = $('#xh'), ov = $('#ov'), svg = box.querySelector('svg'); if (svg) { svg.style.transformOrigin = 'center center'; svg.style.willChange = 'transform'; } let drag = null;
+  const point = e => { const r = ov.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H; return { i: Math.max(0, Math.min(n - 1, Math.floor((px - L) / pw * n))), price: hi - (py - T) / PH * (hi - lo) }; };
+  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false;
+  const finishGesture = () => {
+    state.chartGestureActive = false;
+    if (svg) svg.style.transform = '';
+    drawChart();
+    state.chartPendingRedraw = false;
+  };
+  ov.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { ov.setPointerCapture(e.pointerId); } catch (_) {}
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size === 1) gestureChanged = false;
+    state.chartGestureActive = true;
+    if (activePointers.size === 2) {
+      drag = null;
+      const pts = [...activePointers.values()];
+      pinchStart = { distance: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1, count: view.count, changed: false };
+      return;
+    }
+    if (state.drawMode) {
+      const q = point(e), candlePoint = d[q.i];
+      if (state.drawMode === 'horizontal') {
+        (state.chartDrawings[key] ||= []).push({ horizontal: true, p1: Math.max(lo, Math.min(hi, q.price)) });
+        state.drawMode = false; state.drawDraft = null;
+        $$('[data-draw-line],[data-draw-horizontal]').forEach(b => b.classList.remove('on'));
+        $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles';
+        state.chartGestureActive = false; drawChart(); return;
+      }
+      if (!state.drawDraft) {
+        state.drawDraft = { t: candlePoint[0], p: Math.max(lo, Math.min(hi, q.price)) };
+        $('#chartHint').textContent = 'Tap/click a second point to finish the trend line.';
+      } else {
+        (state.chartDrawings[key] ||= []).push({ t1: state.drawDraft.t, p1: state.drawDraft.p, t2: candlePoint[0], p2: Math.max(lo, Math.min(hi, q.price)) });
+        state.drawDraft = null; state.drawMode = false;
+        $$('[data-draw-line],[data-draw-horizontal]').forEach(b => b.classList.remove('on'));
+        $('#chartHint').textContent = 'Pinch or scroll to zoom · Drag to view older candles';
+        state.chartGestureActive = false; drawChart();
+      }
+      return;
+    }
+    drag = { x: e.clientX, offset: view.offset, moved: false };
+    ov.style.cursor = 'grabbing';
+  });
+  ov.addEventListener('pointermove', e => {
+    if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.size >= 2 && pinchStart) {
+      e.preventDefault();
+      const pts = [...activePointers.values()], dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      view.count = Math.max(12, Math.min(total, Math.round(pinchStart.count * pinchStart.distance / dist)));
+      view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+      pinchStart.changed = true; gestureChanged = true;
+      return;
+    }
+    if (drag && !state.drawMode) {
+      e.preventDefault();
+      const dx = e.clientX - drag.x;
+      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
+      if (drag.moved) {
+        // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
+        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + Math.round(dx / Math.max(1, pw) * view.count * -1)));
+        if (svg) svg.style.transform = `translate3d(${dx}px,0,0)`;
+      }
+      return;
+    }
+    const q = point(e);
+    xh.setAttribute('x1', X(q.i)); xh.setAttribute('x2', X(q.i)); xh.setAttribute('visibility', 'visible'); info(q.i);
+  });
+  const endPointer = e => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.delete(e.pointerId);
+    const wasPinching = !!pinchStart;
+    const pinchChanged = !!(pinchStart && pinchStart.changed);
+    if (activePointers.size < 2) pinchStart = null;
+    const moved = !!(drag && drag.moved);
+    drag = null;
+    if (activePointers.size === 0) {
+      if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
+      else { state.chartGestureActive = false; if (svg) svg.style.transform = ''; if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }
+      gestureChanged = false;
+    }
+  };
+  ov.addEventListener('pointerup', endPointer);
+  ov.addEventListener('pointercancel', endPointer);
+  ov.addEventListener('lostpointercapture', endPointer);
+  ov.addEventListener('pointerleave', () => { if (!drag) { xh.setAttribute('visibility', 'hidden'); info(n - 1); } });
+  ov.addEventListener('wheel', e => { e.preventDefault(); view.count = Math.max(12, Math.min(total, view.count + (e.deltaY < 0 ? -Math.max(3, Math.round(view.count * .18)) : Math.max(3, Math.round(view.count * .18))))); view.offset = Math.min(view.offset, total - view.count); drawChart(); }, { passive: false });
+}
+function bindChart() {
+  $$('[data-ct]').forEach(b => b.onclick = () => { state.chartType = b.dataset.ct; $$('[data-ct]').forEach(x => x.classList.toggle('on', x === b)); drawChart(); });
+  $$('[data-iv]').forEach(b => b.onclick = () => { state.interval = b.dataset.iv; $$('[data-iv]').forEach(x => x.classList.toggle('on', x === b)); loadChart(true); });
+  $$('[data-zoom]').forEach(b => b.onclick = () => { const key = state.coin + ':' + state.interval, c = state.kl[key]; if (!c) return; const v = state.chartView[key] || (state.chartView[key] = { count: 42, offset: 0 }); v.count = Math.max(12, Math.min(c.candles.length, v.count + (b.dataset.zoom === 'in' ? -8 : 8))); v.offset = Math.min(v.offset, c.candles.length - v.count); drawChart(); });
+  $$('[data-chart-home]').forEach(b => b.onclick = () => { const v = state.chartView[state.coin + ':' + state.interval]; if (v) v.offset = 0; drawChart(); });
+  $$('[data-draw-line]').forEach(b => b.onclick = () => { state.drawMode = state.drawMode === 'trend' ? false : 'trend'; state.drawDraft = null; $$('[data-draw-line]').forEach(x => x.classList.toggle('on', state.drawMode === 'trend')); $$('[data-draw-horizontal]').forEach(x => x.classList.remove('on')); $('#chartHint').textContent = state.drawMode ? 'Tap/click two points to draw a trend line.' : 'Pinch or scroll to zoom · Drag to view older candles'; drawChart(); });
+  $$('[data-draw-horizontal]').forEach(b => b.onclick = () => { state.drawMode = state.drawMode === 'horizontal' ? false : 'horizontal'; state.drawDraft = null; $$('[data-draw-horizontal]').forEach(x=>x.classList.toggle('on',state.drawMode==='horizontal')); $$('[data-draw-line]').forEach(x=>x.classList.remove('on')); $('#chartHint').textContent = state.drawMode ? 'Tap/click the chart to add a horizontal price line.' : 'Pinch or scroll to zoom · Drag to view older candles'; drawChart(); });
+  $$('[data-clear-lines]').forEach(b => b.onclick = () => { state.chartDrawings[state.coin + ':' + state.interval] = []; state.drawDraft = null; state.drawMode = false; $$('[data-draw-line],[data-draw-horizontal]').forEach(x => x.classList.remove('on')); drawChart(); });
+  loadChart(true);
+}
+window.addEventListener('resize', () => { if (state.page === 'Coin') drawChart(); });
+
+function coinBody() {
+  const a = state.prices.find(x => x.symbol === state.coin); if (!a) return '';
+  const hold = (state.me && state.me.holdings && state.me.holdings[a.symbol]) || 0, unit = state.fx ? a.price * state.fx : 0, c = state.cfg;
+  const buy = state.side === 'buy';
+  return `<article class="balance-card"><span>${esc(a.name)} · ${esc(a.symbol)}</span><strong id="coinPrice">${unit ? inr(unit) : usd(a.price)}</strong><small id="coinSub">${usd(a.price)} · <span class="${a.change < 0 ? 'negative' : 'positive'}" style="color:inherit">${changeLabel(a.change)} (24h)</span></small>${state.me ? `<div class="stat-grid"><div><small>You hold</small><b>${qtyFmt(hold)} ${esc(a.symbol)}</b></div><div><small>Value</small><b>${unit ? inr(hold * unit) : '—'}</b></div></div>` : ''}</article>
+  <article class="content-card chart-card"><div class="chart-bar"><div class="seg">${[['candle', 'Candles'], ['line', 'Line']].map(([k, l]) => `<button type="button" data-ct="${k}" class="${state.chartType === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="seg">${[['1m', '1m'], ['3m', '3m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1H'], ['1d', '1D']].map(([k, l]) => `<button type="button" data-iv="${k}" class="${state.interval === k ? 'on' : ''}">${l}</button>`).join('')}</div><div class="chart-tools"><button type="button" data-zoom="in" aria-label="Zoom in">＋</button><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-chart-home>Latest</button><button type="button" data-draw-line class="draw-tool">↗ Trend line</button><button type="button" data-draw-horizontal>— Price line</button><button type="button" data-clear-lines>Clear lines</button></div></div><div class="chart-hint" id="chartHint">Pinch or scroll to zoom · Drag to view older candles</div><div class="chart-info" id="chartInfo"></div><div class="chart-box" id="chartBox"></div></article>
+  ${state.me ? `<div class="tabs2"><button type="button" data-side="buy" class="${buy ? 'on' : ''}">Buy</button><button type="button" data-side="sell" class="${buy ? '' : 'on'}">Sell</button></div>
+  <form id="tradeForm" class="demo-form"><label for="tAmt">${buy ? 'Amount to spend (₹)' : 'Quantity to sell (' + esc(a.symbol) + ')'}</label><input id="tAmt" type="number" inputmode="decimal" step="any" min="0" required placeholder="${buy ? 'min ' + c.minTrade : '0.00'}">
+  <div class="quick">${buy ? [25, 50, 100].map(p => `<button type="button" data-pct="${p}">${p}%</button>`).join('') : [25, 50, 100].map(p => `<button type="button" data-pct="${p}">${p === 100 ? 'Max' : p + '%'}</button>`).join('')}</div>
+  <p class="fine-print" id="tEst"></p><p class="fine-print">${buy ? 'Wallet' : 'Holding'}: <b>${buy ? inr(state.me.balance) : qtyFmt(hold) + ' ' + esc(a.symbol)}</b> · Price is fixed by the server at the moment you confirm. No trading fee.</p>
+  <p class="msg-err" id="tErr" role="alert"></p><button class="primary-btn" type="submit">${buy ? 'Buy' : 'Sell'} ${esc(a.symbol)}</button></form>`
+  : `<div class="demo-form"><p class="fine-print">Login to buy or sell ${esc(a.symbol)}.</p><button class="primary-btn" data-page="Auth">Login / Register</button></div>`}`;
+}
+function tradeEstimate() {
+  const a = state.prices.find(x => x.symbol === state.coin), el = $('#tEst'), v = Number($('#tAmt') && $('#tAmt').value);
+  if (!a || !el || !state.fx) return; const unit = a.price * state.fx;
+  el.textContent = v > 0 ? (state.side === 'buy' ? `You get ≈ ${qtyFmt(Math.floor(v / unit * 1e8) / 1e8)} ${a.symbol}` : `You get ≈ ${inr(v * unit)}`) : '';
+}
+function updateCoinLive() {
+  const a = state.prices.find(x => x.symbol === state.coin), p = $('#coinPrice'); if (a && !p) return renderPage('Coin', true); if (!a || !p) return;
+  p.textContent = state.fx ? inr(a.price * state.fx) : usd(a.price); $('#coinSub').innerHTML = `${usd(a.price)} · ${changeLabel(a.change)} (24h)`; tradeEstimate(); loadChart();
+}
+function bindCoin() {
+  const f = $('#tradeForm'); if (!f) return;
+  $$('[data-side]').forEach(b => b.onclick = () => { state.side = b.dataset.side; renderPage('Coin', true); });
+  const a = () => state.prices.find(x => x.symbol === state.coin);
+  $$('[data-pct]').forEach(b => b.onclick = () => {
+    const pct = Number(b.dataset.pct) / 100, c = a(); if (!c) return;
+    if (state.side === 'buy') $('#tAmt').value = Math.floor(state.me.balance * pct * 100) / 100;
+    else { const h = state.me.holdings[state.coin] || 0; $('#tAmt').value = pct === 1 ? h : Math.floor(h * pct * 1e8) / 1e8; f.dataset.all = pct === 1 ? '1' : ''; }
+    tradeEstimate();
+  });
+  $('#tAmt').oninput = () => { f.dataset.all = ''; tradeEstimate(); };
+  f.onsubmit = async e => {
+    e.preventDefault(); $('#tErr').textContent = ''; const btn = e.submitter; btn.disabled = true; const v = Number($('#tAmt').value);
+    try {
+      const j = await api('trade', state.side === 'buy' ? { symbol: state.coin, side: 'buy', amount: v } : { symbol: state.coin, side: 'sell', qty: v, all: f.dataset.all === '1' });
+      await loadMe(); const t = j.trade; showModal(t.side === 'buy' ? 'Bought' : 'Sold', `${qtyFmt(t.qty)} ${t.symbol} at ${inr(t.price)} = ${inr(t.amount)}` + (t.profit != null ? (t.profit >= 0 ? ` · Profit ${inr(t.profit)}` : ` · Loss ${inr(-t.profit)}`) : '')); renderPage('Coin', true);
+    } catch (x) { $('#tErr').textContent = x.message; btn.disabled = false; }
+  };
+}
+
+async function renderPage(page, quiet) {
+  if (PROTECTED.has(page) && !state.me) return needLogin(page);
+  state.page = page; syncBottomNav();
+  const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
+  if (location.hash !== route) history.replaceState(null, '', route);
+  $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+  const main = $('#appMain'), c = state.cfg;
+  if (page === 'Home') renderHome();
+  else if (page === 'Coin') {
+    main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCoins().some(b => b.enabled && state.coin === b.symbol) ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
+    if (bonusCoins().some(b => b.enabled && state.coin === b.symbol)) { bindBonus(); if ($('#chartBox')) bindChart(); } else { bindCoin(); if ($('#chartBox')) bindChart(); }
+  }
+  else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
+  else if (page === 'Profile') {
+    const u = state.me; if (!u) return needLogin('Profile');
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p><p class="fine-print">Account UID: <code>${esc(u.uid || u.id)}</code></p></section>
+    ${u.role === 'admin' ? '<article class="content-card"><h2>Admin</h2><p class="fine-print">You are signed in as an administrator.</p><a class="primary-btn" style="display:block;text-align:center;text-decoration:none" href="/admin">Open Admin Panel</a></article>' : ''}
+    <form id="pwForm" class="demo-form"><h2 style="margin-top:0;font-size:16px">Change password</h2><label for="pwC">Current password</label>${pwField('pwC', 'current-password', 'required')}<label for="pwN">New password (min 8)</label>${pwField('pwN', 'new-password', 'minlength="8" required')}<p class="msg-err" id="pwErr"></p><button class="primary-btn" type="submit">Update password</button></form>
+    <div class="demo-form" style="margin-top:14px"><button class="secondary-btn" id="logout" type="button">Logout</button></div>`;
+    $('#pwForm').onsubmit = async e => { e.preventDefault(); try { await api('password', { current: $('#pwC').value, password: $('#pwN').value }); e.target.reset(); showToast('Password updated.'); } catch (x) { $('#pwErr').textContent = x.message; } };
+    $('#logout').onclick = doLogout;
+  } else if (page === 'Quotes') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET EXPLORER</span><h1>Quotes</h1><p>Live crypto prices in USD with 24h change and 7-day trend.</p></section><div class="search-wrap"><span>⌕</span><input id="assetSearch" type="search" placeholder="Search by name or symbol…" value="${esc(state.query)}" aria-label="Search assets"><button id="clearSearch" type="button" aria-label="Clear search">×</button></div><div id="staleNote">${staleNote()}</div><section class="asset-list" id="quoteList">${renderAssetRows(state.query)}</section>`;
+    $('#assetSearch').addEventListener('input', e => { state.query = e.target.value; $('#quoteList').innerHTML = renderAssetRows(state.query); });
+    $('#clearSearch').addEventListener('click', () => { state.query = ''; $('#assetSearch').value = ''; $('#quoteList').innerHTML = renderAssetRows(''); $('#assetSearch').focus(); });
+  } else if (page === 'Assets') {
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Assets</h1><p>Your wallet balance in Indian rupees.</p><p class="fine-print">Account UID: <code>${esc(state.me.uid || state.me.id)}</code></p></section><article class="balance-card"><span>Main Wallet</span><strong>${inr(state.me.balance)}</strong><small>Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)}</small><div class="stat-grid"><div><small>Third Wallet · Coin profit</small><b>${inr(state.me.thirdWallet || 0)}</b></div><div><small>Deposit amount eligible for investment</small><b>${inr(state.me.depositEligible || 0)}</b></div></div><form id="investForm" class="demo-form"><h3>Coin Investment</h3><p class="fine-print">Admin limit: ${Number(c.investment?.depositPercent ?? 50)}% of deposit-eligible funds · Profit rate: ${Number(c.investment?.profitPct ?? 5)}% · Holding: ${Number(c.investment?.holdingDays ?? 7)} days. Principal returns to Main Wallet; profit goes to Third Wallet.</p><label>Investment amount (₹)</label><input id="investAmount" type="number" min="1" step="1" required><button class="primary-btn" type="submit" ${c.investment?.enabled === false ? 'disabled' : ''}>Invest deposit funds</button><p class="msg-err" id="investErr"></p></form><form id="transferForm" class="demo-form"><h3>Third Wallet → Main Wallet</h3><label>Transfer amount (₹)</label><input id="transferAmount" type="number" min="1" step="1" required><button class="secondary-btn" type="submit">Transfer to Main Wallet</button><p class="msg-err" id="transferErr"></p></form><small>Withdrawal is available only from Main Wallet. Third Wallet cannot be withdrawn directly; transfer Third Wallet funds to Main Wallet first.</small><div class="balance-actions"><button data-page="Recharge">Recharge</button><button data-page="Withdrawal">Withdrawal</button><button data-page="Quotes">Buy / Sell</button></div><div class="balance-actions"><button data-page="Profile">Change password</button><button id="logoutBtn" type="button">Logout</button></div>${['admin','headAdmin','panelAdmin'].includes(state.me.role) ? `<div class="balance-actions"><a class="primary-btn" style="display:block;text-align:center;text-decoration:none;flex:1" href="${state.me.role === 'panelAdmin' ? '/p/' + esc(String(state.me.panelId || activePanelSlug())) + '/admin' : '/admin'}">Open Admin Panel ↗</a></div>` : ''}</article><section class="section-head"><div><span class="eyebrow">YOUR COINS</span><h2>Holdings</h2></div></section>${holdingsList()}<section class="section-head"><div><span class="eyebrow">YOUR RECORDS</span><h2>Recent activity</h2></div></section>${txList()}`;
+    $('#logoutBtn').onclick = doLogout;
+    $('#investForm').onsubmit = async e => { e.preventDefault(); try { await api('investment', { amount: Number($('#investAmount').value) }); await loadMe(); showToast('Investment placed; now visible in Holding.'); renderPage('Assets', true); } catch (x) { $('#investErr').textContent = x.message; } };
+    $('#transferForm').onsubmit = async e => { e.preventDefault(); try { await api('wallet/third-to-main', { amount: Number($('#transferAmount').value) }); await loadMe(); showToast('Transferred to Main Wallet.'); renderPage('Assets', true); } catch (x) { $('#transferErr').textContent = x.message; } };
+    const inv = state.investments || []; if (inv.length) { const h=document.createElement('section'); h.innerHTML = `<section class="section-head"><div><span class="eyebrow">INVESTMENT HISTORY</span><h2>Holding</h2></div></section><div class="content-card"><div class="tbl"><table><tr><th>Amount</th><th>Profit %</th><th>Holding days</th><th>Status</th></tr>${inv.map(x=>`<tr><td>${inr(x.amount)}</td><td>${Number(x.profitPct)}%</td><td>${x.holdingDays}</td><td>${esc(x.status)}</td></tr>`).join('')}</table></div></div>`; main.appendChild(h); }
+  } else if (page === 'Team' || page === 'Invite') {
+    const code = state.me.refCode, invitePanel = String(state.me.role === 'panelAdmin' ? (state.me.panelId || activePanelSlug()) : activePanelSlug()).toLowerCase(), inviteBase = invitePanel && invitePanel !== 'main' ? '/p/' + encodeURIComponent(invitePanel) + '/' : '/', link = location.origin + inviteBase + '?ref=' + encodeURIComponent(code);
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong>${state.cfg.tradeRef && state.cfg.tradeRef.enabled && state.cfg.tradeRef.pct ? `<div class="stat-grid"><div><small>Your commission</small><b>${state.cfg.tradeRef.pct}% of the profit your friends make on their market trades</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : ''}${bonusCfg().enabled && bonusCfg().refPct ? `<div class="stat-grid"><div><small>Your commission</small><b>${bonusCfg().refPct}% of ${bonusCfg().refBase === 'amount' ? 'their ' + esc(bonusCfg().symbol) + ' trade amount' : 'their ' + esc(bonusCfg().symbol) + ' trade return'}</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : `<div class="stat-grid"><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>`}</article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
+    $('#copyCode').onclick = async () => { try { await navigator.clipboard.writeText(link); showToast('Invite link copied.'); } catch { showToast('Your invite code: ' + code); } };
+  } else if (page === 'Games') {
+    if (!state.me) return needLogin('Games');
+    let gameData = null;
+    try { gameData = await api('games/flip-coin'); } catch (e) { showToast(e.message); }
+    const fc = (gameData && gameData.config) || { enabled:true, minBet:10, maxBet:10000, multiplier:2, feePct:0 };
+    const history = (gameData && gameData.history) || [];
+    let coinRet = Number(fc.returnPct != null ? fc.returnPct : 100);
+    main.innerHTML = `<section class="flip-page" aria-label="Games"><div id="gameChooser" class="game-chooser cc-chooser"><div class="cc-hero">${ccLogo('big')}<p>Choose a game and start playing</p></div><div class="cc-cards"><article class="cc-card cc-card-coin"><div class="cc-card-art"><span class="cc-coin-art">₿</span></div><div class="cc-card-body"><h3>Coin Game</h3><p>Head or Tail · choose your side</p><button type="button" class="cc-play" data-game-switch="head">Play</button></div></article><article class="cc-card cc-card-wingo"><div class="cc-card-art"><span class="cc-ball-art"><i class="g">1</i><i class="r">2</i><i class="v">5</i></span></div><div class="cc-card-body"><h3>WinGo</h3><p>Number · Color · Big/Small · 30s to 5 min</p><button type="button" class="cc-play" data-game-switch="big">Play</button></div></article></div></div><div id="headTailGame" class="ht-game" hidden>${ccBar()}
+      <header class="flip-wallet-head bs-head"><div class="bs-wallet-card"><button type="button" class="bs-back" data-game-back aria-label="Back to games">‹</button><div class="bs-bal-row"><strong id="gameBalance">${inr(state.me.balance)}</strong><button type="button" class="flip-refresh" id="flipRefresh" aria-label="Refresh balance">${BSI.refresh}</button></div><div class="bs-bal-label"><span class="bs-wicon">${BSI.wallet}</span>Wallet balance</div><div class="flip-wallet-actions"><button type="button" data-page="Withdrawal" class="flip-withdraw">Withdraw</button><button type="button" data-page="Recharge" class="flip-deposit">Deposit</button></div></div></header>
+      <div class="flip-notice"><span class="bs-speaker">${BSI.speaker}</span><span id="flipNotice">Head or Tail · 30-second rounds</span><button type="button" class="bs-notice-detail" id="flipNoticeDetail">${BSI.fire}Detail</button></div>
+      <section class="flip-timer-panel" id="flipGameCard">
+        <div class="bs-tp-left"><span class="flip-howto" id="flipHowTo">${BSI.book}How to play</span><div class="bs-round-label">Coin Game 30sec</div><div id="flipCoinVisual" class="flip-coin-visual" aria-label="Coin"><span class="coin-face">₿</span></div></div>
+        <div class="bs-tp-right"><div class="flip-time-label">Time remaining</div><div id="flipRoundTimer" class="flip-digits"><b>0</b><b>0</b><em>:</em><b>3</b><b>0</b></div><div id="flipRoundStatus" class="flip-period">Round loading…</div></div>
+      </section>
+      <div class="flip-bet-panel bs-bet-panel" id="flipBetPanel">
+        <div id="flipReveal" class="flip-reveal" aria-live="assertive" aria-hidden="true"><div id="flipRevealCoin" class="flip-reveal-coin"><span>₿</span></div><strong id="flipRevealText">FLIPPING…</strong></div>
+        <form id="flipForm" class="flip-bet-form">
+          <label for="flipBet">Bet amount (₹)</label>
+          <input id="flipBet" type="number" inputmode="decimal" min="${fc.minBet}" max="${fc.maxBet}" step="0.01" required value="${esc(localStorage.getItem('cryptoBridgeFlipBetAmount') || String(fc.minBet))}">
+          <div class="flip-quick-amounts" aria-label="Quick bet amounts">${[10,50,100,500,1000].filter(n=>n>=Number(fc.minBet)&&n<=Number(fc.maxBet)).map(n=>`<button type="button" data-amount="${n}">₹${n}</button>`).join('')}</div>
+          <div class="flip-side-buttons"><button type="button" class="flip-side-head" data-side="heads" aria-pressed="false"><span class="flip-side-coin">₿</span><span>HEAD</span><small>Choose Head</small></button><button type="button" class="flip-side-tail" data-side="tails" aria-pressed="false"><span class="flip-side-coin">Ξ</span><span>TAIL</span><small>Choose Tail</small></button></div>
+          <p class="cc-ret-line" id="flipReturnLine" hidden></p><input type="hidden" id="flipSide" value="heads"><p id="flipErr" class="msg-err" role="alert"></p>
+          <button class="primary-btn" id="flipPlay" type="submit" style="display:none" aria-hidden="true" tabindex="-1">Place bet</button>
+        </form>
+        <div id="flipOutcome" class="flip-outcome" aria-live="polite" hidden></div>
+        <button type="button" id="flipSoundToggle" class="secondary-btn flip-sound-toggle">🔊 Coin sound: ON</button>
+      </div>
+      <div id="flipResultPop" class="bs-result-pop" hidden role="dialog" aria-modal="true"><div class="bs-rp-card"><div class="bs-rp-title" id="flipRpTitle"></div><div class="bs-rp-ball coin" id="flipRpBall"></div><div class="bs-rp-meta" id="flipRpMeta"></div><div class="bs-rp-amt" id="flipRpAmt"></div><div class="bs-rp-period" id="flipRpRound"></div><button type="button" id="flipRpOk">OK</button></div></div>
+      <section class="flip-history-section bs-history-section"><div class="flip-history-tabs bs-history-tabs ht-tabs"><button type="button" class="active" data-flip-tab="results">Game history</button><button type="button" data-flip-tab="mybets">My History</button></div>
+        <div class="content-card bs-history-card" id="flipResultsHistory"><div id="flipResultsRows">No results yet.</div></div>
+        <div id="flipMyBetsSection" class="content-card bs-history-card" hidden><div id="flipHistoryRows"></div><div class="flip-history-pages" id="flipHistoryPages" style="display:none"><button type="button" id="flipHistoryPrev" class="secondary-btn">← Newer 10</button><span id="flipHistoryPageLabel">1 / 1</span><button type="button" id="flipHistoryNext" class="secondary-btn">Older 10 →</button></div></div>
+      </section>
+      </div>
+      <section id="bigSmallGame" class="big-small-game" hidden>
+        ${ccBar()}
+        <header class="flip-wallet-head bs-head"><div class="bs-wallet-card"><button type="button" class="bs-back" data-game-back aria-label="Back to games">‹</button><div class="bs-bal-row"><strong id="bsBalance">${inr(state.me.balance)}</strong><button type="button" class="flip-refresh" id="bsRefresh" aria-label="Refresh balance">${BSI.refresh}</button></div><div class="bs-bal-label"><span class="bs-wicon">${BSI.wallet}</span>Wallet balance</div><div class="flip-wallet-actions"><button type="button" data-page="Withdrawal" class="flip-withdraw">Withdraw</button><button type="button" data-page="Recharge" class="flip-deposit">Deposit</button></div></div></header>
+        <div class="flip-notice"><button type="button" class="bs-speaker" id="bsSoundBtn" aria-label="Sound" aria-pressed="true">${BSI.speaker}</button><span id="bsNotice">30-second rounds · Betting closes in the final 5 seconds</span><button type="button" class="bs-notice-detail" id="bsNoticeDetail">${BSI.fire}Detail</button></div>
+        <div class="bs-duration-strip" aria-label="Game duration"><button type="button" class="bs-duration active" data-bs-duration="30000" data-bs-label="WinGo 30sec"><span>${BSI.clock}</span><small>WinGo<br>30sec</small></button><button type="button" class="bs-duration" data-bs-duration="60000" data-bs-label="WinGo 1 Min"><span>${BSI.clock}</span><small>WinGo 1<br>Min</small></button><button type="button" class="bs-duration" data-bs-duration="180000" data-bs-label="WinGo 3 Min"><span>${BSI.clock}</span><small>WinGo 3<br>Min</small></button><button type="button" class="bs-duration" data-bs-duration="300000" data-bs-label="WinGo 5 Min"><span>${BSI.clock}</span><small>WinGo 5<br>Min</small></button></div>
+        <section class="flip-timer-panel"><div class="bs-tp-left"><span class="flip-howto" id="bsHowTo">${BSI.book}How to play</span><div class="bs-round-label" id="bsRoundLabel">WinGo 30sec</div><div class="bs-mini-results" id="bsMini" aria-hidden="true"></div></div><div class="bs-tp-right"><div class="flip-time-label">Time remaining</div><div id="bsTimer" class="flip-digits"><b>0</b><b>0</b><em>:</em><b>3</b><b>0</b></div><div id="bsPeriod" class="flip-period">&nbsp;</div></div></section>
+        <section class="flip-bet-panel bs-bet-panel"><div id="bsCountdown" class="bs-countdown" hidden aria-live="assertive"></div><h2 class="bs-bet-title">Choose your prediction</h2><div class="cc-ret-strip" id="bsRetStrip" hidden></div><label class="bs-amount-label" for="bsAmount">Bet amount (₹)</label><input id="bsAmount" type="number" inputmode="decimal" min="10" max="10000" value="10" aria-label="Bet amount in rupees"><div class="bs-options">
+          <div class="bs-three bs-color-picks"><button type="button" data-bs-type="color" data-bs-pick="Green" class="bs-green">Green</button><button type="button" data-bs-type="color" data-bs-pick="Violet" class="bs-violet">Violet</button><button type="button" data-bs-type="color" data-bs-pick="Red" class="bs-red">Red</button></div>
+          <div class="bs-numbers bs-number-image-grid" aria-label="Choose a number"><img class="bs-number-image" src="/number-balls.png" alt="Number choices 0 to 9" draggable="false">${Array.from({length:10},(_,n)=>`<button type="button" data-bs-type="number" data-bs-pick="${n}" class="bs-number-hit ${BS_NUM_CLASS(n)}" aria-label="Bet on number ${n}"></button>`).join('')}</div>
+          <div class="bs-two bs-size-picks"><button type="button" data-bs-type="size" data-bs-pick="Big" class="bs-big">Big</button><button type="button" data-bs-type="size" data-bs-pick="Small" class="bs-small">Small</button></div>
+          <div class="bs-multiplier-row"><button type="button" class="bs-random" id="bsRandom">Random</button>${[1,5,10,20,50,100].map(n=>`<button type="button" data-bs-multiplier="${n}" class="${n===1?'active':''}">X${n}</button>`).join('')}</div>
+        </div><p id="bsMessage" role="status" class="bs-message"></p><p class="flip-game-rule">Round closes in the final 5 seconds. Results follow the existing game rules.</p></section>
+        <div id="bsResultPop" class="bs-result-pop" hidden role="dialog" aria-modal="true"><div class="bs-rp-card"><div class="bs-rp-title" id="bsRpTitle"></div><div class="bs-rp-ball" id="bsRpBall"></div><div class="bs-rp-meta" id="bsRpMeta"></div><div class="bs-rp-amt" id="bsRpAmt"></div><div class="bs-rp-period" id="bsRpPeriod"></div><button type="button" id="bsRpOk">OK</button></div></div>
+        <div id="bsBetModal" class="bs-modal" hidden role="dialog" aria-modal="true" aria-labelledby="bsModalTitle">
+          <button type="button" class="bs-modal-scrim" data-bs-modal-close aria-label="Close bet popup"></button>
+          <section class="bs-modal-sheet">
+            <header class="bs-modal-head"><strong id="bsModalTitle">WinGo 30sec</strong><div id="bsModalPick" class="bs-modal-pick"></div></header>
+            <div class="bs-modal-body">
+              <div id="bsModalReturn" class="bs-modal-return"></div>
+              <div class="bs-modal-balance"><span>Balance</span><strong id="bsModalBalance">₹0.00</strong><div class="bs-modal-amounts">${[1,10,100,1000].map(n=>`<button type="button" data-bs-modal-amount="${n}">${n}</button>`).join('')}</div></div>
+              <div class="bs-modal-quantity"><span>Quantity</span><div><button type="button" id="bsQtyMinus">−</button><input id="bsQty" type="number" min="1" max="999" value="1" inputmode="numeric" aria-label="Bet quantity"><button type="button" id="bsQtyPlus">+</button></div></div>
+              <div class="bs-modal-multipliers">${[1,5,10,20,50,100].map(n=>`<button type="button" data-bs-modal-multiplier="${n}" class="${n===1?'active':''}">X${n}</button>`).join('')}</div>
+              <label class="bs-modal-agree"><input id="bsAgree" type="checkbox" checked> I agree <span>《Pre-sale rules》</span></label>
+              <p id="bsModalError" role="status"></p>
+            </div>
+            <footer class="bs-modal-footer"><button type="button" data-bs-modal-close>Cancel</button><button type="button" id="bsConfirmBet">Confirm · ₹10.00</button></footer>
+          </section>
+        </div>
+        <section class="flip-history-section bs-history-section"><div class="flip-history-tabs bs-history-tabs"><button type="button" class="active" data-bs-history-tab="results">Game history</button><button type="button" data-bs-history-tab="chart">Chart</button><button type="button" data-bs-history-tab="mybets">My History</button></div><div class="content-card bs-history-card"><div id="bsResults">No results yet.</div><div class="bs-pager" id="bsPager"><button type="button" id="bsPagePrev" aria-label="Previous page">‹</button><span id="bsPageLabel">1/50</span><button type="button" id="bsPageNext" aria-label="Next page">›</button></div><div id="bsChartPanel" hidden><div class="bs-chart-caption">Recent result trend</div><div id="bsChartBars" class="bs-chart-bars">Results will appear here after rounds finish.</div></div><div id="bsMyHistory" hidden>No bets yet.</div></div></section>
+      </section>
+    </section>`;
+    // Keep coin reveal inside the game card, never in document.body.
+    let flipHistoryPage = 0;
+    const renderFlipHistory = () => {
+      const rows = $('#flipHistoryRows'), pages = $('#flipHistoryPages');
+      if (!rows || !pages) return;
+      const pageSize = 10, totalPages = Math.max(1, Math.ceil(history.length / pageSize));
+      flipHistoryPage = Math.max(0, Math.min(flipHistoryPage, totalPages - 1));
+      const visible = history.slice(flipHistoryPage * pageSize, (flipHistoryPage + 1) * pageSize);
+      rows.innerHTML = visible.length ? `<div class="tbl"><table><tr><th>Round</th><th>Pick</th><th>Bet</th><th>Result</th></tr>${visible.map((x,i)=>{const n=Number(x.net),st=x.status==='Pending'||x.won==null&&x.result==null?'<span class="bs-pend">Pending</span>':x.won?`<span class="bs-won">Won<br><small>+${inr(n)}</small></span>`:`<span class="bs-lost">Lost<br><small>${inr(n)}</small></span>`;return `<tr><td>#${x.roundNo != null ? x.roundNo : history.length - (flipHistoryPage * pageSize + i)}<br><small>${dt(x.ts)}</small></td><td><b>${esc(String(x.side||'').toUpperCase())}</b>${x.result?`<br><small>${esc(String(x.result).toUpperCase())}</small>`:''}</td><td>${inr(x.amount)}</td><td>${st}</td></tr>`;}).join('')}</table></div>` : 'No bets yet.';
+      pages.style.display = history.length > pageSize ? 'flex' : 'none';
+      $('#flipHistoryPageLabel').textContent = `${flipHistoryPage + 1} / ${totalPages}`;
+      $('#flipHistoryPrev').disabled = flipHistoryPage === 0;
+      $('#flipHistoryNext').disabled = flipHistoryPage >= totalPages - 1;
+    };
+    const renderFlipResults = (items=[]) => { const el=$('#flipResultsRows'); if(!el)return; el.innerHTML=items.length?`<div class="tbl"><table><tr><th>Round</th><th>Result</th><th>Time</th></tr>${items.map(x=>`<tr><td>#${x.roundNo}</td><td><b class="ht-res ${String(x.result)==='heads'?'h':'t'}">${String(x.result||'').toUpperCase()}</b></td><td>${dt(x.endTs)}</td></tr>`).join('')}</table></div>`:'No results yet.'; };
+    const ccSetCoinRet = cfg => { if (cfg && cfg.returnPct != null) coinRet = Number(cfg.returnPct); };
+    $$('[data-cc-info]').forEach(b => b.onclick = () => { const g = b.closest('.ht-game,.big-small-game'); const d = g && g.querySelector('.bs-notice-detail'); if (d) d.click(); });
+    let flipPopT = null;
+    const showFlipPop = (b) => { const won=!!b.won,r=String(b.result||'').toUpperCase(); ccResultPop({won,chips:[{t:r,c:won?'g':'r'}],amount:Number(b.payout||0),game:'Coin Game 30sec',period:b.roundNo!=null?'Round #'+b.roundNo:''}); };
+    $('#flipRpOk').onclick = () => { $('#flipResultPop').hidden = true; clearTimeout(flipPopT); };
+    $('#flipRefresh').onclick = async () => { const b=$('#flipRefresh'); b.classList.add('spin'); try { await loadMe(); $('#gameBalance').textContent=inr(state.me.balance); } catch {} setTimeout(()=>b.classList.remove('spin'),600); };
+    $('#flipNoticeDetail').onclick = () => showModal('Game information', 'Choose an amount, pick Head or Tail and place your bet before the final 5 seconds. A winning bet returns '+ccPct(coinRet)+'% profit (₹100 bet wins ₹'+ccPct(100+coinRet)+' back).');
+    $('#flipHowTo').onclick = () => $('#flipNoticeDetail').click();
+    const flipTabButtons = $$('[data-flip-tab]');
+    const setFlipHistoryTab = (tab) => {
+      const showBets = tab === 'mybets';
+      const resultsPanel = $('#flipResultsHistory');
+      const betsPanel = $('#flipMyBetsSection');
+      if (resultsPanel) resultsPanel.hidden = showBets;
+      if (betsPanel) betsPanel.hidden = !showBets;
+      flipTabButtons.forEach(b => { b.classList.toggle('active', b.dataset.flipTab === tab); b.setAttribute('aria-pressed', String(b.dataset.flipTab === tab)); });
+    };
+    flipTabButtons.forEach(b => b.addEventListener('click', () => setFlipHistoryTab(b.dataset.flipTab)));
+    setFlipHistoryTab('results');
+    renderFlipHistory();
+    $('#flipHistoryPrev').onclick = () => { if (flipHistoryPage > 0) { flipHistoryPage--; renderFlipHistory(); } };
+    $('#flipHistoryNext').onclick = () => { if ((flipHistoryPage + 1) * 10 < history.length) { flipHistoryPage++; renderFlipHistory(); } };
+    const form = $('#flipForm'); if (form) {
+      $$('#flipForm [data-amount]').forEach(b => b.onclick = () => { const input=$('#flipBet'); if(input){input.value=b.dataset.amount; input.dispatchEvent(new Event('input',{bubbles:true}));} });
+      
+      const soundKey = 'cryptoBridgeFlipSound';
+      let soundOn = localStorage.getItem(soundKey) !== 'off';
+      let audioCtx = null, soundTimer = null, soundStopAt = 0, lastRoundNo = null, closingRoundNo = null, revealTimer = null, shownRoundNo = null, syncingRound = false;
+      const updateSoundButton = () => { if (soundBtn) { soundBtn.textContent = soundOn ? '🔊 Coin sound: ON' : '🔇 Coin sound: OFF'; soundBtn.setAttribute('aria-pressed', String(soundOn)); } };
+      const soundBtn = $('#flipSoundToggle');
+      const ensureAudio = async () => { const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return null; if(!audioCtx)audioCtx=new AC(); if(audioCtx.state==='suspended')await audioCtx.resume(); return audioCtx; };
+      const coinTick = () => { if(!soundOn || !audioCtx || audioCtx.state!=='running')return; const t=audioCtx.currentTime; const master=audioCtx.createGain(); master.gain.setValueAtTime(0.0001,t); master.gain.linearRampToValueAtTime(0.22,t+0.003); master.gain.exponentialRampToValueAtTime(0.0001,t+0.16); master.connect(audioCtx.destination); const partials=[{f:2180+Math.random()*380,type:'sine',gain:0.7},{f:1320+Math.random()*240,type:'triangle',gain:0.32},{f:3600+Math.random()*500,type:'sine',gain:0.12}]; partials.forEach((p,i)=>{const osc=audioCtx.createOscillator(), g=audioCtx.createGain(), filter=audioCtx.createBiquadFilter(); osc.type=p.type; osc.frequency.setValueAtTime(p.f,t); osc.frequency.exponentialRampToValueAtTime(p.f*(i===1?0.58:0.78),t+0.12); filter.type='highpass'; filter.frequency.value=700; g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(p.gain,t+0.004); g.gain.exponentialRampToValueAtTime(0.0001,t+0.145); osc.connect(filter); filter.connect(g); g.connect(master); osc.start(t); osc.stop(t+0.155); }); };
+      const startCoinSound = async () => { if(!soundOn)return; try { await ensureAudio(); if(!audioCtx || audioCtx.state!=='running')return; if(soundTimer)clearInterval(soundTimer); coinTick(); soundTimer=setInterval(()=>{if(Date.now()>=soundStopAt){clearInterval(soundTimer);soundTimer=null;return;}coinTick();},105); } catch {} };
+      const stopCoinSound = () => { if(soundTimer)clearInterval(soundTimer); soundTimer=null; };
+      const startReveal = async (roundNo) => { if(closingRoundNo===roundNo)return; closingRoundNo=roundNo; const card=$('#flipGameCard'), coin=$('#flipCoinVisual'), reveal=$('#flipReveal'); if(!card||!coin||!reveal)return; card.classList.add('flip-closing'); coin.classList.add('flip-spinning'); reveal.classList.add('is-active','is-spinning'); reveal.setAttribute('aria-hidden','false'); $('#flipRevealText').textContent='FLIPPING…'; const elapsed=Math.min(5000,Math.max(0,Date.now()-(flipRoundEnd-5000))); $('#flipRevealCoin').style.animationDelay=`-${elapsed}ms`; soundStopAt=flipRoundEnd; startCoinSound(); };
+      const showRoundResult = (result, roundNo) => { const reveal=$('#flipReveal'), text=$('#flipRevealText'), revealCoin=$('#flipRevealCoin'), coin=$('#flipCoinVisual'); if(!reveal||!result)return; stopCoinSound(); coin.classList.remove('flip-spinning'); reveal.classList.remove('is-spinning'); revealCoin.style.animationDelay='0ms'; revealCoin.classList.add('reveal-result'); revealCoin.innerHTML=`<span>${String(result)==='tails'?'Ξ':'₿'}</span>`; text.textContent=String(result).toUpperCase(); text.classList.add('result-text'); if(revealTimer)clearTimeout(revealTimer); revealTimer=setTimeout(()=>{reveal.classList.remove('is-active');reveal.setAttribute('aria-hidden','true');revealCoin.classList.remove('reveal-result');revealCoin.innerHTML='<span>₿</span>';text.classList.remove('result-text');const card=$('#flipGameCard');if(card)card.classList.remove('flip-closing');coin.innerHTML='<span class="coin-face">₿</span>';coin.classList.add('flip-win');setTimeout(()=>coin.classList.remove('flip-win'),650);},1850); };
+      updateSoundButton();
+      if (soundBtn) soundBtn.onclick = async () => { soundOn=!soundOn; localStorage.setItem(soundKey,soundOn?'on':'off');updateSoundButton();if(soundOn && closingRoundNo!==null && Date.now()<flipRoundEnd) {soundStopAt=flipRoundEnd;await startCoinSound();} else stopCoinSound(); };
+      const betInput = $('#flipBet');
+      if (betInput) betInput.addEventListener('input', () => localStorage.setItem('cryptoBridgeFlipBetAmount', betInput.value));
+      $$('#flipForm [data-side]').forEach(btn => btn.onclick = () => {
+        ensureAudio().catch(()=>{});
+        $('#flipSide').value = btn.dataset.side;
+        $$('#flipForm [data-side]').forEach(x=>{x.classList.toggle('selected', x===btn);x.setAttribute('aria-pressed',String(x===btn));});
+        if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', {cancelable:true}));
+      });
+      let pendingFlipId = null, flipRoundEnd = 0, flipRoundOpen = true;
+      const syncFlipRound = async () => { if(syncingRound)return; syncingRound=true; try { const fresh = await api('games/flip-coin'); history.splice(0, history.length, ...(fresh.history || [])); const mode=fresh.config?.winningMode||'lower'; const rules={lower:'Lower total stake wins · Equal stakes: random tie-break',heads:'HEADS always wins (admin-configured)',tails:'TAILS always wins (admin-configured)',random:'Random 50/50 result'}; if(!pendingFlipId) { const outcome=$('#flipOutcome'); if(outcome){outcome.textContent=''; outcome.hidden=true;} } renderFlipHistory(); renderFlipResults(fresh.resultsHistory||[]); ccSetCoinRet(fresh.config); if (fresh.round) { flipRoundEnd=fresh.round.endTs; flipRoundOpen=fresh.round.bettingOpen; const left=Math.max(0,flipRoundEnd-Date.now()); const seconds=Math.ceil(left/1000); {const sc=String(Math.min(59,seconds)).padStart(2,'0');$('#flipRoundTimer').innerHTML=`<b>0</b><b>0</b><em>:</em><b>${sc[0]}</b><b>${sc[1]}</b>`;} $('#flipRoundStatus').textContent=`Round #${fresh.round.number}`; if(left>0 && left<=5000){ const revealText=$('#flipRevealText'); if(revealText && !revealText.classList.contains('result-text')) revealText.textContent=`FLIPPING · ${seconds}`; } const card=$('#flipGameCard'); if(card)card.classList.toggle('flip-closing',left<=5000); $$('#flipForm [data-side]').forEach(x=>{x.disabled=!fresh.round.bettingOpen || (!!(fresh.currentBets||[]).length && x.dataset.side!==(fresh.currentBets||[])[0].side);x.title=(fresh.currentBets||[]).length&&x.dataset.side!==(fresh.currentBets||[])[0].side?'You already chose '+(fresh.currentBets||[])[0].side+' this round':'';}); if(left>0 && left<=5000)startReveal(fresh.round.number); if(lastRoundNo!==null && Number(fresh.round.number)>lastRoundNo){ stopCoinSound(); closingRoundNo=null; const ended=(fresh.resultsHistory||[]).find(x=>Number(x.roundNo)===lastRoundNo); if(ended && shownRoundNo!==Number(ended.roundNo)){shownRoundNo=Number(ended.roundNo);showRoundResult(ended.result,shownRoundNo);} } lastRoundNo=Number(fresh.round.number); } if(pendingFlipId){const settled=(fresh.history||[]).find(x=>x.id===pendingFlipId);if(settled && settled.status==='Settled'){pendingFlipId=null;const outcome=$('#flipOutcome');outcome.className='flip-outcome '+(settled.won?'is-win':'is-loss');outcome.innerHTML=`<strong>${settled.won?'🎉 YOU WON':'💔 YOU LOST'}</strong><span>${String(settled.result).toUpperCase()} · Net ${settled.net>=0?'+':''}${inr(settled.net)}</span>`;await loadMe();$('#gameBalance').textContent=inr(state.me.balance);$('#flipPlay').disabled=false;showFlipPop(settled);}} } catch (err) { const status=$('#flipRoundStatus'); if(status)status.textContent='Connection interrupted · retrying…'; } finally { syncingRound=false; } };
+      syncFlipRound(); const flipRoundPoll = setInterval(()=>{ if ($('#flipForm')) syncFlipRound(); else clearInterval(flipRoundPoll); },1000);
+      form.onsubmit = async e => { e.preventDefault(); const btn=$('#flipPlay'); if (btn.disabled || !flipRoundOpen) return; btn.disabled=true; $('#flipErr').textContent=''; const outcome=$('#flipOutcome'); outcome.className='flip-outcome'; outcome.textContent='Bet placed · waiting for round result…'; try { const r=await api('games/flip-coin',{amount:Number($('#flipBet').value),side:$('#flipSide').value}); pendingFlipId=r.bet.id; $('#gameBalance').textContent=inr(r.balance); ccBetPopup({game:'Coin Game',amount:r.bet.amount,side:String(r.bet.side).toUpperCase(),ret:r.bet.returnPct}); localStorage.setItem('cryptoBridgeFlipBetAmount',$('#flipBet').value); btn.disabled=false; await syncFlipRound(); } catch(x) { outcome.textContent='Round rules loading…'; $('#flipErr').textContent=x.message; btn.disabled=false; await syncFlipRound(); } };
+      const switchers=$$('[data-game-switch]'); switchers.forEach(b=>b.onclick=()=>{const big=b.dataset.gameSwitch==='big';$('#gameChooser').hidden=true;$('#headTailGame').hidden=big;$('#bigSmallGame').hidden=!big;if(big)syncBigSmall();}); $$('[data-game-back]').forEach(b=>b.onclick=()=>{$('#gameChooser').hidden=false;$('#headTailGame').hidden=true;$('#bigSmallGame').hidden=true;});
+      let bsRet={number:780,color:80,size:80}, bsHistPage=0, bsAllResults=[], bsPopT=null, bsRoundEnd=0, bsLastRound=null, bsPopPrev=null, bsPending=new Set(), bsSyncing=false, bsDuration=30000, bsDurationLabel="WinGo 30sec";
+      const bsColor=(c)=>String(c||'').includes('Violet')?'#9b43e8':c==='Green'?'#16a765':c==='Red'?'#ff5963':'#9b43e8';
+      const ccRenderBsRet=()=>{const el=$('#bsRetStrip');if(el){el.innerHTML='';el.hidden=true;}};ccRenderBsRet();
+      const bsRenderResults=()=>{const results=bsAllResults,pages=Math.max(1,Math.ceil(results.length/10));bsHistPage=Math.max(0,Math.min(bsHistPage,pages-1));const rows=results.slice(bsHistPage*10,bsHistPage*10+10);$('#bsResults').innerHTML=rows.length?`<div class="tbl"><table><tr><th>Period</th><th>Number</th><th>Big Small</th><th>Color</th></tr>${rows.map(x=>`<tr><td>${bsPeriodId(x.roundNo,bsDuration)}</td><td><b class="bs-n ${BS_NUM_CLASS(Number(x.number))}">${x.number}</b></td><td>${esc(x.size)}</td><td class="bs-dots">${bsDots(x.color)}</td></tr>`).join('')}</table></div>`:'No results yet.';$('#bsPageLabel').textContent=`${bsHistPage+1}/${pages}`;$('#bsPagePrev').disabled=bsHistPage<=0;$('#bsPageNext').disabled=bsHistPage>=pages-1;};
+      const syncBigSmall=async()=>{if(bsSyncing||!$('#bigSmallGame')||$('#bigSmallGame').hidden)return;bsSyncing=true;try{const d=await api('games/big-small?duration='+bsDuration);const r=d.round;if(d.config&&d.config.returns){bsRet=d.config.returns;ccRenderBsRet();}if(r){bsRoundEnd=r.endTs;const left=Math.max(0,r.endTs-Date.now());const totalSeconds=Math.ceil(left/1000);const tmm=String(Math.floor(totalSeconds/60)).padStart(2,'0'),tss=String(totalSeconds%60).padStart(2,'0');$('#bsTimer').innerHTML=`<b>${tmm[0]}</b><b>${tmm[1]}</b><em>:</em><b>${tss[0]}</b><b>${tss[1]}</b>`;$('#bsPeriod').textContent=bsPeriodId(r.number,bsDuration);$('#bigSmallGame').classList.toggle('bs-closed',!r.bettingOpen);$('#bsRoundLabel').textContent=bsDurationLabel;$$('#bigSmallGame [data-bs-type]').forEach(x=>x.disabled=!r.bettingOpen);const sec=Math.ceil(left/1000),ov=$('#bsCountdown');if(!r.bettingOpen&&left>0){ov.hidden=false;ov.innerHTML=`<b>0</b><b>${Math.min(9,sec)}</b>`;if(!$('#bsBetModal').hidden){$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');}}else ov.hidden=true;if(bsLastRound!==null&&Number(r.number)>bsLastRound){bsPopPrev=bsLastRound;await loadMe();}bsLastRound=Number(r.number);}$('#bsBalance').textContent=inr(state.me.balance);const results=d.resultsHistory||[];$('#bsMini').innerHTML=results.slice(0,5).map(x=>`<i class="${BS_NUM_CLASS(Number(x.number))}">${x.number}</i>`).join('');bsAllResults=results;bsRenderResults();$('#bsChartBars').innerHTML=results.length?results.slice(0,12).map(x=>`<span class="bs-chart-item"><i style="height:${18+Number(x.number)*6}px;background:${bsColor(x.color)}"></i><b>${x.number}</b><small>${esc(x.size)}</small></span>`).join(''):'Results will appear here after rounds finish.';const hist=d.history||[];$('#bsMyHistory').innerHTML=hist.length?`<div class="tbl"><table><tr><th>Period</th><th>Pick</th><th>Bet</th><th>Result</th></tr>${hist.map(x=>{const pk=x.type==='number'?'No. '+x.pick:x.pick,st=x.status==='Pending'?'<span class="bs-pend">Pending</span>':x.won?`<span class="bs-won">Won<br><small>+${inr(x.net)}</small></span>`:`<span class="bs-lost">Lost<br><small>${inr(x.net)}</small></span>`;return `<tr><td>${bsPeriodId(x.roundNo,x.durationMs||bsDuration)}</td><td><b>${esc(pk)}</b>${x.result==null?'':`<br><small>${x.result} · ${esc(x.resultSize)}</small>`}</td><td>${inr(x.amount)}</td><td>${st}</td></tr>`;}).join('')}</table></div>`:'No bets yet.';
+if(bsPopPrev!==null){const prev=bsPopPrev;bsPopPrev=null;const mine=hist.filter(x=>Number(x.roundNo)===prev&&x.status==='Settled');if(mine.length){const net=mine.reduce((t,x)=>t+Number(x.net||0),0),won=net>=0&&mine.some(x=>x.won),f=mine[0];const colChips=String(f.resultColor||'').split('+').filter(Boolean).map(c=>({t:c,c:c==='Green'?'g':c==='Violet'?'v':'r'}));ccResultPop({won,chips:[...colChips,{t:String(f.result),c:'n '+BS_NUM_CLASS(Number(f.result))},{t:f.resultSize,c:f.resultSize==='Big'?'big':'small'}],amount:mine.reduce((t,x)=>t+Number(x.payout||0),0),game:'WinGo '+bsDurLabel(f.durationMs||bsDuration),period:bsPeriodId(prev,f.durationMs||bsDuration)});}} }catch(e){$('#bsMessage').textContent=e.message||'Connection interrupted; retrying.';}finally{bsSyncing=false;}};
+      $$('#bigSmallGame [data-bs-duration]').forEach(b=>b.onclick=()=>{const next=Number(b.dataset.bsDuration);if(![30000,60000,180000,300000].includes(next))return;bsDuration=next;bsDurationLabel=b.dataset.bsLabel||'WinGo';bsLastRound=null;bsHistPage=0;bsAllResults=[];$$('#bigSmallGame [data-bs-duration]').forEach(x=>x.classList.toggle('active',x===b));$('#bsNotice').textContent=bsDurationLabel+' rounds · Betting closes in the final 5 seconds';$('#bsMini').innerHTML='';$('#bsPeriod').innerHTML='&nbsp;';$('#bsRoundLabel').textContent=bsDurationLabel;$('#bsMessage').textContent='';syncBigSmall();});
+      $$('#bigSmallGame [data-bs-amount]').forEach(b=>b.onclick=()=>$('#bsAmount').value=b.dataset.bsAmount);
+      $$('#bigSmallGame [data-bs-multiplier]').forEach(b=>b.onclick=()=>{const multiplier=Number(b.dataset.bsMultiplier)||1;$('#bsAmount').value=Math.min(10000,10*multiplier);$$('#bigSmallGame [data-bs-multiplier]').forEach(x=>x.classList.toggle('active',x===b));});
+      $('#bsRandom').onclick=()=>{const picks=$$('#bigSmallGame [data-bs-type]').filter(x=>!x.disabled);if(!picks.length){$('#bsMessage').textContent='Betting is closed for this round.';return;}picks[Math.floor(Math.random()*picks.length)].click();};
+      $('#bsPagePrev').onclick=()=>{if(bsHistPage>0){bsHistPage--;bsRenderResults();}};$('#bsPageNext').onclick=()=>{bsHistPage++;bsRenderResults();};
+      const bsSoundPaint=()=>{const b=$('#bsSoundBtn');if(b){b.classList.toggle('off',!ccSnd.on);b.setAttribute('aria-pressed',String(ccSnd.on));b.title=ccSnd.on?'Sound on':'Sound off';}};bsSoundPaint();$('#bsSoundBtn').onclick=()=>{ccSnd.set(!ccSnd.on);bsSoundPaint();ccSnd.play('bet');};
+      $('#bsRpOk').onclick=()=>{$('#bsResultPop').hidden=true;clearTimeout(bsPopT);};
+      $('#bsRefresh').onclick=async()=>{const b=$('#bsRefresh');b.classList.add('spin');try{await loadMe();$('#bsBalance').textContent=inr(state.me.balance);}catch{}setTimeout(()=>b.classList.remove('spin'),600);};
+      $('#bsNoticeDetail').onclick=()=>showModal('Game information','Choose a duration, select a color, number or Big/Small, and place your bet before the final 5 seconds.');
+      $$('#bigSmallGame [data-bs-history-tab]').forEach(b=>b.onclick=()=>{const tab=b.dataset.bsHistoryTab;$$('#bigSmallGame [data-bs-history-tab]').forEach(x=>x.classList.toggle('active',x===b));$('#bsResults').hidden=tab!=='results';$('#bsPager').hidden=tab!=='results';$('#bsChartPanel').hidden=tab!=='chart';$('#bsMyHistory').hidden=tab!=='mybets';});
+      let bsSelected=null, bsModalUnit=1, bsModalMultiplier=1, bsSubmitting=false;
+      const bsModalTotal=()=>Math.round(bsModalUnit*Math.max(1,Number($('#bsQty').value)||1)*bsModalMultiplier*100)/100;
+      const bsUpdateModalTotal=()=>{const total=bsModalTotal();$('#bsConfirmBet').textContent=`Total amount ${inr(total)}`;const el=$('#bsModalReturn');if(el){el.textContent='';el.hidden=true;}};
+      const bsOpenModal=(b)=>{if(b.disabled)return;bsSelected={type:b.dataset.bsType,pick:b.dataset.bsPick};bsModalUnit=1;bsModalMultiplier=1;$('#bsQty').value='1';$('#bsAgree').checked=true;$('#bsModalError').textContent='';$('#bsModalTitle').textContent=bsDurationLabel;$('#bsModalPick').textContent=bsSelected.type==='size'?`Select ${bsSelected.pick}`:bsSelected.type==='color'?`Select ${bsSelected.pick}`:`Select Number ${bsSelected.pick}`;$('#bsModalPick').dataset.kind=bsSelected.type;$('#bsModalPick').style.setProperty('--pick-color',bsSelected.type==='size'?(bsSelected.pick==='Big'?'#ffad51':'#6aa0f4'):bsSelected.type==='color'?bsColor(bsSelected.pick):(['#b65df4','#20b879','#ff5963','#20b879','#ff5963','#b65df4','#ff5963','#20b879','#ff5963','#20b879'][Number(bsSelected.pick)]));$('#bsBetModal .bs-modal-sheet').style.setProperty('--pick-color',bsSelected.type==='size'?(bsSelected.pick==='Big'?'#ffad51':'#6aa0f4'):bsSelected.type==='color'?bsColor(bsSelected.pick):(['#b65df4','#20b879','#ff5963','#20b879','#ff5963','#b65df4','#ff5963','#20b879','#ff5963','#20b879'][Number(bsSelected.pick)]));$('#bsModalBalance').textContent=$('#bsBalance').textContent;$$('[data-bs-modal-multiplier]').forEach(x=>x.classList.toggle('active',Number(x.dataset.bsModalMultiplier)===1));$$('[data-bs-modal-amount]').forEach(x=>x.classList.toggle('active',Number(x.dataset.bsModalAmount)===1));$('#bsBetModal').hidden=false;document.body.classList.add('bs-modal-open');bsUpdateModalTotal();};
+      const bsCloseModal=()=>{if(bsSubmitting)return;$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');};
+      $$('#bigSmallGame [data-bs-type]').forEach(b=>b.onclick=()=>bsOpenModal(b));
+      $$('[data-bs-modal-close]').forEach(b=>b.onclick=bsCloseModal);
+      $$('[data-bs-modal-amount]').forEach(b=>b.onclick=()=>{bsModalUnit=Number(b.dataset.bsModalAmount);$$('[data-bs-modal-amount]').forEach(x=>x.classList.toggle('active',x===b));bsUpdateModalTotal();});
+      $$('[data-bs-modal-multiplier]').forEach(b=>b.onclick=()=>{bsModalMultiplier=Number(b.dataset.bsModalMultiplier)||1;$$('[data-bs-modal-multiplier]').forEach(x=>x.classList.toggle('active',x===b));bsUpdateModalTotal();});
+      $('#bsQtyMinus').onclick=()=>{$('#bsQty').value=String(Math.max(1,(Number($('#bsQty').value)||1)-1));bsUpdateModalTotal();};
+      $('#bsQtyPlus').onclick=()=>{$('#bsQty').value=String(Math.min(999,(Number($('#bsQty').value)||1)+1));bsUpdateModalTotal();};
+      $('#bsQty').oninput=()=>{const q=Number($('#bsQty').value);if(Number.isInteger(q)&&q>=1&&q<=999)bsUpdateModalTotal();};
+      $('#bsConfirmBet').onclick=async()=>{if(bsSubmitting||!bsSelected)return;const amount=bsModalTotal(),msg=$('#bsMessage');if(!$('#bsAgree').checked){$('#bsModalError').textContent='Please agree to the rules before confirming.';return;}if(!Number.isFinite(amount)||amount<1||amount>10000){$('#bsModalError').textContent='Total bet must be between ₹1 and ₹10,000.';return;}bsSubmitting=true;$('#bsConfirmBet').disabled=true;$('#bsModalError').textContent='Placing bet…';try{const r=await api('games/big-small',{amount,type:bsSelected.type,pick:bsSelected.pick,durationMs:bsDuration,multiplier:bsModalMultiplier});$('#bsBalance').textContent=inr(r.balance);$('#bsModalBalance').textContent=inr(r.balance);msg.textContent='';ccBetPopup({game:'WinGo',amount:r.bet.amount,side:(r.bet.type==='number'?'Number ':'')+r.bet.pick,ret:r.bet.returnPct});$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');await syncBigSmall();}catch(e){$('#bsModalError').textContent=e.message||'Unable to place bet.';}finally{bsSubmitting=false;$('#bsConfirmBet').disabled=false;}};
+      clearInterval(window.__ccBsPoll);window.__ccBsPoll=setInterval(()=>{if($('#bigSmallGame')&&!$('#bigSmallGame').hidden)syncBigSmall();},1000);
+    }
+  } else if (page === 'Bonus') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">OFFERS</span><h1>Bonus</h1><p>Announcements from Crypto Bridge.</p></section>${c.bonus ? `<article class="content-card"><p style="white-space:pre-wrap">${esc(c.bonus)}</p></article>` : '<div class="empty-state">No active offers right now.</div>'}`;
+  } else if (page === 'Recharge') {
+    const razor = c.paymentMode === 'razorpay';
+    const pay = razor ? !!c.razorpayEnabled : !!(c.upi || c.qr);
+    const pendingDep = state.deposits.filter(d => d.status === 'Pending' && d.provider !== 'razorpay').sort((a,b) => b.ts-a.ts)[0];
+    const countdownCard = pendingDep && !razor ? `<article class="content-card"><h2>Deposit review timer</h2><p>Your QR deposit request is pending admin verification.</p><strong class="deposit-countdown" data-deposit-countdown="${Number(pendingDep.ts) + 30 * 60 * 1000}">30:00</strong><p class="fine-print">This is a review timer, not payment confirmation. Your balance is credited only after an admin verifies the payment.</p></article>` : '';
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Recharge</h1><p>Minimum deposit ${inr(c.minDeposit)}. ${razor ? 'Pay securely using Razorpay. Captured payments are verified by the server.' : 'Pay by UPI QR and submit your UTR for admin verification.'}</p></section>${countdownCard}
+    ${razor ? (pay ? `<article class="content-card"><h2>Razorpay Checkout</h2><p>Your payment is verified automatically after Razorpay confirms capture. Do not close the page until Checkout reports the result.</p><p class="fine-print">Deposits are credited only after server-side payment verification.</p></article>` : `<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Razorpay is not configured</h2><p>The administrator must configure Razorpay credentials in Render Environment.</p></div></article>`) : (pay ? `<article class="content-card"><h2>Pay to</h2>${c.qr ? `<img class="qr-img" alt="Payment QR" src="${esc(c.qr)}">` : ''}${c.upi ? `<div class="copy-row"><code>${esc(c.upi)}</code><button class="primary-btn compact" id="copyUpi" type="button">Copy</button></div>` : ''}${c.payee ? `<p class="fine-print">Payee: ${esc(c.payee)}</p>` : ''}</article>` : '<article class="content-card warning-card"><span class="warning-icon">ⓘ</span><div><h2>Deposits not open</h2><p>Payment details have not been set up yet. Please contact support.</p></div></article>')}
+    <form id="depForm" class="demo-form"><label for="dAmt">${razor ? 'Deposit amount (₹)' : 'Amount paid (₹)'}</label><input id="dAmt" type="number" inputmode="numeric" min="${c.minDeposit}" step="1" required placeholder="${c.minDeposit}">${razor ? '' : '<label for="dUtr">UTR / transaction reference</label><input id="dUtr" required maxlength="30" autocomplete="off" placeholder="12-digit UTR"><label for="dProof">Payment screenshot (PNG/JPG/WEBP, max 4 MB)</label><input id="dProof" type="file" accept="image/png,image/jpeg,image/webp" required>'}<p class="msg-err" id="depErr" role="alert"></p><button class="primary-btn" type="submit" ${pay ? '' : 'disabled'}>${razor ? 'Pay securely with Razorpay' : 'Submit for verification'}</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    const cu = $('#copyUpi'); if (cu) cu.onclick = async () => { try { await navigator.clipboard.writeText(c.upi); showToast('UPI ID copied.'); } catch { showToast(c.upi); } };
+    $('#depForm').onsubmit = async e => {
+      e.preventDefault(); $('#depErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+      try {
+        const amount = Number($('#dAmt').value);
+        if (razor) {
+          const order = await api('razorpay/order', { amount });
+          if (!window.Razorpay) await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = 'https://checkout.razorpay.com/v1/checkout.js'; script.onload = resolve; script.onerror = () => reject(new Error('Could not load Razorpay Checkout. Please retry.')); document.head.appendChild(script); });
+          const verification = await new Promise((resolve, reject) => {
+            let finished = false;
+            const checkout = new window.Razorpay({ key: order.keyId, amount: order.amount, currency: order.currency, name: order.name, description: order.description, order_id: order.orderId, handler: async response => { try { const result = await api('razorpay/verify', response); finished = true; resolve(result); } catch (err) { reject(err); } }, modal: { ondismiss: () => { if (!finished) reject(new Error('Checkout closed. If you paid, your deposit will update after Razorpay webhook verification.')); } }, theme: { color: '#245ce8' } });
+            checkout.on('payment.failed', response => reject(new Error(response.error && response.error.description || 'Payment failed. Please retry.'))); checkout.open();
+          });
+          await loadMe();
+          if (verification && verification.waitingForCredits) showModal('Payment verified · credit pending', 'Your payment was verified. The panel is waiting for Head Admin to allocate enough credits before your wallet can be credited. Your payment request is saved.');
+          else showModal('Payment verified', 'Razorpay confirmed your payment and your wallet deposit was credited.');
+          renderPage('Assets');
+        } else {
+          const f = $('#dProof').files[0]; if (!f) throw new Error('Payment proof image is required.'); if (f.size > 4*1024*1024 || !/^image\/(png|jpeg|webp)$/.test(f.type)) throw new Error('Choose a PNG, JPG or WEBP image under 4 MB.'); const proof = await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('Could not read payment proof image.'));r.readAsDataURL(f);}); await api('deposit', { amount, utr: $('#dUtr').value, proof }); await loadMe(); showDepositCountdown(); renderPage('Assets');
+        }
+      } catch (x) { $('#depErr').textContent = x.message; btn.disabled = false; }
+    };
+  } else if (page === 'Withdrawal') {
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Withdrawal</h1><p>Minimum withdrawal ${inr(c.minWithdraw)}. Available: <b>${inr(state.me.balance)}</b>. ${state.me.mode === 'demo' ? 'Demo withdrawals are simulated and do not send real money.' : ''} ${c.withdrawalMode === 'profit' ? 'Profit-only policy is enabled: only recorded realized profits can be requested. Contact support to request principal release.' : 'Full-balance withdrawals are enabled, subject to admin review.'} The amount is held while your request is pending. ${state.withdrawals.some(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()) ? `Retry available after ${new Date(Math.max(...state.withdrawals.filter(w => w.status === 'Rejected' && Number(w.retryAt || 0) > Date.now()).map(w => w.retryAt))).toLocaleString()}.` : ''}</p></section>
+    <form id="wdForm" class="demo-form"><label for="wAmt">Amount (₹)</label><input id="wAmt" type="number" inputmode="numeric" min="${c.minWithdraw}" max="${state.me.balance}" step="1" required placeholder="${c.minWithdraw}"><div class="content-card" style="margin:12px 0"><p>Withdrawal amount: <b id="wdGross">—</b></p><p>${esc(c.withdrawalFeeLabel || 'Platform Fee')}: <b id="wdFee">—</b></p><p>Estimated payout: <b id="wdNet">—</b></p><small class="fine-print">Fee settings are set by the administrator. The full requested amount is held; if rejected, the gross amount is refunded.</small></div><label for="wUpi">${state.me.mode === 'demo' ? 'Demo payout reference / UPI ID' : 'Your UPI ID'}</label><input id="wUpi" required maxlength="60" autocomplete="off" placeholder="name@bank"><p class="msg-err" id="wdErr" role="alert"></p><button class="primary-btn" type="submit">Request withdrawal</button><button class="secondary-btn" type="button" data-page="Assets">Back to assets</button></form>`;
+    const updateWdPreview = () => { const gross = Math.max(0, Number($('#wAmt').value) || 0); const val = Math.max(0, Number(c.withdrawalFeeValue || 0)); const fee = Math.min(gross, c.withdrawalFeeType === 'fixed' ? val : Math.round(gross * val) / 100); $('#wdGross').textContent = inr(gross); $('#wdFee').textContent = inr(fee); $('#wdNet').textContent = inr(Math.max(0, gross - fee)); }; $('#wAmt').addEventListener('input', updateWdPreview); updateWdPreview();
+    $('#wdForm').onsubmit = async e => {
+      e.preventDefault(); $('#wdErr').textContent = ''; const btn = e.submitter; btn.disabled = true;
+      try { await api('withdraw', { amount: Number($('#wAmt').value), upi: $('#wUpi').value }); await loadMe(); showModal('Requested', 'Your withdrawal request is pending. You can follow its status in Assets.'); renderPage('Assets'); }
+      catch (x) { $('#wdErr').textContent = x.message; btn.disabled = false; }
+    };
+  } else if (page === 'Signal') {
+    const sorted = [...state.prices].sort((a, b) => b.change - a.change);
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">MARKET MOVERS</span><h1>Movers</h1><p>Biggest 24h moves among tracked assets, from live data. Not financial advice.</p></section><div id="staleNote">${staleNote()}</div><section class="asset-list" id="moverList">${sorted.length ? sorted.map(assetRow).join('') : renderAssetRows()}</section>`;
+  } else if (page === 'Service') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">HELP CENTER</span><h1>Service</h1><p>Answers and support.</p></section>${c.support ? `<a class="primary-btn" style="display:block;text-align:center;text-decoration:none;margin-bottom:14px" target="_blank" rel="noopener" href="${esc(c.support)}">Contact support ↗</a>` : ''}<div class="faq-list"><details open><summary>How do I deposit?</summary><p>Open Recharge, pay the shown UPI/QR (minimum ${inr(c.minDeposit)}), then submit amount and UTR. Your balance updates after admin verification.</p></details><details><summary>How do I withdraw?</summary><p>Open Withdrawal, enter an amount (minimum ${inr(c.minWithdraw)}, up to your balance) and your UPI ID. If rejected, the amount returns to your balance.</p></details><details><summary>Are prices live?</summary><p>Yes, prices come from CoinGecko and refresh about every 20 seconds. They can be slightly delayed.</p></details></div>`;
+  } else if (page === 'Guide') {
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">QUICK START</span><h1>Guide</h1><p>Get going in three steps.</p></section><div class="faq-list"><details open><summary>1. Register or login</summary><p>Create an account with your email and a password of at least 8 characters.</p></details><details open><summary>2. Recharge</summary><p>Minimum ${inr(c.minDeposit)}. ${(c.paymentMode === 'razorpay' && c.razorpayEnabled) ? 'Pay securely using Razorpay Checkout. Your wallet is credited after server-side payment verification.' : 'Pay via the displayed UPI QR/ID, submit the UTR, and wait for admin verification.'}</p></details><details open><summary>3. Withdraw</summary><p>Minimum ${inr(c.minWithdraw)}. Requests are reviewed and paid to your UPI ID. The configured ${esc(c.withdrawalFeeLabel || 'Platform Fee')} is deducted from the gross request; the net payout is shown before submission.</p></details></div>`;
+  }
+  if (!quiet) window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function doLogout() { try { await api('logout', {}); } catch {} state.me = null; state.deposits = state.withdrawals = state.trades = state.positions = []; await loadMe(); showToast('Logged out.'); renderPage('Home'); }
+function showModal(title, text) { $('#modalTitle').textContent = title; $('#modalBody').innerHTML = ''; const p = document.createElement('p'); p.textContent = text; $('#modalBody').appendChild(p); $('#modal').hidden = false; $('#okModal').focus(); }
+function showDepositCountdown() {
+  $('#modalTitle').textContent = 'Deposit submitted';
+  $('#modalBody').innerHTML = '<p>Your deposit request has been received.</p><p class="fine-print">Estimated review timer</p><strong class="deposit-countdown" id="depositModalCountdown">30:00</strong><p class="fine-print">This timer does not confirm payment or guarantee automatic credit. Your balance will be credited only after an admin verifies the payment.</p>';
+  $('#modal').hidden = false; $('#okModal').focus(); updateDepositCountdowns();
+}
+function updateDepositCountdowns() {
+  const nodes = document.querySelectorAll('[data-deposit-countdown], #depositModalCountdown');
+  nodes.forEach(node => {
+    let end = Number(node.dataset.depositCountdown);
+    if (!end) { const pending = state.deposits.filter(d => d.status === 'Pending').sort((a,b) => b.ts-a.ts)[0]; end = pending ? Number(pending.ts) + 30 * 60 * 1000 : Date.now() + 30 * 60 * 1000; node.dataset.depositCountdown = String(end); }
+    const left = Math.max(0, end - Date.now()); const mins = Math.floor(left / 60000); const secs = Math.floor((left % 60000) / 1000);
+    node.textContent = left > 0 ? `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}` : 'Review time elapsed';
+  });
+}
+setInterval(updateDepositCountdowns, 1000);
+// Refresh the open chart so admin-simulated coins visibly update while the page is open.
+setInterval(() => { if (state.page === 'Coin') { const key = state.coin + ':' + state.interval; if (state.kl[key]) state.kl[key].ts = 0; loadChart(false); } }, 5000);
+function hideModal() { $('#modal').hidden = true; }
+function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
+
+document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-coin]')) { e.preventDefault(); e.target.click(); } });
+document.addEventListener('click', e => {
+  const theme = e.target.closest('[data-theme-toggle]'); if (theme) { ccTheme.dark = !ccTheme.dark; ccTheme.apply(); return; }
+  const eye = e.target.closest('[data-eye]'); if (eye) { const i = document.getElementById(eye.dataset.eye), show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.innerHTML = show ? EYE_OFF : EYE; eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
+  const cn = e.target.closest('[data-coin]'); if (cn) { state.coin = cn.dataset.coin; renderPage('Coin'); return; } const b = e.target.closest('[data-page]'); if (b) { e.preventDefault(); renderPage(b.dataset.page); } });
+$('#closeModal').addEventListener('click', hideModal);
+$('#okModal').addEventListener('click', hideModal);
+$('#modal').addEventListener('click', e => { if (e.target === $('#modal')) hideModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) hideModal(); });
+$('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 'Auth'));
+
+(async function init() {
+  ccTheme.apply();
+  const ref = new URLSearchParams(location.search).get('ref');
+  await loadMe();
+  const route = decodeURIComponent(location.hash.slice(1) || 'Home');
+  let initialPage = route.split(':')[0];
+  if (route.startsWith('Coin:')) state.coin = route.slice(5);
+  const allowedPages = new Set(['Home','Quotes','Signal','Assets','Recharge','Withdrawal','Team','Invite','Bonus','Games','Service','Guide','Coin','Auth','Profile']);
+  if (!allowedPages.has(initialPage)) initialPage = 'Home';
+  if (ref && !state.me) initialPage = 'Auth';
+  renderPage(initialPage);
+  if (ref && !state.me) { state.authMode = 'register'; authPage(); }
+  window.addEventListener('hashchange', async () => {
+    const next = decodeURIComponent(location.hash.slice(1) || 'Home');
+    const page = next.split(':')[0];
+    if (next.startsWith('Coin:')) state.coin = next.slice(5);
+    if (allowedPages.has(page) && page !== state.page) { await loadMe(); renderPage(page); }
+  });
+  pullPrices(); setInterval(pullPrices, 20000);
+  // Refresh a signed-in user's wallet when an admin changes their balance in another session.
+  const syncWallet = async () => {
+    if (!state.me) return;
+    const previous = Number(state.me.balance || 0);
+    await loadMe();
+    if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
+  };
+  window.addEventListener('focus', syncWallet);
+  window.addEventListener('pagehide', () => clearInterval(winningActivityTimer), { once: true });
+  setInterval(syncWallet, 15000);
+})();
