@@ -75,6 +75,8 @@ const bsPeriodId = (n, dur) => { const d = Number(dur) || 30000, start = Number(
 const BS_NUM_CLASS = n => ({0:'v-r',5:'v-g'}[n] || (n % 2 ? 'g' : 'r'));
 const bsDots = c => String(c || '').split('+').map(x => `<i class="bs-dot ${x === 'Green' ? 'g' : x === 'Violet' ? 'v' : 'r'}"></i>`).join('');
 const PROTECTED = new Set(['Home', 'Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite', 'Games']);
+let winningActivityTimer = null;
+function syncBottomNav() { const nav = $('.bottom-nav'); if (nav) nav.style.display = state.me ? '' : 'none'; }
 
 function activePanelSlug() { const m = location.pathname.match(/^\/p\/([a-z0-9-]+)/i); return m ? m[1] : 'main'; }
 async function api(path, body) {
@@ -154,23 +156,41 @@ const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class
 async function loadMe() {
   try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
   catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; updateFooter(); } catch {} }
-  $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login';
+  $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login'; syncBottomNav();
 }
 const updateFooter = () => { const el = $('#siteFooter'); if (el) el.textContent = (state.cfg && state.cfg.footerText) || 'India-focused platform'; };
 const noticeBar = () => `${state.cfg.notice ? `<div class="notice-banner"><span>ⓘ</span><p>${esc(state.cfg.notice)}</p></div>` : ''}`;
 const needLogin = page => { state.after = page; renderPage('Auth'); };
 
 // ---------- pages ----------
+function makeWinningDemoBatch() {
+  const aliases = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana','Reyansh','Kiara'];
+  const rows = Array.from({length:10}, (_,i) => {
+    const uid = String(10000 + Math.floor(Math.random()*89999));
+    return { name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount: Math.round((150 + Math.random()*9850)*100)/100, key: `${Date.now()}-${i}-${Math.random()}` };
+  }).sort((a,b)=>b.amount-a.amount);
+  const host = $('#winningDemoRows');
+  if (host) host.innerHTML = rows.map((r,i)=>`<div class="winning-demo-row"><span class="winning-rank">${i+1}</span><span class="winning-person"><b>${esc(r.name)}</b><small>${esc(r.uid)}</small></span><span class="winning-win">WIN</span><strong>+${inr(r.amount)}</strong></div>`).join('');
+}
+function startWinningDemo() {
+  clearInterval(winningActivityTimer); makeWinningDemoBatch();
+  winningActivityTimer = setInterval(makeWinningDemoBatch, 10000);
+}
+
 function renderHome() {
   const hello = state.me ? `Welcome, ${esc(state.me.name.split(' ')[0])}` : 'Explore digital markets';
   $('#appMain').innerHTML = `${noticeBar()}
     <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>${hello}</h1><p>Live digital asset prices, updated every 20 seconds.</p><button class="welcome-cta" data-page="${state.me ? 'Assets' : 'Auth'}">${state.me ? 'Open wallet' : 'Login / Register'} <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
     <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
     <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
+    <section class="section-head home-games-head"><div><span class="eyebrow">PLAY ZONE</span><h2>Games</h2></div><button class="text-btn" data-page="Games">All games ↗</button></section><section class="home-games-grid"><article class="home-game-card"><span class="home-game-icon">🪙</span><div><b>Coin Flip / Head Tail</b><small>Pick Heads or Tails</small></div><button data-page="Games">Play ↗</button></article><article class="home-game-card"><span class="home-game-icon">🎯</span><div><b>WinGo</b><small>Number and colour game</small></div><button data-page="Games">Play ↗</button></article></section>
     <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
     <section class="market-cards" id="marketCards">${marketCards()}</section>
     <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
-    <section class="asset-list" id="assetList">${renderAssetRows()}</section>`;
+    <section class="asset-list" id="assetList">${renderAssetRows()}</section>
+    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Live Winning Activity</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> Illustrative activity · refreshes every 10 seconds · not real payouts</div><div id="winningDemoRows" aria-live="polite"></div></article>
+    <section class="section-head"><div><span class="eyebrow">PLAY SAFELY</span><h2>18+ Rules &amp; Responsible Play</h2></div></section><article class="responsible-card"><p><b>18+ only.</b> Participation is restricted to adults aged 18 or above.</p><ul><li>Provide accurate account information.</li><li>Read game rules and winning conditions before participating.</li><li>There are no guaranteed winnings.</li><li>Never risk money you cannot afford to lose.</li><li>Follow all applicable local laws and regulations.</li><li>Contact Support for account-related issues.</li></ul><p class="responsible-foot">Set limits, take breaks, and stop playing if it no longer feels recreational.</p></article>`;
+  startWinningDemo();
 }
 
 function authPage() {
@@ -424,7 +444,7 @@ function bindCoin() {
 
 async function renderPage(page, quiet) {
   if (PROTECTED.has(page) && !state.me) return needLogin(page);
-  state.page = page;
+  state.page = page; syncBottomNav();
   const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
   if (location.hash !== route) history.replaceState(null, '', route);
   $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
@@ -730,5 +750,6 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
     if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
   };
   window.addEventListener('focus', syncWallet);
+  window.addEventListener('pagehide', () => clearInterval(winningActivityTimer), { once: true });
   setInterval(syncWallet, 15000);
 })();

@@ -1,0 +1,23 @@
+CRYPTO BRIDGE UPDATE — 2026-11-04
+
+Implemented in this delivery:
+- Bottom navigation is hidden while logged out and shown after a successful authenticated session.
+- Added a Home page Games shortcut section above Trending Markets. The cards route to the existing Games page; no game engine or wallet logic was replaced.
+- Added a 10-row illustrative activity feed, refreshed every 10 seconds, sorted by amount descending, with masked generated identifiers. It is explicitly labelled DEMO / illustrative and is not connected to user identities, wallet balances, or transactions.
+- Added visible 18+ and responsible-play rules beneath the activity section.
+- Added responsive styling and interval cleanup for the activity component.
+
+Validation:
+- node --check app.js: passed
+- node --check server.js: passed
+- npm test: all existing automated server tests passed
+
+Not implemented in this delivery (requires further backend work and configuration):
+- Email OTP forgot-password flow and SMTP integration.
+- Panel-specific WhatsApp/Telegram support settings and admin UI.
+- A comprehensive new authorization/security audit beyond the existing test suite.
+- Browser-based visual testing on desktop/tablet/mobile and live Render deployment verification.
+
+Important:
+- Do not deploy to production until persistent storage is configured on Render (Upstash Redis or a properly mounted persistent disk), SMTP is configured if password recovery is added, and the remaining requested features are completed and tested.
+- No existing database records were edited by this source update. The included db.json remains the supplied original project data.
