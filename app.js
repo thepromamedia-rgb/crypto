@@ -256,20 +256,25 @@ function istDateKey(date = new Date()) {
 }
 function dailyLeaderboardRows() {
   const names = ['Arjun','Aarav','Riya','Vivaan','Kabir','Dev','Anaya','Ishita','Meera','Sana'];
-  const base = [64467,58588,38440,35983,31986,26300,24990,18770,16641,14220];
+  // Top three are illustrative DEMO amounts: #1 always stays between ₹40 lakh and ₹1 crore;
+  // #2 and #3 remain close behind. These values are display-only, never balances or payouts.
   const key = istDateKey();
-  // Stable date-seeded demo values: same leaderboard all day, refreshed automatically at IST midnight.
+  // Date-seeded values stay stable for the day and refresh at IST midnight.
   let seed = 2166136261;
   for (const ch of key) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
   const rand = () => { seed = (Math.imul(seed,1664525)+1013904223) >>> 0; return seed / 4294967296; };
-  const isReferenceDay = key === '2026-11-04';
-  return names.map((name,i)=>({name,amount:isReferenceDay ? base[i] : Math.round(base[i]*(0.88+rand()*0.24))}))
+  const firstPrize = Math.round((5000000 + rand() * 4500000) / 10000) * 10000; // ₹50L–₹95L
+  const secondPrize = firstPrize - Math.round((200000 + rand() * 200000) / 10000) * 10000; // ₹2L–₹4L less
+  const thirdPrize = secondPrize - Math.round((200000 + rand() * 200000) / 10000) * 10000; // ₹2L–₹4L less
+  const topPrizes = [firstPrize, secondPrize, thirdPrize];
+  const base = [0,0,0,35983,31986,26300,24990,18770,16641,14220];
+  return names.map((name,i)=>({name,amount:i < 3 ? topPrizes[i] : Math.round(base[i]*(0.88+rand()*0.24))}))
     .sort((a,b)=>b.amount-a.amount)
     .map((row,i)=>({...row,rank:i+1}));
 }
 function demoEarningsChart() {
   const rows = dailyLeaderboardRows();
-  return `<section class="section-head"><div><span class="eyebrow">ILLUSTRATIVE LEADERBOARD</span><h2>Today's Earnings Chart</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="earnings-demo-card" id="earningsLeaderboard"><p class="fine-print">Simulated leaderboard only — these are not actual user earnings or payouts. Automatically refreshed daily · ${istDateKey()} IST</p><div class="earnings-podium">${rows.slice(0,3).map(r=>`<div class="podium-place rank-${r.rank}"><span class="podium-medal">${r.rank===1?'👑':r.rank===2?'🥈':'🥉'}</span><b>#${r.rank} ${r.name}</b><strong>${inr(r.amount)}</strong></div>`).join('')}</div><div class="earnings-list">${rows.slice(3).map(r=>`<div><b>#${r.rank}</b><span>${r.name}</span><strong>${inr(r.amount)}</strong></div>`).join('')}</div></article>`;
+  return `<section class="section-head"><div><span class="eyebrow">ILLUSTRATIVE LEADERBOARD</span><h2>Today's Earnings Chart</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="earnings-demo-card" id="earningsLeaderboard"><p class="fine-print">Simulated leaderboard only — these are not actual user earnings or payouts. Automatically refreshed daily · ${istDateKey()} IST</p><div class="earnings-podium">${rows.slice(0,3).map(r=>`<div class="podium-place rank-${r.rank}"><span class="podium-rank-label">${r.rank===1?'🏆 CHAMPION':r.rank===2?'🥈 RUNNER UP':'🥉 THIRD PLACE'}</span><span class="podium-medal">${r.rank===1?'👑':r.rank===2?'🥈':'🥉'}</span><b>#${r.rank} ${r.name}</b><small class="podium-prize-label">DEMO PRIZE</small><strong>${inr(r.amount)}</strong></div>`).join('')}</div><div class="earnings-list">${rows.slice(3).map(r=>`<div><b>#${r.rank}</b><span>${r.name}</span><strong>${inr(r.amount)}</strong></div>`).join('')}</div></article>`;
 }
 function scheduleDailyLeaderboardRefresh() {
   clearTimeout(dailyEarningsTimer);
@@ -439,20 +444,26 @@ function drawChart() {
   const drawings = state.chartDrawings[key] || [];
   drawings.forEach(line => { if (line.horizontal) { body += `<line x1="${L}" y1="${Y(line.p1)}" x2="${W-R}" y2="${Y(line.p1)}" stroke="#4263eb" stroke-width="2" stroke-dasharray="5 3"/>`; return; } const ia = d.findIndex(x => x[0] === line.t1), ib = d.findIndex(x => x[0] === line.t2); if (ia >= 0 && ib >= 0) body += `<line x1="${X(ia)}" y1="${Y(line.p1)}" x2="${X(ib)}" y2="${Y(line.p2)}" stroke="#4263eb" stroke-width="2" stroke-linecap="round"/><circle cx="${X(ia)}" cy="${Y(line.p1)}" r="3" fill="#4263eb"/><circle cx="${X(ib)}" cy="${Y(line.p2)}" r="3" fill="#4263eb"/>`; });
   const ly = Y(last[4]);
-  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart"><rect x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="#fff"/>${g}${body}<line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${vTop + VH}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="transparent" style="touch-action:none;cursor:${state.drawMode ? 'crosshair' : 'grab'}"/></svg>`;
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart"><rect x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="#fff"/>${g}<g id="plotPan">${body}</g><line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${vTop + VH}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="transparent" style="touch-action:none;cursor:${state.drawMode ? 'crosshair' : 'grab'}"/></svg>`;
   const vf = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toFixed(1);
+  const panLayer = box.querySelector('#plotPan');
   const info = i => { const x = d[i], ch = (x[4] - x[1]) / (x[1] || 1) * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span><span>Vol <b>${vf(x[5] || 0)}</b></span>` + (candle ? '<span class="ma-row">' + MAS.map(m => m.v[i] == null ? '' : `<span style="color:${m.col}">MA${m.p} <b style="color:${m.col}">${pFmt(m.v[i])}</b></span>`).join('') + '</span>' : ''); };
   info(n - 1); const xh = $('#xh'), ov = $('#ov'), svg = box.querySelector('svg'); if (svg) { svg.style.transformOrigin = 'center center'; svg.style.willChange = 'transform'; } let drag = null;
   const point = e => { const r = ov.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H; return { i: Math.max(0, Math.min(n - 1, Math.floor((px - L) / pw * n))), price: hi - (py - T) / PH * (hi - lo) }; };
-  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false; let dragVelocity = 0; let lastDragSample = null; let inertiaFrame = 0;
+  const activePointers = new Map(); let pinchStart = null; let gestureChanged = false;
+  let dragVelocity = 0, lastDragSample = null, inertiaFrame = 0, previewPx = 0, commitPreview = null;
+  const clampOffset = value => Math.max(0, Math.min(total - view.count, value));
+  const setPreview = px => { previewPx = px; if (panLayer) panLayer.setAttribute('transform', `translate(${px.toFixed(2)} 0)`); };
   const finishGesture = () => {
     state.chartGestureActive = false;
-    if (svg) svg.style.transform = '';
+    if (panLayer) panLayer.removeAttribute('transform');
     drawChart();
     state.chartPendingRedraw = false;
   };
+  const stopInertia = () => { if (inertiaFrame) cancelAnimationFrame(inertiaFrame); inertiaFrame = 0; if (commitPreview) { commitPreview(); commitPreview = null; } };
   ov.addEventListener('pointerdown', e => {
     e.preventDefault();
+    stopInertia();
     try { ov.setPointerCapture(e.pointerId); } catch (_) {}
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size === 1) gestureChanged = false;
@@ -461,6 +472,7 @@ function drawChart() {
       drag = null;
       const pts = [...activePointers.values()];
       pinchStart = { distance: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1, count: view.count, changed: false };
+      if (panLayer) panLayer.removeAttribute('transform');
       return;
     }
     if (state.drawMode) {
@@ -484,7 +496,8 @@ function drawChart() {
       }
       return;
     }
-    drag = { x: e.clientX, offset: view.offset, moved: false }; dragVelocity = 0; lastDragSample = {x:e.clientX,t:performance.now()}; if(inertiaFrame) cancelAnimationFrame(inertiaFrame);
+    drag = { x: e.clientX, offset: view.offset, moved: false, dx: 0 };
+    dragVelocity = 0; lastDragSample = { x: e.clientX, t: performance.now() };
     ov.style.cursor = 'grabbing';
   });
   ov.addEventListener('pointermove', e => {
@@ -493,19 +506,22 @@ function drawChart() {
       e.preventDefault();
       const pts = [...activePointers.values()], dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
       view.count = Math.max(12, Math.min(total, Math.round(pinchStart.count * pinchStart.distance / dist)));
-      view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+      view.offset = clampOffset(view.offset);
       pinchStart.changed = true; gestureChanged = true;
       return;
     }
     if (drag && !state.drawMode) {
       e.preventDefault();
-      const dx = e.clientX - drag.x; const sampleNow=performance.now(); if(lastDragSample){const elapsed=Math.max(1,sampleNow-lastDragSample.t);dragVelocity=(e.clientX-lastDragSample.x)/elapsed;} lastDragSample={x:e.clientX,t:sampleNow};
-      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
-      if (drag.moved) {
-        // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
-        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + (dx / Math.max(1, pw) * view.count * -1)));
-        if (svg) svg.style.transform = `translate3d(${dx}px,0,0)`;
+      const dx = e.clientX - drag.x, sampleNow = performance.now();
+      if (lastDragSample) {
+        const elapsed = Math.max(1, sampleNow - lastDragSample.t);
+        const instant = (e.clientX - lastDragSample.x) / elapsed;
+        // Smooth the velocity sample to avoid a sudden fling from a single noisy pointer event.
+        dragVelocity = dragVelocity * .65 + instant * .35;
       }
+      lastDragSample = { x: e.clientX, t: sampleNow };
+      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
+      if (drag.moved) { drag.dx = dx; setPreview(dx); }
       return;
     }
     const q = point(e);
@@ -517,17 +533,39 @@ function drawChart() {
     const wasPinching = !!pinchStart;
     const pinchChanged = !!(pinchStart && pinchStart.changed);
     if (activePointers.size < 2) pinchStart = null;
-    const moved = !!(drag && drag.moved);
+    const completedDrag = drag;
     drag = null;
     if (activePointers.size === 0) {
-      if(moved && Math.abs(dragVelocity)>.08 && !state.drawMode){
-        state.chartGestureActive=false; if(svg)svg.style.transform='';
-        let velocity=dragVelocity; let previous=performance.now();
-        const coast=now=>{const dt=Math.min(32,now-previous);previous=now;const delta=-(velocity*dt/1000)*total/Math.max(1,pw);view.offset=Math.max(0,Math.min(total-view.count,view.offset+delta));drawChart();velocity*=Math.pow(.90,dt/16);if(Math.abs(velocity)>.025 && (view.offset>0 || velocity<0 && view.offset<total-view.count))inertiaFrame=requestAnimationFrame(coast);else{inertiaFrame=0;state.chartPendingRedraw=false;}};
-        inertiaFrame=requestAnimationFrame(coast);
-      } else if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
-      else { state.chartGestureActive = false; if (svg) svg.style.transform = ''; if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }
-      gestureChanged = false; lastDragSample=null;
+      if (completedDrag && completedDrag.moved && !state.drawMode) {
+        // Convert the pointer movement into candle offset once. Do not rebuild the SVG
+        // on every animation frame: that was the main source of the chart stutter.
+        const base = completedDrag.offset;
+        const pxPerOffset = pw / Math.max(1, view.count);
+        const targetPx = completedDrag.dx + (Math.abs(dragVelocity) > .035 ? dragVelocity * 145 : 0);
+        const clampedTargetOffset = clampOffset(base - targetPx / pxPerOffset);
+        const finalPx = (base - clampedTargetOffset) * pxPerOffset;
+        const startPx = completedDrag.dx;
+        const distance = finalPx - startPx;
+        if (Math.abs(distance) > 1.5) {
+          const started = performance.now(), duration = Math.min(520, Math.max(130, Math.abs(distance) / Math.max(0.35, Math.abs(dragVelocity))));
+          commitPreview = () => { view.offset = clampOffset(base - previewPx / pxPerOffset); if (panLayer) panLayer.removeAttribute('transform'); };
+          const easeOut = t => 1 - Math.pow(1 - t, 3);
+          const animate = now => {
+            const t = Math.min(1, (now - started) / duration);
+            setPreview(startPx + distance * easeOut(t));
+            if (t < 1) inertiaFrame = requestAnimationFrame(animate);
+            else { inertiaFrame = 0; view.offset = clampedTargetOffset; commitPreview = null; finishGesture(); }
+          };
+          inertiaFrame = requestAnimationFrame(animate);
+        } else { view.offset = clampedTargetOffset; finishGesture(); }
+      } else if (gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) {
+        finishGesture();
+      } else {
+        state.chartGestureActive = false;
+        if (panLayer) panLayer.removeAttribute('transform');
+        if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab';
+      }
+      gestureChanged = false; lastDragSample = null;
     }
   };
   ov.addEventListener('pointerup', endPointer);

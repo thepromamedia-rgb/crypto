@@ -9,3 +9,5 @@ UPDATE – 2026-11-04 (Daily leaderboard and wallet direction)
 - Existing wallet balances and records are not rewritten by these UI changes. Historical transfer descriptions are presented with the new 3rd Wallet name.
 
 Verification: node --check passed for app.js, server.js and test-server.js; npm test passed. SMTP delivery still requires the deployment's real SMTP credentials and installed dependency. JSON storage is not a production transactional ledger.
+
+- Follow-up podium amount update: rank 1 ₹40,00,000 (40 lakh), rank 2 ₹30,00,000 (30 lakh), and rank 3 ₹20,00,000 (20 lakh). These are fixed illustrative DEMO figures; lower ranks remain date-seeded simulated values. The DEMO badge and explicit no-real-earnings/no-payout disclosure remain visible.

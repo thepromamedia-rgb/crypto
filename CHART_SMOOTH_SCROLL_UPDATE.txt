@@ -1,0 +1,8 @@
+TRADING CHART SMOOTH SCROLL UPDATE — 2026-11-04
+
+- Reworked chart drag preview to translate only the plotted candles/volume/MA layer; chart frame and price axis remain stationary.
+- Removed full SVG redraws from the animation-frame loop. The previous per-frame DOM rebuild was the main source of stutter.
+- Added smoothed pointer velocity sampling and a short ease-out coast after release.
+- Candle offset is committed once at the end of the gesture/coast, then the chart is redrawn once.
+- Preserved pinch zoom, wheel zoom, timeframe controls, drawing tools and Latest button.
+- Verified JavaScript syntax and the full Node server test suite.
