@@ -28,3 +28,17 @@ Important deployment notes:
 - No production database records were edited; the supplied db.json was preserved.
 - Configure Upstash Redis or a Render persistent disk before production deployment.
 - Do not claim password recovery or panel-specific support settings are available in this build.
+
+Additional changes in this delivery:
+- Added email OTP password recovery endpoints with 10-minute OTP expiry, 60-second resend cooldown, five verification attempts, rate limiting, single-use reset token, and scrypt password hashing.
+- Added Forgot Password user flow. SMTP delivery is real and requires the documented SMTP environment variables; the API returns an error rather than claiming delivery when SMTP is unavailable.
+- Added panel-scoped WhatsApp / Telegram support button settings, backend URL/platform validation, and user-facing buttons on Home and Login.
+- Expanded Winning Information to show country flag, masked username, game, demo bonus amount, win type, mode, timestamp, update schedule, and IST timezone.
+- Winning activity interval is cleared when leaving Home and restarted without duplicate timers.
+- Fixed podium layout so rank 1 is centred, rank 2 is left, and rank 3 is right.
+
+Validation:
+- Node syntax checks pass for server.js, app.js and admin.js.
+- Existing npm test suite passes.
+- SMTP delivery was not tested against a real SMTP provider because no SMTP credentials were supplied.
+- Browser-based visual QA and production deployment were not performed.
