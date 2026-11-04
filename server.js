@@ -5,8 +5,6 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-let nodemailer;
-try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT) || 3000;
@@ -53,8 +51,8 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], walletTransfers: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
-  settings: { upi: '', payee: '', qr: '', support: '', supportButtons: [], notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
+  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -117,7 +115,7 @@ async function loadDB() {
   if (!D.panels.some(x => x.slug === 'main')) D.panels.unshift(defaultPanel());
   const mainPanel = D.panels.find(x => x.slug === 'main');
   if (!mainPanel.settings) mainPanel.settings = clone(D.settings);
-  D.settings = mainPanel.settings; D.walletTransfers = Array.isArray(D.walletTransfers) ? D.walletTransfers : []; syncCoins();
+  D.settings = mainPanel.settings; syncCoins();
   mainPanel.name = 'Head Admin Main'; mainPanel.active = true; mainPanel.deleted = false;
   for (const p of D.panels) {
     if (!Number.isFinite(Number(p.creditBalance))) p.creditBalance = 0;
@@ -425,7 +423,7 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, investment: { enabled: st.investment?.enabled !== false, depositPercent: Number(st.investment?.depositPercent ?? 50), profitPct: Number(st.investment?.profitPct ?? 5), holdingDays: Number(st.investment?.holdingDays ?? 7) }, withdrawalWagerMultiplier: Number(st.withdrawalWagerMultiplier ?? 1), withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, supportButtons: Array.isArray(st.supportButtons) ? st.supportButtons : [], notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
+const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, investment: { enabled: st.investment?.enabled !== false, depositPercent: Number(st.investment?.depositPercent ?? 50), profitPct: Number(st.investment?.profitPct ?? 5), holdingDays: Number(st.investment?.holdingDays ?? 7) }, withdrawalWagerMultiplier: Number(st.withdrawalWagerMultiplier ?? 1), withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
 const needUser = u => u || fail(401, 'Please login.');
 const needAdmin = u => { needUser(u); if (!['admin', 'headAdmin', 'panelAdmin'].includes(u.role)) fail(403, 'Forbidden'); };
 const needHead = u => { needUser(u); if (!isHead(u)) fail(403, 'Head Admin only.'); };
@@ -534,18 +532,6 @@ async function autoSettleCompletedWeeks() {
   if (changed) await save();
 }
 
-
-// Password recovery challenges are short-lived, single-use and process-local.
-const passwordChallenges = new Map();
-const otpDigest = (email, otp) => crypto.createHmac('sha256', D.secret).update(email + ':' + otp).digest('hex');
-async function deliverPasswordOtp(email, otp) {
-  if (!nodemailer) throw new Error('Email service dependency is unavailable. Install dependencies before enabling SMTP.');
-  const host = str(E.SMTP_HOST, 200), port = Number(E.SMTP_PORT || 587), user = str(E.SMTP_USER, 200), pass = String(E.SMTP_PASS || ''), from = str(E.SMTP_FROM || user, 200);
-  if (!host || !port || !user || !pass || !from) throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.');
-  const transport = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
-  await transport.sendMail({ from, to: email, subject: 'Crypto Bridge password reset code', text: `Your password reset code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.`, html: `<p>Your Crypto Bridge password reset code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>` });
-}
-
 const routes = {
   'GET /api/prices': async (req) => { const c = await getPrices(S(req).coins); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async (req) => PUBLIC_SETTINGS(req),
@@ -594,48 +580,11 @@ const routes = {
     setCookie(res, makeToken(u.id), 7 * 86400);
     return { user: pubUser(u), ...(u.role === 'headAdmin' && req.panelId !== 'main' ? {adminRedirect:'/admin'} : {}) };
   },
-  'POST /api/password/forgot/request': async (req, res, b) => {
-    const email = normEmail(b.email);
-    if (!emailOk(email)) fail(400, 'Enter the registered email address.');
-    limit('pwreset-ip:' + req.ip, 5, 3600e3); limit('pwreset-email:' + email, 3, 3600e3);
-    const key = String(req.panelId || 'main') + ':' + email;
-    const existing = passwordChallenges.get(key);
-    if (existing && existing.resendAfter > now()) fail(429, `Please wait ${Math.ceil((existing.resendAfter-now())/1000)} seconds before requesting another code.`);
-    const account = D.users.find(x => normEmail(x.email) === email && String(x.panelId || 'main') === String(req.panelId || 'main') && !['headAdmin','admin','panelAdmin'].includes(x.role));
-    if (!account) return { ok: true, message: 'If this email belongs to an account, a reset code will be sent.' };
-    const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
-    const challenge = { email, panelId: req.panelId || 'main', uid: account.id, otpHash: otpDigest(email, otp), expiresAt: now()+10*60e3, resendAfter: now()+60e3, attempts: 0, resetTokenHash: '', resetExpiresAt: 0 };
-    passwordChallenges.set(key, challenge);
-    try { await deliverPasswordOtp(email, otp); }
-    catch (err) { passwordChallenges.delete(key); console.error('PASSWORD OTP DELIVERY FAILED:', err.message); fail(503, 'Email delivery is unavailable. Please contact support; no password was changed.'); }
-    return { ok: true, message: 'If this email belongs to an account, a reset code will be sent.' };
-  },
-  'POST /api/password/forgot/verify': async (req, res, b) => {
-    const email = normEmail(b.email), otp = String(b.otp || '').trim(), key = String(req.panelId || 'main') + ':' + email;
-    const ch = passwordChallenges.get(key);
-    if (!ch || ch.expiresAt < now() || ch.attempts >= 5) { passwordChallenges.delete(key); fail(400, 'Code expired or unavailable. Request a new code.'); }
-    ch.attempts++;
-    const suppliedDigest = Buffer.from(otpDigest(email, otp), 'hex'), expectedDigest = Buffer.from(ch.otpHash, 'hex');
-    if (!/^\d{6}$/.test(otp) || suppliedDigest.length !== expectedDigest.length || !crypto.timingSafeEqual(suppliedDigest, expectedDigest)) fail(400, 'Invalid verification code.');
-    ch.resetToken = crypto.randomBytes(32).toString('hex'); ch.resetTokenHash = crypto.createHash('sha256').update(ch.resetToken).digest('hex'); ch.resetExpiresAt = now()+10*60e3; ch.otpHash = ''; ch.attempts = 0;
-    return { resetToken: ch.resetToken };
-  },
-  'POST /api/password/forgot/reset': async (req, res, b) => {
-    const email = normEmail(b.email), key = String(req.panelId || 'main') + ':' + email, ch = passwordChallenges.get(key);
-    const token = String(b.resetToken || ''), pw = String(b.password || ''), confirm = String(b.confirmPassword || '');
-    if (!ch || ch.uid == null || ch.resetExpiresAt < now() || !token || crypto.createHash('sha256').update(token).digest('hex') !== ch.resetTokenHash) fail(400, 'Verification expired. Start password recovery again.');
-    if (pw.length < 8 || pw.length > 100) fail(400, 'Password must be 8–100 characters.');
-    if (pw !== confirm) fail(400, 'Passwords do not match.');
-    const account = D.users.find(x => x.id === ch.uid && String(x.panelId || 'main') === String(req.panelId || 'main'));
-    if (!account || account.blocked) fail(400, 'Account unavailable. Contact support.');
-    account.pass = hashPw(pw); passwordChallenges.delete(key); audit(email, 'password-reset', 'Email OTP verified'); await save();
-    return { ok: true, message: 'Password reset successfully. Please log in.' };
-  },
   'POST /api/logout': async (req, res) => { setCookie(res, '', 0); return { ok: true }; },
   'GET /api/me': async (req, res, b, u) => {
     needUser(u); await settleAndSave(); await settleInvestmentsAndSave();
     return {
-      user: pubUser(u), walletTransfers: (D.walletTransfers || []).filter(x => x.uid === u.id).sort((a,b)=>b.ts-a.ts).slice(0,50), investments: (D.investments || []).filter(p => p.uid === u.id).sort((a,b)=>b.ts-a.ts), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
+      user: pubUser(u), investments: (D.investments || []).filter(p => p.uid === u.id).sort((a,b)=>b.ts-a.ts), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
       positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
@@ -661,23 +610,15 @@ const routes = {
   },
   'POST /api/wallet/main-to-third': async (req, res, b, u) => {
     needUser(u); const amount = money(b.amount); if (!amount || amount < 1) fail(400, 'Enter a valid transfer amount.');
-    const requestId = str(b.requestId, 80);
-    if (requestId) { const prior = (D.walletTransfers || []).find(x => x.uid === u.id && x.requestId === requestId); if (prior) return { balance: prior.mainBalance, thirdWallet: prior.rdBalance, transactionId: prior.id, duplicate: true }; }
     if (amount > Number(u.balance || 0)) fail(400, 'Amount exceeds your Main Wallet balance.');
     u.balance = r2(Number(u.balance || 0) - amount); u.thirdWallet = r2(Number(u.thirdWallet || 0) + amount);
-    const row = { id: nid(), ts: now(), uid: u.id, panelId: u.panelId || req.panelId || 'main', direction: 'main-to-rd', amount, requestId, mainBalance: u.balance, rdBalance: u.thirdWallet };
-    D.walletTransfers.push(row); if (D.walletTransfers.length > 10000) D.walletTransfers.splice(0, D.walletTransfers.length-10000);
-    audit(u.email, 'main-to-third-transfer', `₹${amount} · transfer #${row.id}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet, transactionId: row.id };
+    audit(u.email, 'main-to-third-transfer', `₹${amount}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet };
   },
   'POST /api/wallet/third-to-main': async (req, res, b, u) => {
     needUser(u); const amount = money(b.amount); if (!amount || amount < 1) fail(400, 'Enter a valid transfer amount.');
-    const requestId = str(b.requestId, 80);
-    if (requestId) { const prior = (D.walletTransfers || []).find(x => x.uid === u.id && x.requestId === requestId); if (prior) return { balance: prior.mainBalance, thirdWallet: prior.rdBalance, transactionId: prior.id, duplicate: true }; }
-    if (amount > Number(u.thirdWallet || 0)) fail(400, 'Amount exceeds your RD Wallet balance.');
+    if (amount > Number(u.thirdWallet || 0)) fail(400, 'Amount exceeds your Third Wallet balance.');
     u.thirdWallet = r2(Number(u.thirdWallet || 0) - amount); u.balance = r2(Number(u.balance || 0) + amount);
-    const row = { id: nid(), ts: now(), uid: u.id, panelId: u.panelId || req.panelId || 'main', direction: 'rd-to-main', amount, requestId, mainBalance: u.balance, rdBalance: u.thirdWallet };
-    D.walletTransfers.push(row); if (D.walletTransfers.length > 10000) D.walletTransfers.splice(0, D.walletTransfers.length-10000);
-    audit(u.email, 'third-to-main-transfer', `₹${amount} · transfer #${row.id}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet, transactionId: row.id };
+    audit(u.email, 'third-to-main-transfer', `₹${amount}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet };
   },
   'POST /api/password': async (req, res, b, u) => {
     needUser(u); limit('pw:' + u.id, 5, 600e3);
@@ -1215,17 +1156,7 @@ const routes = {
     if (b.withdrawalFeeLabel !== undefined) s.withdrawalFeeLabel = str(b.withdrawalFeeLabel, 40) || 'Platform Fee';
     const requestedUpi = b.upi !== undefined ? str(b.upi, 60) : s.upi; const requestedPayee = b.payee !== undefined ? str(b.payee, 60) : s.payee;
     if (!(isPanelAdmin(u) && req.panel && req.panel.slug !== 'main')) { s.upi = requestedUpi; s.payee = requestedPayee; }
-    s.support = str(b.support, 200);
-    if (b.supportButtons !== undefined) {
-      if (!Array.isArray(b.supportButtons) || b.supportButtons.length > 2) fail(400, 'Support settings must contain at most two buttons.');
-      s.supportButtons = b.supportButtons.map(x => {
-        const platform = String(x.platform || '').toLowerCase(), name = str(x.name, 30), url = str(x.url, 300);
-        if (!['whatsapp','telegram'].includes(platform)) fail(400, 'Support platform must be WhatsApp or Telegram.');
-        if (!name || !/^https:\/\//i.test(url) || !/^https:\/\/(?:wa\.me|api\.whatsapp\.com|t\.me|telegram\.me)(?:\/|$)/i.test(url)) fail(400, 'Enter a valid HTTPS WhatsApp or Telegram support URL.');
-        return { platform, name, url, enabled: x.enabled !== false };
-      });
-    }
-    s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
+    s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
     if (b.minDeposit !== undefined) {
       const md = Number(b.minDeposit), mw = Number(b.minWithdraw), mt = Number(b.minTrade);
@@ -1331,7 +1262,7 @@ const routes = {
       if (password.length < 8 || password.length > 100) fail(400, 'Panel admin password must be 8–100 characters.');
       if (D.users.some(x => x.email === email) || D.demoUsers.some(x => x.email === email)) fail(409, 'This email is already in use.');
       const panel = { id: 'panel-' + crypto.randomBytes(6).toString('hex'), slug, aliases: [], name, active: true, deleted: false, created: now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(S(req)) };
-      panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.supportButtons = []; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
+      panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
       const admin = { id: nid(), uid: nextAccountUid('PAD'), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, thirdWallet: 0, depositEligible: 0, wagerRequired: 0, wagerCompleted: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
       if (!checkPw(password, admin.pass)) fail(500, 'Panel admin credential validation failed.');
       panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);

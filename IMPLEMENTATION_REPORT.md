@@ -34,15 +34,3 @@
 
 ## Important
 The demo activity feed and earnings leaderboard are simulated display-only data. They do not represent verified payouts, do not modify balances, and do not create financial transaction records. Do not enable real-money play without confirming applicable legal and operational requirements.
-
-## Additional implementation in this delivery
-- Email OTP recovery backend and user interface. Requires Nodemailer installation and valid SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM environment variables.
-- Panel-scoped WhatsApp/Telegram support buttons configurable from each admin's Settings page.
-- Expanded 10-row demo winners table and proper one-second timer cleanup.
-- Corrected earnings podium ordering.
-
-## Remaining production verification
-- Configure and test SMTP credentials before enabling password recovery in production.
-- Perform visual browser QA at mobile, tablet and desktop sizes.
-- Verify persistent storage configuration and backup/restore on the actual deployment.
-- Review wallet transfer concurrency under the chosen multi-instance production storage topology; the current application is a single Node process and its JSON/Redis persistence layer is not a transactional SQL database.
