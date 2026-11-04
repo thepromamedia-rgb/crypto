@@ -608,6 +608,12 @@ const routes = {
     audit(u.email, 'investment-created', `#${p.id} principal ₹${amount}; ${p.profitPct}% planned profit; ${p.holdingDays} days`); await save();
     return { investment: p, balance: u.balance, thirdWallet: Number(u.thirdWallet || 0) };
   },
+  'POST /api/wallet/main-to-third': async (req, res, b, u) => {
+    needUser(u); const amount = money(b.amount); if (!amount || amount < 1) fail(400, 'Enter a valid transfer amount.');
+    if (amount > Number(u.balance || 0)) fail(400, 'Amount exceeds your Main Wallet balance.');
+    u.balance = r2(Number(u.balance || 0) - amount); u.thirdWallet = r2(Number(u.thirdWallet || 0) + amount);
+    audit(u.email, 'main-to-third-transfer', `₹${amount}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet };
+  },
   'POST /api/wallet/third-to-main': async (req, res, b, u) => {
     needUser(u); const amount = money(b.amount); if (!amount || amount < 1) fail(400, 'Enter a valid transfer amount.');
     if (amount > Number(u.thirdWallet || 0)) fail(400, 'Amount exceeds your Third Wallet balance.');

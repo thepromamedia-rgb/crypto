@@ -72,6 +72,9 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 200);
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 409);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 1000); ok('reject refunds exactly once');
+  const toRd = await u('POST', '/api/wallet/main-to-third', { amount: 250 }); assert.equal(toRd.s, 200); assert.equal(toRd.j.balance, 750); assert.equal(toRd.j.thirdWallet, 250);
+  const toMain = await u('POST', '/api/wallet/third-to-main', { amount: 250 }); assert.equal(toMain.s, 200); assert.equal(toMain.j.balance, 1000); assert.equal(toMain.j.thirdWallet, 0); ok('wallet transfers work in both directions');
+  assert.equal((await u('POST', '/api/wallet/main-to-third', { amount: 2000 })).s, 400); ok('wallet transfer prevents insufficient balance');
   const w2 = await u('POST', '/api/withdraw', { amount: 400, upi: 'ravi@bank' });
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w2.j.withdrawal.id, action: 'paid', ref: 'X1', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 200);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 600); ok('paid withdrawal keeps deduction');
