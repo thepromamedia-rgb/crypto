@@ -1,0 +1,11 @@
+UPDATE – 2026-11-04 (Daily leaderboard and wallet direction)
+
+- Today's Earnings Chart now uses a date-seeded DEMO leaderboard. Values stay stable during the day and regenerate at midnight Asia/Kolkata; it also refreshes automatically if the Home page remains open across midnight.
+- The requested reference-day values are used for 04 Nov 2026: Arjun ₹64,467; Aarav ₹58,588; Riya ₹38,440; Vivaan ₹35,983; Kabir ₹31,986; Dev ₹26,300; Anaya ₹24,990; Ishita ₹18,770; Meera ₹16,641; Sana (demo amount generated for rank 10). Later dates receive deterministic simulated values.
+- The leaderboard is explicitly marked DEMO and states that values are not actual earnings or payouts. It is not connected to user balances or transactions.
+- Winning Information now adds an entry every 2 seconds, shows a matching country flag/currency code and formats the amount in that currency.
+- Assets now labels the second wallet 3rd Wallet. The transfer form only offers 3rd Wallet → Main Wallet.
+- Main Wallet → 3rd Wallet is rejected by the backend (HTTP 403), not merely hidden in the interface.
+- Existing wallet balances and records are not rewritten by these UI changes. Historical transfer descriptions are presented with the new 3rd Wallet name.
+
+Verification: node --check passed for app.js, server.js and test-server.js; npm test passed. SMTP delivery still requires the deployment's real SMTP credentials and installed dependency. JSON storage is not a production transactional ledger.

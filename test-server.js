@@ -44,6 +44,11 @@ const stub = http.createServer((q, r) => {
   const firstRegister = await u('POST', '/api/register', { name: 'Ravi', email: 'ravi@x.io', password: 'password1' }); assert.equal(firstRegister.s, 200); assert.match(firstRegister.j.user.uid, /^USR-\d{6}$/);
   assert.equal((await u('POST', '/api/register', { name: 'Dup', email: 'RAVI@x.io', password: 'password1' })).s, 409); ok('register + duplicate');
   assert.equal((await u('GET', '/api/admin/overview')).s, 403); ok('user cannot reach admin');
+  const unknownReset = await mk()('POST', '/api/password/forgot/request', { email: 'nobody@x.io' });
+  assert.equal(unknownReset.s, 200); assert.match(unknownReset.j.message, /If this email belongs/);
+  const unavailableMail = await mk()('POST', '/api/password/forgot/request', { email: 'ravi@x.io' });
+  assert.equal(unavailableMail.s, 503); assert.match(unavailableMail.j.error, /Email delivery is unavailable/); ok('password reset never claims success without real SMTP');
+
   assert.equal((await mk()('POST', '/api/login', { email: 'ravi@x.io', password: 'bad' })).s, 401);
 
   // deposit rules
@@ -53,7 +58,7 @@ const stub = http.createServer((q, r) => {
   const mainForCredits = (await a('GET', '/api/admin/panels')).j.panels.find(p => p.slug === 'main');
   const mainAllocation = await a('POST', '/api/admin/panels', { action: 'allocate', id: mainForCredits.id, amount: 9000000, reason: 'integration test starting credits' });
   assert.equal(mainAllocation.s, 200); assert.equal(mainAllocation.j.panel.creditBalance, 9000000); ok('Head Admin allocates credits to main panel');
-  assert.equal((await a('POST', '/api/admin/settings', { withdrawalWagerMultiplier: 0, upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', notice: '', bonus: '' })).s, 200);
+  assert.equal((await a('POST', '/api/admin/settings', { withdrawalWagerMultiplier: 0, upi: 'shop@upi', payee: 'CB', support: 'https://t.me/x', supportButtons: [{ platform: 'telegram', name: 'Main Telegram', url: 'https://t.me/mainhelp', enabled: true }], notice: '', bonus: '' })).s, 200);
   const d = await u('POST', '/api/deposit', { amount: 1000, utr: 'abcdefgh1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' }); assert.equal(d.s, 200);
   assert.equal((await u('POST', '/api/deposit', { amount: 2000, utr: 'ABCDEFGH1234', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 409); ok('duplicate UTR rejected');
   assert.equal((await u('GET', '/api/me')).j.user.balance, 0);
@@ -72,9 +77,8 @@ const stub = http.createServer((q, r) => {
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 200);
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w.j.withdrawal.id, action: 'reject', note: 'Test rejection reason' })).s, 409);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 1000); ok('reject refunds exactly once');
-  const toRd = await u('POST', '/api/wallet/main-to-third', { amount: 250 }); assert.equal(toRd.s, 200); assert.equal(toRd.j.balance, 750); assert.equal(toRd.j.thirdWallet, 250);
-  const toMain = await u('POST', '/api/wallet/third-to-main', { amount: 250 }); assert.equal(toMain.s, 200); assert.equal(toMain.j.balance, 1000); assert.equal(toMain.j.thirdWallet, 0); ok('wallet transfers work in both directions');
-  assert.equal((await u('POST', '/api/wallet/main-to-third', { amount: 2000 })).s, 400); ok('wallet transfer prevents insufficient balance');
+  const blockedMainToThird = await u('POST', '/api/wallet/main-to-third', { amount: 250, requestId: 'wallet-test-blocked' }); assert.equal(blockedMainToThird.s, 403); assert.equal((await u('GET', '/api/me')).j.user.balance, 1000); ok('Main Wallet to 3rd Wallet transfer is blocked server-side');
+  assert.equal((await u('POST', '/api/wallet/third-to-main', { amount: 250 })).s, 400); assert.equal((await u('GET', '/api/me')).j.walletTransfers.length, 0); ok('3rd Wallet to Main Wallet requires sufficient 3rd Wallet funds');
   const w2 = await u('POST', '/api/withdraw', { amount: 400, upi: 'ravi@bank' });
   assert.equal((await a('POST', '/api/admin/withdrawal', { id: w2.j.withdrawal.id, action: 'paid', ref: 'X1', proof: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=' })).s, 200);
   assert.equal((await u('GET', '/api/me')).j.user.balance, 600); ok('paid withdrawal keeps deduction');
@@ -245,7 +249,9 @@ const stub = http.createServer((q, r) => {
   assert.equal((await panelAdmin('POST', '/api/login', { email: 'paneladmin@x.io', password: 'PanelPass123' })).s, 200);
   assert.equal((await panelAdmin('POST', '/api/admin/panels', { action: 'allocate', id: panelCreate.j.panel.id, amount: 100 })).s, 403); ok('panel admins cannot allocate or expand their own credit pool');
   assert.equal((await a('POST', '/api/admin/settings', { upi: 'main@upi', payee: 'Main', paymentMode: 'qr' })).s, 200);
-  assert.equal((await panelAdmin('POST', '/api/admin/settings', { upi: 'panel@upi', payee: 'Panel One', paymentMode: 'qr' })).s, 200);
+  assert.equal((await panelAdmin('POST', '/api/admin/settings', { upi: 'panel@upi', payee: 'Panel One', paymentMode: 'qr', supportButtons: [{ platform: 'whatsapp', name: 'Panel WhatsApp', url: 'https://wa.me/919999999999', enabled: true }] })).s, 200);
+  assert.equal((await panelAdmin('GET', '/api/config')).j.supportButtons[0].name, 'Panel WhatsApp');
+  assert.equal((await a('GET', '/api/config')).j.supportButtons[0].name, 'Main Telegram'); ok('support buttons are isolated per panel');
   assert.equal((await a('GET', '/api/config')).j.upi, 'main@upi');
   assert.notEqual((await panelAdmin('GET', '/api/config')).j.upi, 'panel@upi');
   const pendingPanel = (await a('GET', '/api/admin/panels')).j.panels.find(x => x.slug === 'panel-one'); assert.equal(pendingPanel.pendingQrApproval, true);

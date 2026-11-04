@@ -76,6 +76,7 @@ const BS_NUM_CLASS = n => ({0:'v-r',5:'v-g'}[n] || (n % 2 ? 'g' : 'r'));
 const bsDots = c => String(c || '').split('+').map(x => `<i class="bs-dot ${x === 'Green' ? 'g' : x === 'Violet' ? 'v' : 'r'}"></i>`).join('');
 const PROTECTED = new Set(['Home', 'Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite', 'Games']);
 let winningActivityTimer = null;
+let dailyEarningsTimer = null;
 let winningDemoRows = [];
 function syncBottomNav() { const nav = $('.bottom-nav'); if (nav) nav.style.display = state.me ? '' : 'none'; }
 
@@ -155,7 +156,7 @@ const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class
 
 // ---------- session ----------
 async function loadMe() {
-  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.walletTransfers = j.walletTransfers || []; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
   catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; updateFooter(); } catch {} }
   $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login'; syncBottomNav();
 }
@@ -167,37 +168,102 @@ const needLogin = page => { state.after = page; renderPage('Auth'); };
 function makeWinningDemoBatch() {
   const games = ['WinGo', 'Coin Flip', 'Head/Tail', 'BTC', 'ETH', 'SOL'];
   const aliases = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana','Reyansh','Kiara'];
+  const countries = [
+    {flag:'🇮🇳',name:'India',currency:'INR',locale:'en-IN'},
+    {flag:'🇸🇬',name:'Singapore',currency:'SGD',locale:'en-SG'},
+    {flag:'🇲🇾',name:'Malaysia',currency:'MYR',locale:'en-MY'},
+    {flag:'🇵🇭',name:'Philippines',currency:'PHP',locale:'en-PH'},
+    {flag:'🇹🇭',name:'Thailand',currency:'THB',locale:'en-TH'},
+    {flag:'🇺🇸',name:'United States',currency:'USD',locale:'en-US'},
+    {flag:'🇬🇧',name:'United Kingdom',currency:'GBP',locale:'en-GB'}
+  ];
+  const country = countries[Math.floor(Math.random()*countries.length)];
   const uid = String(10000 + Math.floor(Math.random()*89999));
-  winningDemoRows.unshift({ game: games[Math.floor(Math.random()*games.length)], name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount: Math.round((2000 + Math.random()*98000)*100)/100, key: `${Date.now()}-${Math.random()}` });
+  const ts = Date.now();
+  const amount = Math.round((2000 + Math.random()*98000)*100)/100;
+  const formatted = new Intl.NumberFormat(country.locale,{style:'currency',currency:country.currency,maximumFractionDigits:2}).format(amount);
+  winningDemoRows.unshift({ game: games[Math.floor(Math.random()*games.length)], name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount, formatted, currency:country.currency, country:country.flag, countryName:country.name, winType:['Big Win','Lucky Win','Bonus Win'][Math.floor(Math.random()*3)], mode:['Classic','Quick','Turbo'][Math.floor(Math.random()*3)], ts, key: `${ts}-${Math.random()}` });
   winningDemoRows = winningDemoRows.slice(0, 10);
   const host = $('#winningDemoRows');
-  if (host) host.innerHTML = winningDemoRows.map(r=>`<div class="winning-demo-row"><span class="winning-person"><b>${esc(r.game)}</b><small>${esc(r.name)} · ${esc(r.uid)}</small></span><span class="winning-win">DEMO WIN</span><strong>+${inr(r.amount)}</strong></div>`).join('');
+  if (host) host.innerHTML = winningDemoRows.map((r,i)=>`<div class="winning-demo-row ${i===0?'is-new':''}"><span class="winning-country" title="${r.countryName} · ${r.currency}">${r.country}</span><span class="winning-person"><b>${esc(r.name)} ${esc(r.uid)}</b><small>${esc(r.game)} · ${esc(r.currency)}</small></span><strong class="winning-win">+${esc(r.formatted)}</strong><span class="winning-type">${esc(r.winType)}</span><span class="winning-mode">${esc(r.mode)}</span><time>${new Date(r.ts).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})}</time></div>`).join('');
+  const updated=$('#winningUpdated'), next=$('#winningNext');
+  if(updated) updated.textContent=new Date(ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})+' IST';
+  if(next) next.textContent=new Date(ts+2000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Kolkata'})+' IST';
 }
 function startWinningDemo() {
-  clearInterval(winningActivityTimer); winningDemoRows = []; makeWinningDemoBatch();
-  winningActivityTimer = setInterval(makeWinningDemoBatch, 1000);
+  // Keep a single timer and do not animate a detached/hidden Home page.
+  if (winningActivityTimer) { clearInterval(winningActivityTimer); winningActivityTimer = null; }
+  if (document.hidden || state.page !== 'Home') return;
+  winningDemoRows = [];
+  makeWinningDemoBatch();
+  winningActivityTimer = setInterval(() => {
+    if (document.hidden || state.page !== 'Home' || !document.getElementById('winningDemoRows')) {
+      clearInterval(winningActivityTimer); winningActivityTimer = null;
+      return;
+    }
+    makeWinningDemoBatch();
+  }, 2000);
+}
+function istDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+}
+function dailyLeaderboardRows() {
+  const names = ['Arjun','Aarav','Riya','Vivaan','Kabir','Dev','Anaya','Ishita','Meera','Sana'];
+  const base = [64467,58588,38440,35983,31986,26300,24990,18770,16641,14220];
+  const key = istDateKey();
+  // Stable date-seeded demo values: same leaderboard all day, refreshed automatically at IST midnight.
+  let seed = 2166136261;
+  for (const ch of key) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rand = () => { seed = (Math.imul(seed,1664525)+1013904223) >>> 0; return seed / 4294967296; };
+  const isReferenceDay = key === '2026-11-04';
+  return names.map((name,i)=>({name,amount:isReferenceDay ? base[i] : Math.round(base[i]*(0.88+rand()*0.24))}))
+    .sort((a,b)=>b.amount-a.amount)
+    .map((row,i)=>({...row,rank:i+1}));
 }
 function demoEarningsChart() {
-  const names = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana'];
-  const rows = names.map((name,i)=>({rank:i+1,name,amount:Math.round((12000 + Math.random()*88000)*(1-i*.055))})).sort((a,b)=>b.amount-a.amount).map((x,i)=>({...x,rank:i+1}));
-  return `<section class="section-head"><div><span class="eyebrow">ILLUSTRATIVE LEADERBOARD</span><h2>Today's Earnings Chart</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="earnings-demo-card"><p class="fine-print">Simulated leaderboard only — these are not actual user earnings or payouts.</p><div class="earnings-podium">${rows.slice(0,3).map((r,i)=>`<div class="podium-place rank-${r.rank}"><span class="podium-medal">${r.rank===1?'👑':r.rank===2?'🥈':'🥉'}</span><b>#${r.rank} ${r.name}</b><strong>${inr(r.amount)}</strong></div>`).join('')}</div><div class="earnings-list">${rows.slice(3).map(r=>`<div><b>#${r.rank}</b><span>${r.name}</span><strong>${inr(r.amount)}</strong></div>`).join('')}</div></article>`;
+  const rows = dailyLeaderboardRows();
+  return `<section class="section-head"><div><span class="eyebrow">ILLUSTRATIVE LEADERBOARD</span><h2>Today's Earnings Chart</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="earnings-demo-card" id="earningsLeaderboard"><p class="fine-print">Simulated leaderboard only — these are not actual user earnings or payouts. Automatically refreshed daily · ${istDateKey()} IST</p><div class="earnings-podium">${rows.slice(0,3).map(r=>`<div class="podium-place rank-${r.rank}"><span class="podium-medal">${r.rank===1?'👑':r.rank===2?'🥈':'🥉'}</span><b>#${r.rank} ${r.name}</b><strong>${inr(r.amount)}</strong></div>`).join('')}</div><div class="earnings-list">${rows.slice(3).map(r=>`<div><b>#${r.rank}</b><span>${r.name}</span><strong>${inr(r.amount)}</strong></div>`).join('')}</div></article>`;
+}
+function scheduleDailyLeaderboardRefresh() {
+  clearTimeout(dailyEarningsTimer);
+  const now = new Date();
+  // IST midnight is 18:30 UTC on the previous date.
+  const next = new Date(now);
+  next.setUTCHours(18,30,0,0);
+  if (next <= now) next.setUTCDate(next.getUTCDate()+1);
+  dailyEarningsTimer = setTimeout(() => {
+    const host = $('#earningsLeaderboard');
+    if (host) {
+      const fresh = demoEarningsChart();
+      const wrapper = document.createElement('div'); wrapper.innerHTML = fresh;
+      const newCard = wrapper.querySelector('#earningsLeaderboard');
+      if (newCard) host.replaceWith(newCard);
+    }
+    scheduleDailyLeaderboardRefresh();
+  }, Math.max(1000,next-now));
 }
 
+function supportButtonsHtml(extraClass='support-actions') {
+  const rows = Array.isArray(state.cfg?.supportButtons) ? state.cfg.supportButtons.filter(x=>x && x.enabled && x.url) : [];
+  if (!rows.length) return '';
+  return `<div class="${extraClass}" aria-label="Customer support">${rows.map(x=>`<a class="support-action support-${esc(x.platform)}" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name || (x.platform==='whatsapp'?'WhatsApp Support':'Telegram Support'))}</a>`).join('')}</div>`;
+}
 function renderHome() {
   const hello = state.me ? `Welcome, ${esc(state.me.name.split(' ')[0])}` : 'Explore digital markets';
   $('#appMain').innerHTML = `${noticeBar()}
     <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>${hello}</h1><p>Live digital asset prices, updated every 20 seconds.</p><button class="welcome-cta" data-page="${state.me ? 'Assets' : 'Auth'}">${state.me ? 'Open wallet' : 'Login / Register'} <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
-    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
+    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>${supportButtonsHtml()}
     <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
     <section class="section-head home-games-head"><div><span class="eyebrow">PLAY ZONE</span><h2>Games</h2></div><button class="text-btn" data-page="Games">All games ↗</button></section><section class="home-games-grid"><article class="home-game-card"><span class="home-game-icon">🪙</span><div><b>Coin Flip / Head Tail</b><small>Pick Heads or Tails</small></div><button data-page="Games">Play ↗</button></article><article class="home-game-card"><span class="home-game-icon">🎯</span><div><b>WinGo</b><small>Number and colour game</small></div><button data-page="Games">Play ↗</button></article></section>
     <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
     <section class="market-cards" id="marketCards">${marketCards()}</section>
     <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
     <section class="asset-list" id="assetList">${renderAssetRows()}</section>
-    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Winning Information</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> Simulated demo activity · new entry every second · not real payouts</div><div class="winning-demo-columns"><b>Game / User</b><b>Winning Amount</b></div><div id="winningDemoRows" aria-live="polite"></div></article>
+    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Recent Winners · Winning Information</h2></div><span class="activity-demo-tag">DEMO / SIMULATED</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> SIMULATED ACTIVITY ONLY — not verified payouts and not real financial transactions</div><div class="winning-demo-meta"><span>Last Updated <b id="winningUpdated">—</b></span><span>Next Update <b id="winningNext">—</b></span><span>Time Zone <b>Asia/Kolkata (IST)</b></span></div><div class="winning-demo-table-head"><span>Country</span><span>User / Game</span><span>Bonus Amount</span><span>Win Type</span><span>Last Mode</span><span>Date &amp; Time</span></div><div id="winningDemoRows" aria-live="polite"></div></article>
     ${demoEarningsChart()}
     <section class="section-head"><div><span class="eyebrow">PLAY SAFELY</span><h2>18+ Rules &amp; Responsible Play</h2></div></section><article class="responsible-card"><p><b>18+ only.</b> Participation is restricted to adults aged 18 or above.</p><ul><li>Provide accurate account information.</li><li>Read game rules and winning conditions before participating.</li><li>There are no guaranteed winnings.</li><li>Never risk money you cannot afford to lose.</li><li>Follow all applicable local laws and regulations.</li><li>Contact Support for account-related issues.</li></ul><p class="responsible-foot">Set limits, take breaks, and stop playing if it no longer feels recreational.</p></article>`;
   startWinningDemo();
+  scheduleDailyLeaderboardRefresh();
 }
 
 function authPage() {
@@ -212,8 +278,11 @@ function authPage() {
     <p class="msg-err" id="authErr" role="alert"></p>
     <button class="primary-btn" type="submit">${reg ? 'Register' : 'Login'}</button>
     <button class="link-btn" type="button" id="swapAuth">${reg ? 'Already have an account? Login' : 'New here? Create an account'}</button>
+    ${!reg ? '<button class="link-btn" type="button" id="forgotPassword">Forgot password?</button>' : ''}
+    ${supportButtonsHtml()}
   </form>`;
   $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
+  if (!reg && $('#forgotPassword')) $('#forgotPassword').onclick = forgotPasswordPage;
   $('#authForm').onsubmit = async e => {
     e.preventDefault(); const btn = e.submitter; btn.disabled = true; $('#authErr').textContent = '';
     try {
@@ -223,13 +292,31 @@ function authPage() {
   };
 }
 
+
+async function forgotPasswordPage() {
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT RECOVERY</span><h1>Forgot password</h1><p>We'll send a one-time code to your registered email address.</p></section><form id="forgotRequest" class="demo-form"><label for="resetEmail">Registered email</label><input id="resetEmail" type="email" required autocomplete="email"><p class="msg-err" id="resetErr" role="alert"></p><button class="primary-btn" type="submit">Send email OTP</button><button class="link-btn" type="button" id="backLogin">Back to login</button>${supportButtonsHtml()}</form>`;
+  $('#backLogin').onclick=()=>{state.authMode='login';authPage();};
+  $('#forgotRequest').onsubmit=async e=>{
+    e.preventDefault();const btn=e.submitter;btn.disabled=true;$('#resetErr').textContent='';
+    try{
+      await api('password/forgot/request',{email:$('#resetEmail').value});const email=$('#resetEmail').value.trim();
+      $('#appMain').innerHTML=`<section class="page-intro"><span class="eyebrow">VERIFY EMAIL</span><h1>Enter OTP</h1><p>Enter the 6-digit code sent to ${esc(email)}. It expires in 10 minutes.</p></section><form id="verifyOtp" class="demo-form"><label>6-digit OTP</label><input id="resetOtp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="msg-err" id="otpErr" role="alert"></p><button class="primary-btn" type="submit">Verify OTP</button><button class="link-btn" id="resendOtp" type="button">Resend code</button></form>`;
+      $('#verifyOtp').onsubmit=async ev=>{ev.preventDefault();const b=ev.submitter;b.disabled=true;try{
+        const v=await api('password/forgot/verify',{email,otp:$('#resetOtp').value});const resetToken=v.resetToken;
+        $('#appMain').innerHTML=`<section class="page-intro"><span class="eyebrow">NEW PASSWORD</span><h1>Reset password</h1></section><form id="resetPassword" class="demo-form"><label>New password</label><input id="newResetPass" type="password" minlength="8" maxlength="100" required autocomplete="new-password"><label>Confirm new password</label><input id="confirmResetPass" type="password" minlength="8" maxlength="100" required autocomplete="new-password"><p class="msg-err" id="newPassErr" role="alert"></p><button class="primary-btn" type="submit">Update password</button></form>`;
+        $('#resetPassword').onsubmit=async ev2=>{ev2.preventDefault();const sb=ev2.submitter;sb.disabled=true;try{await api('password/forgot/reset',{email,resetToken,password:$('#newResetPass').value,confirmPassword:$('#confirmResetPass').value});showToast('Password reset. Please log in.');state.authMode='login';authPage();}catch(x){$('#newPassErr').textContent=x.message;sb.disabled=false;}};
+      }catch(x){$('#otpErr').textContent=x.message;b.disabled=false;}};
+      $('#resendOtp').onclick=async()=>{try{await api('password/forgot/request',{email});showToast('If the account exists, a new code has been sent.');}catch(x){$('#otpErr').textContent=x.message;}};
+    }catch(x){$('#resetErr').textContent=x.message;btn.disabled=false;}
+  };
+}
 function txList() {
-  const bc = bonusCfg(), rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
+  const bc = bonusCfg(), rows = [...(state.walletTransfers || []).map(x => ({ ...x, kind: 'Wallet Transfer' })), ...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
   if (!rows.length) return '<div class="empty-state">No transactions yet.</div>';
-  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★' }, plus = { Deposit: 1, Sell: 1 };
+  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★', 'Wallet Transfer': '⇄' }, plus = { Deposit: 1, Sell: 1 };
   return `<div class="activity-list">${rows.map(r => {
-    const rw = r.kind === 'Reward', val = rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
-    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
+    const rw = r.kind === 'Reward', transfer = r.kind === 'Wallet Transfer', val = transfer ? '↔ ' + inr(r.amount) : rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
+    const sub = transfer ? `${r.direction === 'main-to-rd' ? 'Main Wallet → 3rd Wallet (legacy)' : '3rd Wallet → Main Wallet'} · ${dt(r.ts)} · Ref #${r.id}` : rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
     return `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${rw ? esc(r.symbol) : r.kind}${!rw && r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${rw ? ' · ' : ''}${sub}</small></span><strong class="${cls}">${val}</strong></div>`;
   }).join('')}</div>`;
 }
@@ -450,6 +537,8 @@ function bindCoin() {
 }
 
 async function renderPage(page, quiet) {
+  if (page !== 'Home' && winningActivityTimer) { clearInterval(winningActivityTimer); winningActivityTimer = null; }
+  if (page !== 'Home' && dailyEarningsTimer) { clearTimeout(dailyEarningsTimer); dailyEarningsTimer = null; }
   if (PROTECTED.has(page) && !state.me) return needLogin(page);
   state.page = page; syncBottomNav();
   const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
@@ -475,10 +564,10 @@ async function renderPage(page, quiet) {
     $('#assetSearch').addEventListener('input', e => { state.query = e.target.value; $('#quoteList').innerHTML = renderAssetRows(state.query); });
     $('#clearSearch').addEventListener('click', () => { state.query = ''; $('#assetSearch').value = ''; $('#quoteList').innerHTML = renderAssetRows(''); $('#assetSearch').focus(); });
   } else if (page === 'Assets') {
-    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Assets</h1><p>Your wallet balance in Indian rupees.</p><p class="fine-print">Account UID: <code>${esc(state.me.uid || state.me.id)}</code></p></section><article class="balance-card"><div class="wallet-transfer-row"><div class="wallet-mini"><small>MAIN WALLET</small><strong>${inr(state.me.balance)}</strong></div><span class="wallet-transfer-symbol">⇄</span><div class="wallet-mini"><small>RD WALLET</small><strong>${inr(state.me.thirdWallet || 0)}</strong></div></div><small>Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)}</small><div class="stat-grid"><div><small>Deposit amount eligible for investment</small><b>${inr(state.me.depositEligible || 0)}</b></div></div><form id="investForm" class="demo-form"><h3>Coin Investment</h3><p class="fine-print">Admin limit: ${Number(c.investment?.depositPercent ?? 50)}% of deposit-eligible funds · Profit rate: ${Number(c.investment?.profitPct ?? 5)}% · Holding: ${Number(c.investment?.holdingDays ?? 7)} days. Principal returns to Main Wallet; profit goes to Third Wallet.</p><label>Investment amount (₹)</label><input id="investAmount" type="number" min="1" step="1" required><button class="primary-btn" type="submit" ${c.investment?.enabled === false ? 'disabled' : ''}>Invest deposit funds</button><p class="msg-err" id="investErr"></p></form><form id="transferForm" class="demo-form"><h3>Wallet Transfer</h3><label>Transfer direction</label><select id="transferDirection"><option value="third-to-main">RD Wallet → Main Wallet</option><option value="main-to-third">Main Wallet → RD Wallet</option></select><label>Transfer amount (₹)</label><input id="transferAmount" type="number" min="1" step="1" required><button class="secondary-btn" type="submit">Transfer</button><p class="msg-err" id="transferErr"></p></form><small>Withdrawal is available only from Main Wallet. Third Wallet cannot be withdrawn directly; transfer Third Wallet funds to Main Wallet first.</small><div class="balance-actions"><button data-page="Recharge">Recharge</button><button data-page="Withdrawal">Withdrawal</button><button data-page="Quotes">Buy / Sell</button></div><div class="balance-actions"><button data-page="Profile">Change password</button><button id="logoutBtn" type="button">Logout</button></div>${['admin','headAdmin','panelAdmin'].includes(state.me.role) ? `<div class="balance-actions"><a class="primary-btn" style="display:block;text-align:center;text-decoration:none;flex:1" href="${state.me.role === 'panelAdmin' ? '/p/' + esc(String(state.me.panelId || activePanelSlug())) + '/admin' : '/admin'}">Open Admin Panel ↗</a></div>` : ''}</article><section class="section-head"><div><span class="eyebrow">YOUR COINS</span><h2>Holdings</h2></div></section>${holdingsList()}<section class="section-head"><div><span class="eyebrow">YOUR RECORDS</span><h2>Recent activity</h2></div></section>${txList()}`;
+    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Assets</h1><p>Your wallet balance in Indian rupees.</p><p class="fine-print">Account UID: <code>${esc(state.me.uid || state.me.id)}</code></p></section><article class="balance-card"><div class="wallet-transfer-row"><div class="wallet-mini"><small>MAIN WALLET</small><strong>${inr(state.me.balance)}</strong></div><span class="wallet-transfer-symbol">⇄</span><div class="wallet-mini"><small>3RD WALLET</small><strong>${inr(state.me.thirdWallet || 0)}</strong></div></div><small>Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)}</small><div class="stat-grid"><div><small>Deposit amount eligible for investment</small><b>${inr(state.me.depositEligible || 0)}</b></div></div><form id="investForm" class="demo-form"><h3>Coin Investment</h3><p class="fine-print">Admin limit: ${Number(c.investment?.depositPercent ?? 50)}% of deposit-eligible funds · Profit rate: ${Number(c.investment?.profitPct ?? 5)}% · Holding: ${Number(c.investment?.holdingDays ?? 7)} days. Principal returns to Main Wallet; profit goes to 3rd Wallet.</p><label>Investment amount (₹)</label><input id="investAmount" type="number" min="1" step="1" required><button class="primary-btn" type="submit" ${c.investment?.enabled === false ? 'disabled' : ''}>Invest deposit funds</button><p class="msg-err" id="investErr"></p></form><form id="transferForm" class="demo-form"><h3>Wallet Transfer</h3><p class="fine-print">3rd Wallet → Main Wallet only</p><label>Transfer amount (₹)</label><input id="transferAmount" type="number" min="1" step="1" required><button class="secondary-btn" type="submit">Transfer to Main Wallet</button><p class="msg-err" id="transferErr"></p></form><small>Withdrawal is available only from Main Wallet. 3rd Wallet cannot be withdrawn directly; transfer 3rd Wallet funds to Main Wallet first.</small><div class="balance-actions"><button data-page="Recharge">Recharge</button><button data-page="Withdrawal">Withdrawal</button><button data-page="Quotes">Buy / Sell</button></div><div class="balance-actions"><button data-page="Profile">Change password</button><button id="logoutBtn" type="button">Logout</button></div>${['admin','headAdmin','panelAdmin'].includes(state.me.role) ? `<div class="balance-actions"><a class="primary-btn" style="display:block;text-align:center;text-decoration:none;flex:1" href="${state.me.role === 'panelAdmin' ? '/p/' + esc(String(state.me.panelId || activePanelSlug())) + '/admin' : '/admin'}">Open Admin Panel ↗</a></div>` : ''}</article><section class="section-head"><div><span class="eyebrow">YOUR COINS</span><h2>Holdings</h2></div></section>${holdingsList()}<section class="section-head"><div><span class="eyebrow">YOUR RECORDS</span><h2>Recent activity</h2></div></section>${txList()}`;
     $('#logoutBtn').onclick = doLogout;
     $('#investForm').onsubmit = async e => { e.preventDefault(); try { await api('investment', { amount: Number($('#investAmount').value) }); await loadMe(); showToast('Investment placed; now visible in Holding.'); renderPage('Assets', true); } catch (x) { $('#investErr').textContent = x.message; } };
-    $('#transferForm').onsubmit = async e => { e.preventDefault(); try { await api('wallet/' + $('#transferDirection').value, { amount: Number($('#transferAmount').value) }); await loadMe(); showToast('Wallet transfer completed.'); renderPage('Assets', true); } catch (x) { $('#transferErr').textContent = x.message; } };
+    $('#transferForm').onsubmit = async e => { e.preventDefault(); const btn=e.submitter; btn.disabled=true; const form=$('#transferForm'); form.dataset.requestId=form.dataset.requestId||('wtx-'+Date.now()+'-'+Math.random().toString(36).slice(2)); try { await api('wallet/third-to-main', { amount: Number($('#transferAmount').value), requestId: form.dataset.requestId }); delete form.dataset.requestId; await loadMe(); showToast('Wallet transfer completed.'); renderPage('Assets', true); } catch (x) { $('#transferErr').textContent = x.message; btn.disabled=false; } };
     const inv = state.investments || []; if (inv.length) { const h=document.createElement('section'); h.innerHTML = `<section class="section-head"><div><span class="eyebrow">INVESTMENT HISTORY</span><h2>Holding</h2></div></section><div class="content-card"><div class="tbl"><table><tr><th>Amount</th><th>Profit %</th><th>Holding days</th><th>Status</th></tr>${inv.map(x=>`<tr><td>${inr(x.amount)}</td><td>${Number(x.profitPct)}%</td><td>${x.holdingDays}</td><td>${esc(x.status)}</td></tr>`).join('')}</table></div></div>`; main.appendChild(h); }
   } else if (page === 'Team' || page === 'Invite') {
     const code = state.me.refCode, invitePanel = String(state.me.role === 'panelAdmin' ? (state.me.panelId || activePanelSlug()) : activePanelSlug()).toLowerCase(), inviteBase = invitePanel && invitePanel !== 'main' ? '/p/' + encodeURIComponent(invitePanel) + '/' : '/', link = location.origin + inviteBase + '?ref=' + encodeURIComponent(code);
@@ -720,6 +809,18 @@ function hideModal() { $('#modal').hidden = true; }
 function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
 
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-coin]')) { e.preventDefault(); e.target.click(); } });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (winningActivityTimer) clearInterval(winningActivityTimer);
+    winningActivityTimer = null;
+    if (dailyEarningsTimer) clearTimeout(dailyEarningsTimer);
+    dailyEarningsTimer = null;
+  } else if (state.page === 'Home') {
+    startWinningDemo();
+    scheduleDailyLeaderboardRefresh();
+  }
+});
 document.addEventListener('click', e => {
   const theme = e.target.closest('[data-theme-toggle]'); if (theme) { ccTheme.dark = !ccTheme.dark; ccTheme.apply(); return; }
   const eye = e.target.closest('[data-eye]'); if (eye) { const i = document.getElementById(eye.dataset.eye), show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.innerHTML = show ? EYE_OFF : EYE; eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
@@ -757,6 +858,6 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
     if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
   };
   window.addEventListener('focus', syncWallet);
-  window.addEventListener('pagehide', () => clearInterval(winningActivityTimer), { once: true });
+  window.addEventListener('pagehide', () => { clearInterval(winningActivityTimer); clearTimeout(dailyEarningsTimer); }, { once: true });
   setInterval(syncWallet, 15000);
 })();

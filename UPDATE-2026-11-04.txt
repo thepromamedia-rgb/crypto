@@ -1,30 +1,17 @@
 CRYPTO BRIDGE UPDATE — 2026-11-04
 
-Implemented in this source update:
-- Preserved the existing website architecture and supplied db.json.
-- Removed Bonus from the bottom navigation; Team now surfaces recorded bonus positions and referral earnings.
-- Added an illustrative Top 10 Today's Earnings leaderboard, explicitly labelled DEMO.
-- Updated Winning Information to add one simulated entry per second, with a fixed 10-row display and INR 2,000–1,00,000 display range.
-- Added game labels and masked demo identifiers to the winning activity.
-- Changed the Assets wallet display to a horizontal Main Wallet ⇄ RD Wallet layout.
-- Added authenticated backend transfer in both directions with balance validation and audit entries.
-- Added integration tests for both transfer directions and insufficient-balance rejection.
-- Existing game and trading engines were not replaced.
+Current delivery notes (supersede older entries in this file):
+- Existing website architecture and supplied db.json are retained.
+- Bonus is removed from bottom navigation only; Team surfaces existing referral and bonus records.
+- Today's Earnings is a date-seeded DEMO leaderboard, stable throughout each IST day and refreshed at the next IST midnight. The reference values are shown on 04 Nov 2026; subsequent dates use simulated values.
+- Winning Information adds one simulated entry every 2 seconds, retains 10 visible rows, and formats the amount using the currency associated with the displayed country flag.
+- Winning Information and Today's Earnings are display-only; they do not write to balances or financial ledgers.
+- Assets displays Main Wallet and 3rd Wallet. Only 3rd Wallet → Main Wallet transfer is offered; the reverse direction is rejected server-side.
+- Forgot Password requires real SMTP configuration and does not simulate successful delivery.
+- WhatsApp / Telegram support settings are panel-scoped and validated by the backend.
+- Rank order is recalculated from each day's simulated amounts so the leaderboard remains sorted by earnings.
+- Demo activity timers are cleared when leaving Home or hiding the page and restarted safely when returning.
 
-Validation actually performed:
-- node --check app.js: passed
-- node --check server.js: passed
-- npm test: passed, including new wallet-transfer tests
-- ZIP integrity: verified after packaging
+Validation: run `npm install`, `npm test`, and `node --check app.js server.js admin.js`. Real SMTP, production database backup/restore, and browser-based responsive QA still require deployment-environment testing.
 
-Not implemented:
-- Forgot-password email OTP / SMTP workflow.
-- Panel-specific WhatsApp/Telegram support configuration UI and backend model.
-- Full route/API authorization audit beyond the existing tests.
-- Browser-based visual QA on desktop/tablet/mobile.
-- Live Render deployment verification.
-
-Important deployment notes:
-- No production database records were edited; the supplied db.json was preserved.
-- Configure Upstash Redis or a Render persistent disk before production deployment.
-- Do not claim password recovery or panel-specific support settings are available in this build.
+Production limitations: JSON snapshot storage is not a multi-instance transactional ledger. Use one application instance until balance-changing operations are migrated to transactional storage.

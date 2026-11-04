@@ -1,14 +1,30 @@
-# Coin Flip 5-second frontend animation
+# Crypto Bridge — Existing Project
 
-Standalone, dependency-free UI demo. Open `index.html` in a browser.
+This is the existing Crypto Bridge website project. It includes the Node.js backend, frontend, admin panels, JSON database seed/data file, and existing game modules.
 
-## Integration
-- Keep your existing backend, wallet, betting rules and round lifecycle unchanged.
-- Call `CoinFlipVisual.create(element, {getServerNow, onAudioPreferenceChange})` once per game card.
-- Call `visual.updateRound({roundId, deadlineMs, result})` when existing backend data arrives. `deadlineMs` must be an epoch-millisecond timestamp from your authoritative game clock. `result` is `heads`, `tails`, or null while pending.
-- Call `visual.destroy()` when the component unmounts.
-- For accurate synchronization, pass an existing server-synchronized `getServerNow()` implementation; the default Date.now() is for demo only.
-- Browsers may block sound until the user interacts with the page. Audio is enabled through the sound toggle.
-- On slow/background tabs, visual frames can be skipped; animation phase is derived from deadline, not accumulated frames.
+## Run locally
 
-Demo only: The buttons in index.html simulate a server-provided result; no betting, randomness, or backend code is included. The demo does not claim to modify your existing website.
+- Node.js 18+
+- `npm install`
+- Configure environment variables using `.env.example`
+- `npm start`
+- `npm test` to run the automated integration suite
+
+## Email password recovery
+
+Install dependencies with `npm install` and configure all of:
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
+
+Password recovery sends a real email OTP. It does not simulate successful delivery. Pending OTP challenges are in process memory and are invalidated on server restart.
+
+## Production storage
+
+Use Upstash Redis or a correctly mounted persistent disk as documented in `.env.example`. The current storage model is a JSON snapshot and is not a multi-instance transactional database. Run a single application instance until wallet and other balance-changing operations are moved to transactional storage.
+
+## Demo activity disclosure
+
+Recent Winners and Today's Earnings are simulated display-only content. They are not verified payouts and do not create financial transactions or change user balances.
+
+## Existing Coin Flip visual module
+
+`coin-flip.js` and `coin-flip.css` are retained as part of the existing game code. Do not treat the standalone animation demo as a replacement for the production game backend.
