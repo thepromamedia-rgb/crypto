@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 let nodemailer;
 try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 
@@ -1659,7 +1660,18 @@ const server = http.createServer((req, res) => {
   if (!meta) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
   fs.readFile(path.join(ROOT, pathname), (err, buf) => {
     if (err) { res.writeHead(404); return res.end('Not Found'); }
-    res.writeHead(200, { 'Content-Type': meta[0], 'Cache-Control': meta[1], ...SEC });
+    const compressible = buf.length > 1024 && /^(text\/|application\/javascript)/i.test(meta[0]);
+    const acceptsGzip = /(?:^|,)\s*gzip\s*(?:,|$)/i.test(req.headers['accept-encoding'] || '');
+    const headers = { 'Content-Type': meta[0], 'Cache-Control': meta[1], ...SEC };
+    if (compressible) headers.Vary = 'Accept-Encoding';
+    if (compressible && acceptsGzip && req.method !== 'HEAD') {
+      res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
+      return zlib.gzip(buf, { level: zlib.constants.Z_BEST_SPEED }, (gzipErr, compressed) => {
+        if (gzipErr) { if (!res.headersSent) { res.writeHead(500); res.end('Compression failed'); } return; }
+        res.end(compressed);
+      });
+    }
+    res.writeHead(200, headers);
     res.end(req.method === 'HEAD' ? undefined : buf);
   });
 });

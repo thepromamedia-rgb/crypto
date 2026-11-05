@@ -33,7 +33,31 @@ function applyLanguage(root=document){
 function setLanguage(lang){state.language=lang==='hi'?'hi':'en';try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};const main=document.querySelector('#appMain');if(main)applyLanguage(document.body || main);const head=document.querySelector('#languageSelect');if(head)head.value=state.language;const auth=document.querySelector('#authLanguage');if(auth)auth.value=state.language;}
 function initLanguage(){
   const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>setLanguage(sel.value);}
-  const target=document.body; if(target){applyLanguage(target);if(!target.dataset.languageObserver){new MutationObserver(()=>applyLanguage(target)).observe(target,{childList:true,subtree:true,characterData:true});target.dataset.languageObserver='1';}}
+  const target=document.body;
+  if(target && !target.dataset.languageObserver){
+    applyLanguage(target);
+    let pending=[];
+    let scheduled=false;
+    const observer=new MutationObserver(records=>{
+      for(const record of records){
+        for(const node of record.addedNodes){
+          if(node.nodeType===1) pending.push(node);
+          else if(node.nodeType===3 && node.parentElement) pending.push(node.parentElement);
+        }
+      }
+      if(!pending.length || scheduled) return;
+      scheduled=true;
+      requestAnimationFrame(()=>{
+        scheduled=false;
+        const roots=[...new Set(pending)]; pending=[];
+        for(const root of roots){
+          if(root.isConnected) applyLanguage(root);
+        }
+      });
+    });
+    observer.observe(target,{childList:true,subtree:true});
+    target.dataset.languageObserver='1';
+  }
 }
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
