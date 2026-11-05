@@ -9,31 +9,24 @@ Date: 2026-11-05
 - `npm test` — PASS (existing project integration suite)
 - `npm run test:admin-roles` — PASS (new role workflow integration tests)
 
-## Existing integration coverage passed
-- Health endpoint and static-file protection
-- Authentication and password recovery safeguards
-- Registration and duplicate-account handling
-- Deposit validation and one-time crediting
-- Withdrawal validation, rejection refunds and payout handling
-- Wallet transfer and balance safeguards
-- Trading, pricing, coin and bonus flows
-- Demo account isolation
-- Backup password-hash exclusion
-- Panel isolation, panel admin routing and panel credit controls
-- Admin audit and user management-related legacy behavior
+## Existing integration coverage
+Health endpoint and static-file protection; authentication and password recovery safeguards; registration; deposit validation and one-time crediting; withdrawal validation and refunds; wallet transfer; trading and pricing; demo account isolation; backup password-hash exclusion; persistence; panel isolation and management; admin audit; and payment gateway verification.
 
-## New role integration tests
+## Role workflow tests
 - New role account creation and login — PASS
 - Support Admin read-only restrictions — PASS
-- Sub Admin user-directory access and settings restrictions — PASS
+- Sub Admin user-directory and settings restrictions — PASS
 - Super Admin panel-owner restrictions and scoped admin management — PASS
 
-## Admin upgrade implementation
-- Added `superAdmin`, `subAdmin`, and `supportAdmin` roles to the existing account model.
-- Added panel-scoped admin directory and staff creation/status management API.
-- Added server-side role gates; UI visibility is supplementary only.
-- Added an Admin Management view for Head Admin and Super Admin.
-- Kept existing legacy roles and existing JSON database records compatible.
+## Admin UI changes
+- Responsive grouped sidebar navigation — added
+- Mobile horizontal navigation fallback — added
+- Role identity and workspace header — added
+- Quick actions filtered by role — added
+- Role & Access permission matrix page — added
+- Support Admin user actions hidden in read-only UI — added
+- Backup shortcut restricted to Head Admin — added
+- Existing website and game source files preserved — verified by file-level comparison against the previous upgraded archive
 
-## Limitations / deployment verification
-The existing integration suite passed, but it predates the new staff-role workflows. Before production launch, perform a staging login test for each new role and verify panel scope, user block/unblock, staff suspension and denied privileged endpoints. This report is not a security certification or a live production deployment test.
+## Important limitations
+Automated backend integration tests pass. This environment did not perform a live browser session against a deployed production server. Before production use, stage the ZIP and sign in separately as Head Admin, Super Admin, Sub Admin and Support Admin on desktop and mobile. Verify panel scoping and every displayed operation. This report is not a security certification.
