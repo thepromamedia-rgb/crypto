@@ -56,7 +56,7 @@ const defaults = () => ({
   users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], walletTransfers: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
   settings: { games: [], upi: '', payee: '', qr: '', support: '', supportButtons: [], notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
-let D = defaults();
+let D = { ...defaults(), maintenance: false };
 const clone = v => JSON.parse(JSON.stringify(v));
 const defaultPanel = () => ({ id: 'main', slug: 'main', name: 'Head Admin Main', active: true, deleted: false, created: Date.now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(D.settings) });
 function getPanel(slug) {
@@ -68,6 +68,20 @@ function getPanel(slug) {
   return p;
 }
 const S = req => (req && req.panel && req.panel.settings) || D.settings;
+const BUILTIN_GAMES = [
+  {id:'builtin-coin',slug:'coin',name:'Coin Game',description:'Pick Heads or Tails',image:'/coin-art.jpg',status:'play',createdAt:0},
+  {id:'builtin-wingo',slug:'wingo',name:'WinGo',description:'Number and colour game',image:'/wingo-home.jpg',status:'play',createdAt:0},
+  {id:'builtin-bingo',slug:'bingo',name:'Bingo',description:'Number draw game',image:'/bingo-art.jpg',status:'soon',createdAt:0},
+  {id:'builtin-lottery',slug:'lottery',name:'Today Lottery',description:'Daily lottery',image:'/lottery-art.jpg',status:'soon',createdAt:0},
+  {id:'builtin-aviator',slug:'aviator',name:'Aviator',description:'Flight game',image:'/aviator-original.png',status:'soon',createdAt:0},
+  {id:'builtin-more',slug:'more',name:'More Games',description:'Explore more games',image:'/more-games-art.jpg',status:'soon',createdAt:0}
+];
+function gameCatalog(req) {
+  const st=S(req), overrides=Array.isArray(st.gameOverrides)?st.gameOverrides:[];
+  const builtins=BUILTIN_GAMES.map(g=>({...g,...(overrides.find(x=>x.id===g.id)||{})})).filter(g=>!g.deleted);
+  const customs=(Array.isArray(st.games)?st.games:[]).map(g=>({...g,slug:'custom',status:'soon',kind:'custom'}));
+  return [...builtins,...customs];
+}
 const isHead = u => !!u && u.role === 'headAdmin';
 const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
 const FLIP_MODES = ['heads','tails','lower','random'];
@@ -106,7 +120,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0, ...(ss.flipCoin || {}) }, withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24, paymentMode: ss.paymentMode === 'razorpay' ? 'razorpay' : 'qr', withdrawalFeeType: ss.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent', withdrawalFeeValue: Math.max(0, Number(ss.withdrawalFeeValue || 0)), withdrawalFeeLabel: String(ss.withdrawalFeeLabel || 'Platform Fee').slice(0, 40), investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7, ...(ss.investment || {}) }, withdrawalWagerMultiplier: Number.isFinite(Number(ss.withdrawalWagerMultiplier)) ? Math.max(0,Math.min(100,Number(ss.withdrawalWagerMultiplier))) : 1 } };
+    D = { ...defaults(), maintenance: !!saved.maintenance, ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0, ...(ss.flipCoin || {}) }, withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24, paymentMode: ss.paymentMode === 'razorpay' ? 'razorpay' : 'qr', withdrawalFeeType: ss.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent', withdrawalFeeValue: Math.max(0, Number(ss.withdrawalFeeValue || 0)), withdrawalFeeLabel: String(ss.withdrawalFeeLabel || 'Platform Fee').slice(0, 40), investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7, ...(ss.investment || {}) }, withdrawalWagerMultiplier: Number.isFinite(Number(ss.withdrawalWagerMultiplier)) ? Math.max(0,Math.min(100,Number(ss.withdrawalWagerMultiplier))) : 1 } };
     if (!Array.isArray(ss.bonusCoins) && D.settings.bonusCoin) D.settings.bonusCoins = [{ ...D.settings.bonusCoin, id: 'legacy-' + String(D.settings.bonusCoin.symbol || 'CBX'), startPrice: 1, priceHistory: [] }];
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
@@ -951,24 +965,39 @@ const routes = {
     const rets=gameReturns(req),returnPct=type==='number'?rets.number:type==='size'?rets.size:rets.color,multiplier=returnMult(returnPct),debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);u.depositEligible=r2(Math.max(0,Number(u.depositEligible||0)-debit));
     const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,returnPct,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);u.wagerCompleted=r2(Number(u.wagerCompleted||0)+amount);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
   },
-  // ----- upcoming game catalogue -----
-  'GET /api/games/catalog': async (req) => ({ games: (Array.isArray(S(req).games) ? S(req).games : []).map(({id,name,description,image,createdAt}) => ({id,name,description,image,createdAt})) }),
-  'GET /api/admin/games': async (req,res,b,u) => { needAdmin(u); return { games: Array.isArray(S(req).games) ? S(req).games : [] }; },
+  // ----- unified game catalogue (built-in + custom upcoming games) -----
+  'GET /api/games/catalog': async (req) => ({ games: gameCatalog(req) }),
+  'GET /api/admin/games': async (req,res,b,u) => { needAdmin(u); return { games: gameCatalog(req) }; },
   'POST /api/admin/games': async (req,res,b,u) => {
-    needAdmin(u); const st=S(req); if(!Array.isArray(st.games)) st.games=[];
-    if(b.action==='delete') { const before=st.games.length; st.games=st.games.filter(g=>g.id!==String(b.id)); if(st.games.length===before) fail(404,'Game not found.'); audit(u.email,'soon-game-deleted',String(b.id)); await save(); return {ok:true,games:st.games.length}; }
-    if(b.action!=='add') fail(400,'Unknown game action.');
-    const name=String(b.name||'').trim(), description=String(b.description||'').trim(), image=String(b.image||'');
-    if(name.length<2||name.length>60) fail(400,'Game name must be 2–60 characters.');
-    if(description.length>300) fail(400,'Description must be 300 characters or less.');
-    const m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m) fail(400,'Upload a valid JPG, PNG or WEBP image.');
-    const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024) fail(400,'Image must be 5 MB or smaller.');
-    const mime=m[1]==='jpeg'?'image/jpeg':'image/'+m[1];
-    // Verify file signature instead of trusting the browser-provided MIME type.
-    const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
-    if(!sigOk) fail(400,'Image file signature does not match its format.');
-    const id=crypto.randomUUID(); st.games.push({id,name,description,image,createdAt:now()}); audit(u.email,'soon-game-added',name); await save(); return {ok:true,game:{id,name,description,image}};
+    needAdmin(u); const st=S(req); if(!Array.isArray(st.games)) st.games=[]; if(!Array.isArray(st.gameOverrides)) st.gameOverrides=[];
+    const id=String(b.id||'');
+    if(b.action==='delete') {
+      if(id.startsWith('builtin-')) { const base=BUILTIN_GAMES.find(g=>g.id===id); if(!base) fail(404,'Game not found.'); const old=st.gameOverrides.find(g=>g.id===id)||{...base}; Object.assign(old,{deleted:true}); st.gameOverrides=st.gameOverrides.filter(g=>g.id!==id); st.gameOverrides.push(old); }
+      else { const before=st.games.length; st.games=st.games.filter(g=>g.id!==id); if(st.games.length===before) fail(404,'Game not found.'); }
+      audit(u.email,'game-deleted',id); await save(); return {ok:true,games:gameCatalog(req).length};
+    }
+    if(b.action==='add') {
+      const name=String(b.name||'').trim(), description=String(b.description||'').trim(), image=String(b.image||'');
+      if(name.length<2||name.length>60) fail(400,'Game name must be 2–60 characters.'); if(description.length>300) fail(400,'Description must be 300 characters or less.');
+      const m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m) fail(400,'Upload a valid JPG, PNG or WEBP image.');
+      const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024) fail(400,'Image must be 5 MB or smaller.');
+      const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
+      if(!sigOk) fail(400,'Image file signature does not match its format.');
+      const game={id:crypto.randomUUID(),name,description,image,createdAt:now()}; st.games.push(game); audit(u.email,'soon-game-added',name); await save(); return {ok:true,game};
+    }
+    if(b.action==='edit') {
+      const name=String(b.name||'').trim(),description=String(b.description||'').trim(); if(name.length<2||name.length>60)fail(400,'Game name must be 2–60 characters.'); if(description.length>300)fail(400,'Description must be 300 characters or less.');
+      let target;
+      if(id.startsWith('builtin-')) { const base=BUILTIN_GAMES.find(g=>g.id===id); if(!base)fail(404,'Game not found.'); target=st.gameOverrides.find(g=>g.id===id)||{...base}; target={...target,name,description}; }
+      else { target=st.games.find(g=>g.id===id); if(!target)fail(404,'Game not found.'); target.name=name; target.description=description; }
+      if(b.image!==undefined && b.image!=='') { const image=String(b.image),m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m)fail(400,'Upload a valid JPG, PNG or WEBP image.'); const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024)fail(400,'Image must be 5 MB or smaller.'); const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP'); if(!sigOk)fail(400,'Image file signature does not match its format.'); target.image=image; }
+      if(id.startsWith('builtin-')) { st.gameOverrides=st.gameOverrides.filter(g=>g.id!==id); st.gameOverrides.push(target); }
+      audit(u.email,'game-edited',id); await save(); return {ok:true,game:target};
+    }
+    fail(400,'Unknown game action.');
   },
+  'GET /api/admin/maintenance': async (req,res,b,u) => { needHead(u); return { enabled:!!D.maintenance }; },
+  'POST /api/admin/maintenance': async (req,res,b,u) => { needHead(u); if(typeof b.enabled!=='boolean')fail(400,'Maintenance state must be true or false.'); D.maintenance=b.enabled; audit(u.email,'maintenance-mode',b.enabled?'enabled':'disabled'); await save(); return {ok:true,enabled:D.maintenance}; },
   // ----- admin -----
   'GET /api/admin/game-returns': async (req, res, b, u) => { needAdmin(u); return { returns: gameReturns(req), defaults: GAME_RETURN_DEFAULT }; },
   'POST /api/admin/game-returns': async (req, res, b, u) => {
@@ -1028,7 +1057,7 @@ const routes = {
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
-      role: u.role, accountUid: String(u.uid || u.id), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
+      role: u.role, maintenance: isHead(u) ? !!D.maintenance : undefined, accountUid: String(u.uid || u.id), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
       depositsApproved: sum(ok), withdrawalsPaid: sumPayout(paid),
       pendingDeposits: depRows.filter(d => d.status === 'Pending').length, pendingWithdrawals: wdRows.filter(w => w.status === 'Pending').length,
       bonus: { active: posRows.filter(p => p.status === 'Active').length, activeAmount: sum(posRows.filter(p => p.status === 'Active')), profitPaid: r2(posRows.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(posRows.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(tradeRows.reduce((s, t) => s + (t.refPaid || 0), 0)) },
@@ -1548,6 +1577,7 @@ async function handleApi(req, res, pathname) {
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
     const user = authUser(req); req.user = user;
+    if (D.maintenance && !isHead(user) && !(req.method === 'POST' && pathname === '/api/login')) fail(503, 'Website is under maintenance. Please try again later.');
     // Server-side least-privilege matrix for the added admin roles. Existing Head Admin
     // and legacy Panel Admin behavior remains intact; the legacy owner is normalized below.
     if (user && ['superAdmin','subAdmin','supportAdmin'].includes(user.role)) {
@@ -1617,6 +1647,14 @@ const server = http.createServer((req, res) => {
   if (pathname === '/admin') pathname = '/admin.html';
   const panelRoute = pathname.match(/^\/p\/([a-z0-9-]+)(\/admin)?\/?$/i);
   if (panelRoute) pathname = panelRoute[2] ? '/admin.html' : '/index.html';
+  if (D.maintenance) {
+    const viewer=authUser(req);
+    const adminAssets=['/admin.html','/admin.js','/style.css'];
+    if (!isHead(viewer) && !adminAssets.includes(pathname)) {
+      const page='<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Under Maintenance</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#08111f;color:#fff;font:16px system-ui;padding:24px}.card{max-width:520px;text-align:center;padding:42px 28px;border:1px solid #26364d;border-radius:22px;background:#101d30;box-shadow:0 20px 70px #0006}h1{font-size:clamp(28px,6vw,42px);margin:12px 0}p{color:#b9c6d8;line-height:1.7}.mark{font-size:42px}</style><main class="card"><div class="mark">🛠️</div><h1>We’ll be back soon</h1><p>Our website is currently under maintenance. We are working to improve your experience. Please check back shortly.</p></main></html>';
+      res.writeHead(503,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',...SEC}); return res.end(page);
+    }
+  }
   const meta = STATIC[pathname];
   if (!meta) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
   fs.readFile(path.join(ROOT, pathname), (err, buf) => {
