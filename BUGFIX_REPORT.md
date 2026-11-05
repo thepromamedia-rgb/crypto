@@ -74,3 +74,9 @@
 4. Configure persistent storage according to `README.md` and run a single application instance.
 5. Run `npm test` and `python test-site.py`.
 6. Verify SMTP delivery and perform desktop, tablet and mobile browser QA in staging before production rollout.
+
+
+## WinGo image visibility hotfix
+- Root cause: the frontend referenced `/wingo-home.jpg`, and the image existed in the project root, but the backend's explicit static-file whitelist did not include that path. The server therefore returned HTTP 404 for the image.
+- Fix: added `/wingo-home.jpg` to the static whitelist with `image/jpeg` content type and long-lived immutable caching.
+- Regression test: integration test now requests `/wingo-home.jpg` and verifies HTTP 200, JPEG content type, and a non-empty image response.

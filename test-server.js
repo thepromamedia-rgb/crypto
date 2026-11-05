@@ -34,6 +34,9 @@ const stub = http.createServer((q, r) => {
 
   const anon = mk();
   assert.equal((await fetch(base + '/healthz')).status, 200); ok('/healthz');
+  const wingoAsset = await fetch(base + '/wingo-home.jpg');
+  assert.equal(wingoAsset.status, 200); assert.match(wingoAsset.headers.get('content-type') || '', /image\/jpeg/i);
+  assert.ok((await wingoAsset.arrayBuffer()).byteLength > 10000); ok('WinGo artwork is served from the static asset whitelist');
   for (const f of ['/server.js', '/package.json', '/data/db.json', '/test-server.js']) assert.equal((await fetch(base + f)).status, 404, f);
   ok('server files not exposed');
   const pr = await anon('GET', '/api/prices'); assert.equal(pr.s, 200); assert.equal(pr.j.prices.length, 14); assert.ok(pr.j.prices[0].spark.length > 5); ok('live prices');
