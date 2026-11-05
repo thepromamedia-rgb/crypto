@@ -1,20 +1,26 @@
-CryptoClub - Games Section Artwork Fit Update
+CryptoClub - Games Section Full-Bleed Artwork Fix
 
 Scope:
-- Updated only the Games chooser artwork presentation and its six Games-only artwork files.
-- Home Page markup and its artwork references are unchanged from the supplied baseline package.
-- Home Page CSS selectors were not modified; the added image-fit rules are scoped to .cc-chooser only.
-- Aviator Games artwork uses the exact original aviator-original.png as the centered, uncropped foreground, with a matching blurred full-width background to fill both sides.
-- All six Games artwork files use a consistent 900x480 (15:8) canvas and responsive image fit.
+- Updated only the Games chooser (.cc-chooser) image presentation and its six Games-only artwork assets.
+- Home Page markup, Home Page artwork files, and Home Page selectors are unchanged.
+- The new Games image-fit rule is scoped only to .cc-chooser.
+- Removed the blurred side-gutter treatment from Coin Game, WinGo, Bingo, Today Lottery, Aviator, and More Games artwork.
+- All six Games images use a consistent 730x480 canvas and the Games cards use the matching 73:48 aspect ratio.
+- WinGo artwork keeps the exact supplied CryptoClub WinGo poster centred, with a custom red radial background filling the remaining canvas.
+- Aviator artwork keeps the exact original aviator-original.png poster centred, with matching charcoal/red radial artwork filling the remaining canvas.
+- Coin, Bingo, Lottery, and More Games use full-width artwork without embedded blurred side strips.
 
 Not changed:
-- Gameplay, betting, wallet, balances, Admin Panel, database, login, and game logic.
+- Home Page design or artwork.
+- Gameplay, betting, wallet, balances, Admin Panel, database, login, or game logic.
+- Server/API code and app.js.
 
 Checks run:
 - node --check app.js
 - node --check server.js
 - node --check admin.js
+- node --check wingo-result-logic.js
 - npm test (server, admin-role, and WinGo result suites)
 - python test-site.py (18 checks)
-- Verified all six Games artwork files are 900x480 and all six Games references exist.
-- Verified Home Page Aviator artwork reference remains /aviator-original.png.
+- Verified all six Games artwork files are 730x480 and all six Games references exist.
+- Confirmed Home Page markup and artwork references in app.js are unchanged.

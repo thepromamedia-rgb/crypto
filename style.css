@@ -1959,3 +1959,27 @@ body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,
     aspect-ratio:15 / 8;
   }
 }
+
+/* Games chooser only: full-width artwork with no embedded blurred side gutters. */
+.cc-chooser .cc-card-art.cc-art-image{
+  width:100%;
+  height:auto;
+  min-height:0;
+  aspect-ratio:73 / 48;
+  padding:0;
+  overflow:hidden;
+  display:block;
+  background:#17131e;
+}
+.cc-chooser .cc-card-art.cc-art-image img{
+  display:block;
+  width:100%;
+  height:100%;
+  max-width:none;
+  max-height:none;
+  object-fit:cover;
+  object-position:center;
+}
+@media(max-width:600px){
+  .cc-chooser .cc-card-art.cc-art-image{height:auto;min-height:0;aspect-ratio:73 / 48;}
+}
