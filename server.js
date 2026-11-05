@@ -432,7 +432,8 @@ function trimOldData() {
   trimRounds('flipCoinRounds', r => `${r.panelId || 'main'}`, new Set([...pendingFlip]));
   return changed;
 }
-async function settleAndSave() { if (settleDue()) await save(); }
+const saveSoon = () => { save().catch(() => {}); };   // coalesced write, not awaited (failures are logged inside save)
+async function settleAndSave() { if (settleDue()) saveSoon(); }
 
 
 function settleInvestment(p) {
@@ -447,7 +448,22 @@ function settleInvestment(p) {
   return true;
 }
 function settleInvestments() { let n=0; for (const p of (D.investments || [])) if (settleInvestment(p)) n++; return n; }
-async function settleInvestmentsAndSave() { if (settleInvestments()) await save(); }
+async function settleInvestmentsAndSave() { if (settleInvestments()) saveSoon(); }
+
+
+// Payment/payout proof images live inside the DB as data: URIs. Never ship them inside list responses;
+// give the admin a lightweight same-origin URL instead (the "View ... proof" link keeps working).
+const isDataUri = v => typeof v === 'string' && v.startsWith('data:');
+function slimProofs(req, kind, rows) {
+  const slug = encodeURIComponent(req.panelId || 'main');
+  return rows.map(x => {
+    if (!isDataUri(x.proof) && !isDataUri(x.payoutProof)) return x;
+    const c = { ...x };
+    for (const f of ['proof', 'payoutProof']) if (isDataUri(x[f])) c[f] = `/api/admin/proof?kind=${kind}&id=${encodeURIComponent(x.id)}&f=${f}&panel=${slug}`;
+    return c;
+  });
+}
+const stripUserProofs = rows => rows.map(x => (isDataUri(x.proof) || isDataUri(x.payoutProof)) ? { ...x, proof: isDataUri(x.proof) ? '' : x.proof, payoutProof: isDataUri(x.payoutProof) ? '' : x.payoutProof } : x);
 
 // ---------- API ----------
 function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
@@ -687,8 +703,8 @@ const routes = {
     return {
       user: pubUser(u), walletTransfers: (D.walletTransfers || []).filter(x => x.uid === u.id).sort((a,b)=>b.ts-a.ts).slice(0,50), investments: (D.investments || []).filter(p => p.uid === u.id).sort((a,b)=>b.ts-a.ts), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
       positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
-      deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
-      withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
+      deposits: stripUserProofs(D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts)),
+      withdrawals: stripUserProofs(D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts)),
       referrals: u.mode === 'demo' ? 0 : D.users.filter(x => x.refBy === u.id && String(x.panelId || 'main') === String(u.panelId || 'main')).length,
       trades: (u.mode === 'demo' ? (u.trades || []) : D.trades.filter(t => t.uid === u.id)).sort((a, c) => c.ts - a.ts).slice(0, 50)
     };
@@ -860,7 +876,7 @@ const routes = {
     }
     if (D.flipCoinRounds.length > 2000) D.flipCoinRounds.splice(0, D.flipCoinRounds.length - 2000);
     let round = D.flipCoinRounds.find(x => x.roundNo === roundNo && String(x.panelId || 'main') === String(panelId));
-    if (roundsChanged) await save();
+    if (roundsChanged) saveSoon();
     // Published rule: the side with the lower total stake wins. Ties use a fair coin toss.
     // Lock results only after the betting deadline; never change a finalized round.
     for (const r of D.flipCoinRounds) {
@@ -873,7 +889,7 @@ const routes = {
       r.headsTotal = heads; r.tailsTotal = tails; r.outcomeLocked = true;
       roundsChanged = true;
     }
-    if (roundsChanged) await save();
+    if (roundsChanged) saveSoon();
     // Settle bets from completed rounds once, using the stored shared result.
     let changed = false;
     for (const bet of (D.flipCoinBets || [])) {
@@ -887,7 +903,7 @@ const routes = {
       bet.result = resultRound.result; bet.won = won; bet.payout = payout; bet.lossAmount = won ? 0 : bet.amount; bet.net = r2((won ? bet.amount * (bm - 1) : -bet.amount) - Number(bet.fee || 0)); bet.balanceAfter = owner.balance; bet.status = 'Settled'; bet.ts = resultRound.endTs; changed = true;
       audit(bet.email, 'flip-coin-settlement', `round #${bet.roundNo} ${bet.result}; ${won ? 'won' : 'lost'}; payout ${payout}`);
     }
-    if (changed) await save();
+    if (changed) saveSoon();
     let gameSession = D.flipCoinSessions.find(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId));
     if (!gameSession || ts - Number(gameSession.lastActivityTs || gameSession.startTs || 0) > 30 * 60000) {
       gameSession = { id: crypto.randomUUID(), userId: u.id, panelId, startTs: ts, startBalance: r2(Number(u.balance || 0)), timeProfitResetTs: ts, timeLossResetTs: ts, betProfitCount: 0, betLossCount: 0, lastActivityTs: ts };
@@ -976,7 +992,7 @@ const routes = {
       bet.result=rr.result;bet.resultSize=rr.bigSmall;bet.resultColor=rr.color;bet.won=win;bet.payout=payout;bet.net=r2(payout-Number(bet.amount));bet.status='Settled';bet.settledTs=rr.endTs;changed=true;
       if(owner)audit(owner.email,'big-small-settlement',`round #${bet.roundNo} (${durationKey}ms); ${bet.type} ${bet.pick}; ${win?'won':'lost'}; payout ${payout}`);
     }
-    if(changed)await save();
+    if(changed)saveSoon();
     const round=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingRounds=D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingBets=D.bigSmallBets.filter(x=>String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
@@ -1118,9 +1134,17 @@ const routes = {
     audit(u.email, 'demo-' + action, x.id + ' ' + x.email); await save(); return { ok: true };
   },
   'GET /api/admin/investments': async (req,res,b,u) => { needAdmin(u); await settleInvestmentsAndSave(); return { items: panelRows(req, D.investments || []).slice().sort((a,c)=>c.ts-a.ts) }; },
-  'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: [...panelRows(req, D.deposits)].sort((a, c) => c.ts - a.ts) }; },
+  'GET /api/admin/proof': async (req, res, b, u) => {
+    needAdmin(u);
+    const q = new URL(req.url, 'http://localhost').searchParams, kind = q.get('kind') === 'withdrawal' ? D.withdrawals : D.deposits, f = q.get('f') === 'payoutProof' ? 'payoutProof' : 'proof';
+    const row = kind.find(x => String(x.id) === String(q.get('id'))); if (!row) fail(404, 'Not found'); assertPanelAccess(req, row);
+    const m = String(row[f] || '').match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/); if (!m) fail(404, 'Not found');
+    const buf = Buffer.from(m[2], 'base64');
+    res.writeHead(200, { 'Content-Type': m[1], 'Content-Length': buf.length, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff', ...SEC }); res.end(buf); return { __raw: true };
+  },
+  'GET /api/admin/deposits': async (req, res, b, u) => { needAdmin(u); return { items: slimProofs(req, 'deposit', [...panelRows(req, D.deposits)].sort((a, c) => c.ts - a.ts)) }; },
   'GET /api/admin/credits': async (req, res, b, u) => { needAdmin(u); const ps = isHead(u) ? D.panels.filter(p => !p.deleted) : [req.panel]; return { items: (isHead(u) ? D.creditLedger : D.creditLedger.filter(x => String(x.panelId || 'main') === String(req.panelId || 'main'))).slice().reverse().slice(0, 1000), balance: r2(ps.reduce((n, p) => n + Number(p.creditBalance || 0), 0)), allocated: r2(ps.reduce((n, p) => n + Number(p.creditsAllocated || 0), 0)), used: r2(ps.reduce((n, p) => n + Number(p.creditsUsed || 0), 0)) }; },
-  'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: [...panelRows(req, D.withdrawals)].sort((a, c) => c.ts - a.ts) }; },
+  'GET /api/admin/withdrawals': async (req, res, b, u) => { needAdmin(u); return { items: slimProofs(req, 'withdrawal', [...panelRows(req, D.withdrawals)].sort((a, c) => c.ts - a.ts)) }; },
   'GET /api/admin/trades': async (req, res, b, u) => { needAdmin(u); const demo = panelRows(req, D.demoUsers).flatMap(x => (x.trades || []).map(t => ({ ...t, mode: 'demo', email: t.email || x.email }))); const real = panelRows(req, D.trades).map(t => ({ ...t, mode: 'real' })); return { items: [...real, ...demo].sort((a, c) => c.ts - a.ts).slice(0, 1000) }; },
   'GET /api/admin/bonus': async (req, res, b, u) => { needAdmin(u); await settleAndSave(); return { config: S(req).bonusCoins[0] || BONUS_DEFAULT(), coins: S(req).bonusCoins, items: [...panelRows(req, D.positions)].sort((a, c) => c.ts - a.ts).slice(0, 500) }; },
   'POST /api/admin/bonuscoin': async (req, res, b, u) => {
@@ -1605,7 +1629,7 @@ function json(res, code, obj, extra = {}) {
 }
 
 async function handleApi(req, res, pathname) {
-  const requestedSlug = String(req.headers['x-panel-slug'] || 'main').toLowerCase();
+  const requestedSlug = String(req.headers['x-panel-slug'] || (pathname === '/api/admin/proof' && new URL(req.url, 'http://localhost').searchParams.get('panel')) || 'main').toLowerCase();
   const panel = getPanel(requestedSlug);
   if (!panel) return json(res, 404, { error: 'Panel link unavailable. Ask Head Admin to verify its status and URL.' });
   req.panel = panel; req.panelId = panel.slug;
@@ -1643,6 +1667,7 @@ async function handleApi(req, res, pathname) {
     if (!isLoginRequest && user && user.role !== 'headAdmin' && String(user.panelId || 'main') !== String(req.panelId || 'main')) fail(403, 'This account belongs to a different panel.');
     if (!isLoginRequest && user && user.role === 'panelAdmin' && String(user.panelId || '') !== String(req.panelId || '')) fail(403, 'Admin panel access denied.');
     const out = await h(req, res, body, user);
+    if (out && out.__raw) return;
     if (out && out.__download) { res.setHeader('Content-Disposition', `attachment; filename="${out.__download}"`); return json(res, 200, out.data); }
     json(res, 200, out);
   } catch (e) {

@@ -1,3 +1,5 @@
 SPEED FIX (look/animation unchanged)
 server.js: save() group-commit (one write for many requests), async file write; old settled game data auto-trim (bets >30 days, rounds keep last 600; Pending never removed); audit cap 500; poll history 100; gzip + ETag + in-memory static cache; gzip for big API responses.
 app.js: Home/Games open instantly (catalog cached, parallel calls); language observer only runs in Hindi and only on changed nodes; background wallet sync skipped when tab hidden.
+
+ROUND 2: payment/payout proof images (stored as base64 in DB) are no longer sent inside /api/me and admin Deposits/Withdrawals lists; admin gets a /api/admin/proof?... link instead (same "View payment proof" link). Game poll/settle saves are no longer awaited (still coalesced). Admin panel no longer fetches overview twice on first load.

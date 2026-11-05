@@ -32,10 +32,10 @@ async function start() {
     return loginView(x.status === 403 ? 'This account cannot access this panel. Use your assigned Panel Admin URL.' : (x.message || 'Please log in.'));
   }
   if (ov.role === 'headAdmin' && activePanelSlug() !== 'main') { location.replace('/admin'); return; }
-  draw();
+  draw(true);
 }
-async function draw() {
-  ov = await api('admin/overview').catch(() => ov);
+async function draw(useLoadedOverview) {
+  if (!useLoadedOverview) ov = await api('admin/overview').catch(() => ov);
   const tabs = [['over', 'Overview'], ...(ov.role === 'headAdmin' ? [['accounting', 'Weekly Accounting']] : []), ...(
     ov.role === 'headAdmin' ? [['panels', 'Admin Panels']] : []
   ), ['dep', 'Deposits', ov.pendingDeposits], ['wd', 'Withdrawals', ov.pendingWithdrawals], ['credits', 'Credits'], ['trd', 'Trades'], ['coins', 'Coins'], ['bonus', 'Bonus Coin', ov.bonus && ov.bonus.active], ['games', 'Games'], ...(['headAdmin','superAdmin'].includes(ov.role) ? [['admins','Admin Management']] : []), ['users', 'Users'], ['demo', 'Demo Accounts'], ['rep', 'Reports'], ['ref', 'Referral'], ['set', 'Settings'], ['log', 'Audit log'], ['access','Role & Access']];
