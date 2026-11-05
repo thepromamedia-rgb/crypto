@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const zlib = require('node:zlib');
 let nodemailer;
 try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 
@@ -149,20 +150,23 @@ async function loadDB() {
   }
   ensureAccountUids();
 }
-let saveChain = Promise.resolve();
+let saveChain = Promise.resolve(), savePending = null;
+// Group commit: callers still await a durable write, but all save() calls that arrive while an earlier
+// write is running share ONE next write of the latest state (instead of one full-DB write per request).
 function save() {
-  const snap = JSON.stringify(D);
-  // Serialize writes, but do not report success to an API caller if durable storage failed.
-  // Recover the queue after a failed write so later requests can retry.
+  if (savePending) return savePending;
   const write = saveChain.then(async () => {
+    savePending = null;                     // later callers queue a fresh write that captures newer state
+    const snap = JSON.stringify(D);
     if (UP_URL) await up(['SET', KEY, snap]);
     else {
       fs.mkdirSync(DATA_DIR, { recursive: true });
       const tmp = DB_FILE + '.tmp';
-      fs.writeFileSync(tmp, snap);
-      fs.renameSync(tmp, DB_FILE);
+      await fs.promises.writeFile(tmp, snap);
+      await fs.promises.rename(tmp, DB_FILE);
     }
   });
+  savePending = write;
   saveChain = write.catch(e => { console.error('SAVE FAILED', e.message); });
   return write;
 }
@@ -197,7 +201,7 @@ function ensureAccountUids() {
 }
 const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 const money = v => { const n = Number(v); return Number.isInteger(n) && n > 0 && n <= MAX_AMOUNT ? n : null; };
-const audit = (who, action, detail) => { D.audit.push({ id: nid(), ts: now(), who, action, detail }); if (D.audit.length > 2000) D.audit.splice(0, D.audit.length - 2000); };
+const audit = (who, action, detail) => { D.audit.push({ id: nid(), ts: now(), who, action, detail }); if (D.audit.length > 500) D.audit.splice(0, D.audit.length - 500); };
 function recordCreditLedger(panel, amount, action, who, detail = '') {
   const row = { id: nid(), ts: now(), panelId: panel.slug, amount: r2(amount), action, who, detail, balanceAfter: r2(panel.creditBalance || 0) };
   D.creditLedger.push(row); if (D.creditLedger.length > 5000) D.creditLedger.splice(0, D.creditLedger.length - 5000);
@@ -402,6 +406,32 @@ function settlePosition(p) {
   return true;
 }
 function settleDue() { let n = 0; for (const p of D.positions) if (p.status === 'Active' && p.matureAt <= now() && settlePosition(p)) n++; return n; }
+
+// ---------- retention: keep the database small (settled data only; pending bets/rounds are never removed) ----------
+const KEEP_BET_MS = 30 * 24 * 3600e3, KEEP_ROUNDS = 600;
+function trimOldData() {
+  const cutoff = now() - KEEP_BET_MS; let changed = false;
+  const keepBet = x => x.status === 'Pending' || Number(x.ts || 0) >= cutoff;
+  for (const k of ['flipCoinBets', 'bigSmallBets']) {
+    if (Array.isArray(D[k]) && D[k].some(x => !keepBet(x))) { D[k] = D[k].filter(keepBet); changed = true; }
+  }
+  const pendingRounds = new Set((D.bigSmallBets || []).filter(x => x.status === 'Pending').map(x => `${x.panelId || 'main'}|${Number(x.durationMs || 30000)}|${x.roundNo}`));
+  const pendingFlip = new Set((D.flipCoinBets || []).filter(x => x.status === 'Pending').map(x => `${x.panelId || 'main'}|${x.roundNo}`));
+  const trimRounds = (key, grp, pend) => {
+    if (!Array.isArray(D[key])) return;
+    const rows = D[key]; if (rows.length <= KEEP_ROUNDS) return;
+    const byGroup = new Map();
+    for (const r of rows) { const g = grp(r); if (!byGroup.has(g)) byGroup.set(g, []); byGroup.get(g).push(r.roundNo); }
+    const minKeep = new Map();
+    for (const [g, nums] of byGroup) { if (nums.length > KEEP_ROUNDS) { nums.sort((a, b) => b - a); minKeep.set(g, Number(nums[KEEP_ROUNDS - 1])); } }
+    if (!minKeep.size) return;
+    const kept = rows.filter(r => { const m = minKeep.get(grp(r)); return m === undefined || Number(r.roundNo) >= m || pend.has(grp(r) + '|' + r.roundNo); });
+    if (kept.length !== rows.length) { D[key] = kept; changed = true; }
+  };
+  trimRounds('bigSmallRounds', r => `${r.panelId || 'main'}|${Number(r.durationMs || 30000)}`, pendingRounds);
+  trimRounds('flipCoinRounds', r => `${r.panelId || 'main'}`, new Set([...pendingFlip]));
+  return changed;
+}
 async function settleAndSave() { if (settleDue()) await save(); }
 
 
@@ -867,7 +897,7 @@ const routes = {
       round: { number: roundNo, startTs, endTs, remainingMs: Math.max(0, endTs-ts), bettingOpen: endTs-ts > 5000 },
       resultsHistory: D.flipCoinRounds.filter(x => String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) < roundNo && x.outcomeLocked).slice().sort((a,b)=>Number(b.roundNo)-Number(a.roundNo)).slice(0,10).map(x=>({roundNo:x.roundNo,result:x.result,endTs:x.endTs})),
       currentBets: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId) && Number(x.roundNo) === roundNo).map(x=>({id:x.id,side:x.side,amount:x.amount,status:x.status})),
-      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId)).slice().sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,1000) };
+      history: (D.flipCoinBets || []).filter(x => x.userId === u.id && String(x.panelId || 'main') === String(panelId)).slice().sort((a,b)=>Number(b.ts)-Number(a.ts)).slice(0,100) };
   },
   'POST /api/games/flip-coin': async (req, res, b, u) => {
     needUser(u); if (u.role !== 'user') fail(403, 'Only user accounts can play this game.');
@@ -950,7 +980,7 @@ const routes = {
     const round=D.bigSmallRounds.find(x=>Number(x.roundNo)===roundNo&&String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingRounds=D.bigSmallRounds.filter(x=>String(x.panelId||'main')===String(panelId)&&isDuration(x));
     const matchingBets=D.bigSmallBets.filter(x=>String(x.panelId||'main')===String(panelId)&&Number(x.durationMs||30000)===durationMs);
-    return {config:{durationMs,minBet:1,maxBet:10000,returns:gameReturns(req),multipliers:{size:returnMult(gameReturns(req).size),color:returnMult(gameReturns(req).color),number:returnMult(gameReturns(req).number)}},round:{number:roundNo,startTs,endTs,remainingMs:Math.max(0,endTs-ts),bettingOpen:endTs-ts>5000},resultsHistory:matchingRounds.filter(x=>x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,500).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:matchingBets.filter(x=>String(x.userId)===String(u.id)&&Number(x.roundNo)===roundNo),history:matchingBets.filter(x=>String(x.userId)===String(u.id)).sort((a,b)=>b.ts-a.ts).slice(0,500)};
+    return {config:{durationMs,minBet:1,maxBet:10000,returns:gameReturns(req),multipliers:{size:returnMult(gameReturns(req).size),color:returnMult(gameReturns(req).color),number:returnMult(gameReturns(req).number)}},round:{number:roundNo,startTs,endTs,remainingMs:Math.max(0,endTs-ts),bettingOpen:endTs-ts>5000},resultsHistory:matchingRounds.filter(x=>x.outcomeLocked&&Number(x.roundNo)<roundNo).sort((a,b)=>b.roundNo-a.roundNo).slice(0,500).map(x=>({roundNo:x.roundNo,number:x.result,size:x.bigSmall,color:x.color,endTs:x.endTs})),currentBets:matchingBets.filter(x=>String(x.userId)===String(u.id)&&Number(x.roundNo)===roundNo),history:matchingBets.filter(x=>String(x.userId)===String(u.id)).sort((a,b)=>b.ts-a.ts).slice(0,100)};
   },
   'POST /api/games/big-small': async (req,res,b,u) => {
     needUser(u); if(u.role!=='user')fail(403,'Only user accounts can play this game.');
@@ -1238,7 +1268,7 @@ const routes = {
       consumePanelCredits(targetPanelId, amt, u.email, 'wallet-add-money', `user #${t.id} ${t.email}; ${reason}`);
       t.balance = r2(t.balance + amt);
       const event = { who: u.email, action: 'add-money', detail: `UID ${t.uid || t.id} (${t.email}) +₹${amt}; ${reason}`, operationKey: operationKey || undefined };
-      D.audit.push({ id: nid(), ts: now(), ...event }); if (D.audit.length > 2000) D.audit.splice(0, D.audit.length - 2000);
+      D.audit.push({ id: nid(), ts: now(), ...event }); if (D.audit.length > 500) D.audit.splice(0, D.audit.length - 500);
       await save(); return { ok: true, uid: String(t.uid || t.id), balance: r2(t.balance), creditBalance: r2((D.panels.find(p => p.slug === targetPanelId) || {}).creditBalance || 0) };
     }
     else if (b.action === 'adjust') {        // manual wallet correction, always logged with a reason
@@ -1561,7 +1591,18 @@ function readBody(req) {
   });
 }
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'strict-origin-when-cross-origin' };
-function json(res, code, obj, extra = {}) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...extra }); res.end(JSON.stringify(obj)); }
+function json(res, code, obj, extra = {}) {
+  const body = Buffer.from(JSON.stringify(obj)), headers = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...extra };
+  const req = res.req;
+  if (body.length > 1400 && req && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+    return zlib.gzip(body, { level: 4 }, (err, gz) => {
+      if (res.writableEnded || res.destroyed) return;
+      if (err) { res.writeHead(code, { ...headers, 'Content-Length': body.length }); return res.end(body); }
+      res.writeHead(code, { ...headers, 'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding', 'Content-Length': gz.length }); res.end(gz);
+    });
+  }
+  res.writeHead(code, { ...headers, 'Content-Length': body.length }); res.end(body);
+}
 
 async function handleApi(req, res, pathname) {
   const requestedSlug = String(req.headers['x-panel-slug'] || 'main').toLowerCase();
@@ -1657,12 +1698,37 @@ const server = http.createServer((req, res) => {
   }
   const meta = STATIC[pathname];
   if (!meta) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
-  fs.readFile(path.join(ROOT, pathname), (err, buf) => {
-    if (err) { res.writeHead(404); return res.end('Not Found'); }
-    res.writeHead(200, { 'Content-Type': meta[0], 'Cache-Control': meta[1], ...SEC });
-    res.end(req.method === 'HEAD' ? undefined : buf);
-  });
+  const accepts = String(req.headers['accept-encoding'] || '');
+  serveStatic(req, res, pathname, meta, /\bgzip\b/.test(accepts));
 });
+
+// In-memory static cache: file is re-read only when it changes on disk; gzip + ETag so repeat visits are 304s.
+const staticCache = new Map();
+const COMPRESSIBLE = /^(text\/|application\/json|text\/javascript)/;
+function serveStatic(req, res, pathname, meta, wantGzip) {
+  const file = path.join(ROOT, pathname);
+  fs.stat(file, (err, st) => {
+    if (err) { res.writeHead(404); return res.end('Not Found'); }
+    let e = staticCache.get(pathname);
+    const send = () => {
+      const headers = { 'Content-Type': meta[0], 'Cache-Control': meta[1], 'ETag': e.etag, 'Vary': 'Accept-Encoding', ...SEC };
+      if (req.headers['if-none-match'] === e.etag) { res.writeHead(304, headers); return res.end(); }
+      const useGz = wantGzip && e.gz;
+      if (useGz) headers['Content-Encoding'] = 'gzip';
+      const body = useGz ? e.gz : e.buf;
+      headers['Content-Length'] = body.length;
+      res.writeHead(200, headers);
+      res.end(req.method === 'HEAD' ? undefined : body);
+    };
+    if (e && e.mtime === st.mtimeMs && e.size === st.size) return send();
+    fs.readFile(file, (err2, buf) => {
+      if (err2) { res.writeHead(404); return res.end('Not Found'); }
+      const etag = '"' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 20) + '"';
+      if (!COMPRESSIBLE.test(meta[0])) { e = { mtime: st.mtimeMs, size: st.size, buf, gz: null, etag }; staticCache.set(pathname, e); return send(); }
+      zlib.gzip(buf, { level: 9 }, (err3, gz) => { e = { mtime: st.mtimeMs, size: st.size, buf, gz: err3 ? null : gz, etag }; staticCache.set(pathname, e); send(); });
+    });
+  });
+}
 
 async function seedAdmin() {
   const email = normEmail(E.ADMIN_EMAIL || 'admin@cryptobridge.local');
@@ -1687,6 +1753,8 @@ async function seedAdmin() {
 if (require.main === module) {
   loadDB().then(seedAdmin).then(() => {
     setInterval(() => settleAndSave().catch(e => console.error(e.message)), 1000).unref();
+    if (trimOldData()) save().catch(() => {});
+    setInterval(() => { try { if (trimOldData()) save().catch(() => {}); } catch (e) { console.error('Trim failed:', e.message); } }, 10 * 60_000).unref();
     setInterval(() => autoSettleCompletedWeeks().catch(e => console.error('Weekly settlement failed:', e.message)), 60_000).unref();
     autoSettleCompletedWeeks().catch(e => console.error('Weekly settlement failed:', e.message));
     server.listen(PORT, HOST, () => console.log(`Crypto Bridge listening on ${HOST}:${PORT}`));

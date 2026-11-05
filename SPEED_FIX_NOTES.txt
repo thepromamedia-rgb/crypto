@@ -1,0 +1,3 @@
+SPEED FIX (look/animation unchanged)
+server.js: save() group-commit (one write for many requests), async file write; old settled game data auto-trim (bets >30 days, rounds keep last 600; Pending never removed); audit cap 500; poll history 100; gzip + ETag + in-memory static cache; gzip for big API responses.
+app.js: Home/Games open instantly (catalog cached, parallel calls); language observer only runs in Hindi and only on changed nodes; background wallet sync skipped when tab hidden.

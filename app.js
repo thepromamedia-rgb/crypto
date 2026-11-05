@@ -8,32 +8,37 @@ const UI_HI = {
   'Home':'होम','Quotes':'कॉइन्स','Team':'टीम','Games':'गेम्स','Assets':'एसेट्स','Login':'लॉगिन','Register':'रजिस्टर','Login / Register':'लॉगिन / रजिस्टर','Create account':'खाता बनाएं','Full name':'पूरा नाम','Email':'ईमेल','Mobile (optional)':'मोबाइल (वैकल्पिक)','Password':'पासवर्ड','Invite code (optional)':'इनवाइट कोड (वैकल्पिक)','Already have an account? Login':'पहले से खाता है? लॉगिन करें','New here? Create an account':'नए हैं? खाता बनाएं','Forgot password?':'पासवर्ड भूल गए?','Minimum deposit':'न्यूनतम जमा','Minimum withdrawal':'न्यूनतम निकासी','Deposit':'जमा करें','Withdrawal':'निकासी','Recharge':'रिचार्ज','Wallet':'वॉलेट','Holdings':'होल्डिंग्स','History':'इतिहास','Available balance':'उपलब्ध बैलेंस','Market value':'मार्केट वैल्यू','Buy':'खरीदें','Sell':'बेचें','Search':'खोजें','Save settings':'सेटिंग सेव करें','Settings':'सेटिंग्स','Contact support':'सपोर्ट से संपर्क करें','Recent Winners':'हाल के विजेता','DEMO':'डेमो','Latest':'नवीनतम','Candles':'कैंडल','Line':'लाइन','My Bets':'मेरे दांव','My History':'मेरा इतिहास','My assets':'मेरे एसेट्स','Your holdings':'आपकी होल्डिंग्स','No coins yet. Tap any coin in Quotes to buy.':'अभी कोई कॉइन नहीं है। खरीदने के लिए Quotes में कॉइन चुनें।','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Account':'खाता','ACCOUNT':'खाता','WALLET':'वॉलेट','Available':'उपलब्ध','Amount':'राशि','Amount (₹)':'राशि (₹)','Request withdrawal':'निकासी का अनुरोध करें','Request deposit':'जमा अनुरोध भेजें','Submit':'जमा करें','Confirm':'पुष्टि करें','Cancel':'रद्द करें','Back to assets':'एसेट्स पर वापस जाएं','Customer support':'ग्राहक सहायता','Help Center':'सहायता केंद्र','Service':'सहायता','Price':'कीमत','Change':'बदलाव','24h Volume':'24 घंटे का वॉल्यूम','Portfolio':'पोर्टफोलियो','Total balance':'कुल बैलेंस','Transaction history':'लेन-देन का इतिहास','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास','Explore digital markets':'डिजिटल मार्केट देखें','Live digital asset prices, updated every 20 seconds.':'डिजिटल एसेट की कीमतें हर 20 सेकंड में अपडेट होती हैं।','Open wallet':'वॉलेट खोलें','Login to your Crypto Bridge wallet.':'अपने Crypto Bridge वॉलेट में लॉगिन करें।','Register to deposit, withdraw and track your wallet.':'जमा, निकासी और वॉलेट ट्रैक करने के लिए रजिस्टर करें।','Your Market at a glance':'एक नज़र में आपका मार्केट','Trending assets':'ट्रेंडिंग एसेट्स','Live market data':'लाइव मार्केट डेटा','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Send email OTP':'ईमेल OTP भेजें','Forgot password':'पासवर्ड भूल गए','Enter OTP':'OTP दर्ज करें','Reset password':'पासवर्ड रीसेट करें','New password':'नया पासवर्ड','Confirm new password':'नया पासवर्ड कन्फर्म करें','Update password':'पासवर्ड अपडेट करें','Customer support':'ग्राहक सहायता','Answers and support.':'सवालों के जवाब और सहायता।','Available balance':'उपलब्ध बैलेंस','Main Wallet':'मुख्य वॉलेट','Third Wallet':'तीसरा वॉलेट','Transfer':'ट्रांसफर','Transfer history':'ट्रांसफर इतिहास','My portfolio':'मेरा पोर्टफोलियो','Investment':'निवेश','Active':'सक्रिय','Completed':'पूरा हुआ','Pending':'लंबित','Approved':'स्वीकृत','Rejected':'अस्वीकृत','Search coins':'कॉइन खोजें','Market':'मार्केट','Buy crypto':'क्रिप्टो खरीदें','Sell crypto':'क्रिप्टो बेचें','Confirm purchase':'खरीद की पुष्टि करें','Confirm sale':'बिक्री की पुष्टि करें','Transaction details':'लेन-देन का विवरण','Account settings':'अकाउंट सेटिंग्स','Profile':'प्रोफ़ाइल','Logout':'लॉगआउट','Help Center':'सहायता केंद्र','Contact support':'सपोर्ट से संपर्क करें','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास','Language / भाषा':'भाषा','English':'अंग्रेज़ी','YOUR MARKET AT A GLANCE':'आपका मार्केट एक नज़र में','YOUR RECORDS':'आपका रिकॉर्ड','YOUR COINS':'आपके कॉइन','Wallets & portfolio':'वॉलेट और पोर्टफोलियो','Total balance':'कुल बैलेंस','Main wallet':'मुख्य वॉलेट','3rd wallet':'तीसरा वॉलेट','Crypto holdings':'क्रिप्टो होल्डिंग्स','Unrealized P/L':'अनरियलाइज़्ड लाभ/हानि','Withdraw':'निकासी','Invest':'निवेश','Game History':'गेम इतिहास','My game history':'मेरा गेम इतिहास','Transaction':'लेन-देन','My transaction history':'मेरा लेन-देन इतिहास','Deposits':'जमा','Withdrawals':'निकासी','Rewards & transfers':'रिवॉर्ड और ट्रांसफर','Team & invite':'टीम और आमंत्रण','Customer service':'ग्राहक सेवा',"Beginner's guide":'शुरुआती गाइड','Change password':'पासवर्ड बदलें','Dark / light mode':'डार्क / लाइट मोड','Logout':'लॉगआउट','YOUR MARKET AT A GLANCE':'आपका मार्केट एक नज़र में','WALLET':'वॉलेट','ACCOUNT':'खाता'
 };
 const languageOriginalText = new WeakMap();
-function applyLanguage(root=document){
-  if(!root) return;
-  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[];
-  while(walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(node=>{
-    if(!languageOriginalText.has(node)) languageOriginalText.set(node,node.nodeValue);
-    const original=languageOriginalText.get(node); const trimmed=original.trim();
-    if(!trimmed) return;
-    const translated=state.language==='hi' ? (UI_HI[trimmed] || trimmed) : trimmed;
-    const nextValue=original.replace(trimmed,translated);
-    // Avoid writing an unchanged CharacterData value: the language MutationObserver
-    // watches characterData, so unconditional writes can create an endless observer loop.
-    if(node.nodeValue !== nextValue) node.nodeValue=nextValue;
-  });
-  const attrs=['placeholder','title','aria-label'];
-  root.querySelectorAll?.('*').forEach(el=>attrs.forEach(attr=>{
-    const val=el.getAttribute(attr); if(!val) return;
+function translateTextNode(node){
+  if(!languageOriginalText.has(node)) languageOriginalText.set(node,node.nodeValue);
+  const original=languageOriginalText.get(node); const trimmed=original.trim();
+  if(!trimmed) return;
+  const translated=state.language==='hi' ? (UI_HI[trimmed] || trimmed) : trimmed;
+  const nextValue=original.replace(trimmed,translated);
+  // Avoid writing an unchanged CharacterData value (prevents observer loops).
+  if(node.nodeValue !== nextValue) node.nodeValue=nextValue;
+}
+function translateAttrs(el){
+  for(const attr of ['placeholder','title','aria-label']){
+    const val=el.getAttribute(attr); if(!val) continue;
     const key='data-lang-original-'+attr;
     if(!el.hasAttribute(key)) el.setAttribute(key,val);
-    const original=el.getAttribute(key); el.setAttribute(attr,state.language==='hi'?(UI_HI[original]||original):original);
-  }));
+    const original=el.getAttribute(key); const next=state.language==='hi'?(UI_HI[original]||original):original;
+    if(el.getAttribute(attr)!==next) el.setAttribute(attr,next);
+  }
+}
+function applyLanguage(root=document){
+  if(!root) return;
+  if(root.nodeType===3){ translateTextNode(root); return; }
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(translateTextNode);
+  if(root.nodeType===1 && root!==document.body) translateAttrs(root);
+  root.querySelectorAll?.('*').forEach(translateAttrs);
 }
 function setLanguage(lang){state.language=lang==='hi'?'hi':'en';try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};const main=document.querySelector('#appMain');if(main)applyLanguage(document.body || main);const head=document.querySelector('#languageSelect');if(head)head.value=state.language;const auth=document.querySelector('#authLanguage');if(auth)auth.value=state.language;}
 function initLanguage(){
   const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>setLanguage(sel.value);}
-  const target=document.body; if(target){applyLanguage(target);if(!target.dataset.languageObserver){new MutationObserver(()=>applyLanguage(target)).observe(target,{childList:true,subtree:true,characterData:true});target.dataset.languageObserver='1';}}
+  const target=document.body; if(target){applyLanguage(target);if(!target.dataset.languageObserver){new MutationObserver(muts=>{ if(state.language!=='hi') return; for(const m of muts){ if(m.type==='characterData'){ translateTextNode(m.target); continue; } m.addedNodes.forEach(n=>{ if(n.nodeType===1||n.nodeType===3) applyLanguage(n); }); } }).observe(target,{childList:true,subtree:true,characterData:true});target.dataset.languageObserver='1';}}
 }
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -630,6 +635,10 @@ function bindCoin() {
   };
 }
 
+async function refreshCatalog(onChange) {
+  try { const catalog = await api('games/catalog'); const games = catalog.games || []; const changed = JSON.stringify(games) !== JSON.stringify(state.customGames); state.customGames = games; state.catalogTs = Date.now(); if (changed && onChange) onChange(); }
+  catch { if (!state.catalogTs) state.customGames = []; }
+}
 async function renderPage(page, quiet) {
   if (page !== 'Home' && winningActivityTimer) { clearInterval(winningActivityTimer); winningActivityTimer = null; }
   if (page !== 'Home' && dailyEarningsTimer) { clearTimeout(dailyEarningsTimer); dailyEarningsTimer = null; }
@@ -639,7 +648,7 @@ async function renderPage(page, quiet) {
   if (location.hash !== route) history.replaceState(null, '', route);
   $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   const main = $('#appMain'), c = state.cfg;
-  if (page === 'Home') { try { const catalog=await api('games/catalog'); state.customGames=catalog.games||[]; } catch { state.customGames=[]; } renderHome(); }
+  if (page === 'Home') { if (state.catalogTs) { renderHome(); if (Date.now() - state.catalogTs > 10000) refreshCatalog(() => state.page === 'Home' && renderHome()); } else { await refreshCatalog(); renderHome(); } }
   else if (page === 'Coin') {
     main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCoins().some(b => b.enabled && state.coin === b.symbol) ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
     if (bonusCoins().some(b => b.enabled && state.coin === b.symbol)) { bindBonus(); if ($('#chartBox')) bindChart(); } else { bindCoin(); if ($('#chartBox')) bindChart(); }
@@ -692,8 +701,9 @@ async function renderPage(page, quiet) {
   } else if (page === 'Games') {
     if (!state.me) return needLogin('Games');
     let gameData = null;
+    const catalogP = refreshCatalog();
     try { gameData = await api('games/flip-coin'); } catch (e) { showToast(e.message); }
-    try { const catalog=await api('games/catalog'); state.customGames=catalog.games||[]; } catch { state.customGames=[]; }
+    await catalogP;
     const fc = (gameData && gameData.config) || { enabled:true, minBet:10, maxBet:10000, multiplier:2, feePct:0 };
     const history = (gameData && gameData.history) || [];
     let coinRet = Number(fc.returnPct != null ? fc.returnPct : 100);
@@ -957,7 +967,7 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
 (async function init() {
   ccTheme.apply();
   const ref = new URLSearchParams(location.search).get('ref');
-  await loadMe();
+  await Promise.all([loadMe(), refreshCatalog()]);
   const route = decodeURIComponent(location.hash.slice(1) || 'Home');
   let initialPage = route.split(':')[0];
   if (route.startsWith('Coin:')) state.coin = route.slice(5);
@@ -975,7 +985,7 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
   pullPrices(); setInterval(pullPrices, 20000);
   // Refresh a signed-in user's wallet when an admin changes their balance in another session.
   const syncWallet = async () => {
-    if (!state.me) return;
+    if (!state.me || document.hidden) return;
     const previous = Number(state.me.balance || 0);
     await loadMe();
     if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
