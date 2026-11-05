@@ -1,0 +1,20 @@
+CryptoClub - Games Section Artwork Fit Update
+
+Scope:
+- Updated only the Games chooser artwork presentation and its six Games-only artwork files.
+- Home Page markup and its artwork references are unchanged from the supplied baseline package.
+- Home Page CSS selectors were not modified; the added image-fit rules are scoped to .cc-chooser only.
+- Aviator Games artwork uses the exact original aviator-original.png as the centered, uncropped foreground, with a matching blurred full-width background to fill both sides.
+- All six Games artwork files use a consistent 900x480 (15:8) canvas and responsive image fit.
+
+Not changed:
+- Gameplay, betting, wallet, balances, Admin Panel, database, login, and game logic.
+
+Checks run:
+- node --check app.js
+- node --check server.js
+- node --check admin.js
+- npm test (server, admin-role, and WinGo result suites)
+- python test-site.py (18 checks)
+- Verified all six Games artwork files are 900x480 and all six Games references exist.
+- Verified Home Page Aviator artwork reference remains /aviator-original.png.
