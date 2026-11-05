@@ -1,45 +1,28 @@
-CRYPTO BRIDGE — AUTOMATED TEST REPORT
-Delivery: 2026-11-04 (bug-fix rebuild)
+CRYPTO BRIDGE DEMO — TEST REPORT
+Date: 2026-10-18
 
-CHECKS RUN
-- node --check server.js — PASS
-- node --check app.js — PASS
-- node --check admin.js — PASS
-- node --check test-server.js — PASS
-- npm test — PASS (all server integration tests)
-- python test-site.py — PASS (18 static smoke checks)
+OFFLINE SMOKE TESTS: 13 PASSED, 0 FAILED
+- HTML parsing
+- Duplicate HTML IDs
+- Linked CSS/JS files exist
+- Viewport metadata
+- Accessible main navigation
+- Demo-only disclosure text
+- No remote script dependency
+- Page route handlers exist for Home, Quotes, Assets, Team, Bonus, Recharge, Withdrawal, Signal, Service, Invite and Guide
+- Asset search handler exists
+- Recharge/withdrawal demo-only handling exists
+- Responsive CSS media query
+- Static deployment files are at project root
+- JavaScript syntax (`node --check`)
 
-BUG FIXED
-- Fixed a critical language MutationObserver loop: the previous implementation
-  rewrote unchanged text nodes while observing characterData changes, which
-  could continuously retrigger the observer and freeze the page. Text nodes are
-  now only written when their translated value actually changes.
-- Language application/observation now covers the full app body, including the
-  public navigation and dynamically rendered pages.
-- Added a language selector inside the Assets account menu, in addition to the
-  header and login/register selector. The preference remains device-local.
+BROWSER INTERACTION TEST LIMITATION
+A headless Chromium interaction run was attempted in the build environment, but navigation to both local HTTP and file URLs was blocked by the environment's browser policy (ERR_BLOCKED_BY_ADMINISTRATOR). Therefore a full real-browser interaction run could not be confirmed here. The site should be checked in a browser after deployment; use Render's deploy logs if it fails.
 
-FEATURE CHECKS
-- Panel-wise support buttons/settings are present and covered by server tests.
-- Winners leaderboard includes a DEMO / SIMULATED disclosure.
-- Chart has pointer drag, momentum coast, pinch/wheel zoom, and Latest control.
-- Admin page and script load from the expected routes.
+RENDER STATIC SITE SETTINGS
+Build Command: leave blank
+Publish Directory: .
+The repository root must directly contain index.html, style.css and app.js.
 
-IMPORTANT LIMITATIONS
-- No successful headless-browser visual interaction test was available in this
-  environment. Verify desktop, tablet and mobile layouts in a real browser.
-- Hindi dictionary coverage is still partial; untranslated labels remain in
-  English. This rebuild fixes the page-freezing language observer, not a full
-  professional translation of every dynamic screen.
-- SMTP was not tested against a real provider. Configure SMTP and perform a
-  real email-delivery test before production use.
-- JSON / snapshot storage is not a cross-instance transactional database. Do
-  not scale to multiple application instances without transactional storage.
-- Live production deployment and production backup/restore were not tested.
-
-DATA SAFETY
-- The supplied db.json was preserved.
-- No user, wallet, deposit, withdrawal, trade, or historical record was
-  intentionally deleted or reset during this rebuild.
-- Simulated winner/earnings content remains display-only and is not credited
-  to wallets or financial ledgers.
+SCOPE
+This is a static front-end demo. It does not implement real user authentication, a backend, database, live prices, real deposits/withdrawals, wallet integrations or trading.
