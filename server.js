@@ -427,7 +427,13 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
 }
 const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, investment: { enabled: st.investment?.enabled !== false, depositPercent: Number(st.investment?.depositPercent ?? 50), profitPct: Number(st.investment?.profitPct ?? 5), holdingDays: Number(st.investment?.holdingDays ?? 7) }, withdrawalWagerMultiplier: Number(st.withdrawalWagerMultiplier ?? 1), withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, supportButtons: Array.isArray(st.supportButtons) ? st.supportButtons : [], notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
 const needUser = u => u || fail(401, 'Please login.');
-const needAdmin = u => { needUser(u); if (!['admin', 'headAdmin', 'panelAdmin'].includes(u.role)) fail(403, 'Forbidden'); };
+const ADMIN_ROLES = ['admin', 'headAdmin', 'panelAdmin', 'superAdmin', 'subAdmin', 'supportAdmin'];
+const needAdmin = u => { needUser(u); if (!ADMIN_ROLES.includes(u.role)) fail(403, 'Forbidden'); };
+const isSuperAdmin = u => !!u && u.role === 'superAdmin';
+const isSubAdmin = u => !!u && u.role === 'subAdmin';
+const isSupportAdmin = u => !!u && u.role === 'supportAdmin';
+const canManageAdmins = u => isHead(u) || isSuperAdmin(u);
+const adminRoleLabel = role => ({headAdmin:'Super Admin (Owner)',admin:'Super Admin (Legacy)',panelAdmin:'Panel Admin (Legacy)',superAdmin:'Super Admin',subAdmin:'Sub Admin',supportAdmin:'Support Admin'}[role] || role);
 const needHead = u => { needUser(u); if (!isHead(u)) fail(403, 'Head Admin only.'); };
 
 async function razorpayRequest(method, endpoint, payload) {
@@ -578,7 +584,7 @@ const routes = {
     const candidates = [...D.users, ...D.demoUsers].filter(x => normEmail(x.email) === email);
     const u = candidates.find(x => checkPw(String(b.password || ''), x.pass));
     if (!u) fail(401, 'Wrong email or password.');
-    if (['headAdmin','admin','panelAdmin'].includes(u.role) && u.twoFactorEnabled && !verifyTotp(u.twoFactorSecret, b.otp)) fail(401, 'Authenticator OTP is required or invalid.');
+    if (ADMIN_ROLES.includes(u.role) && u.twoFactorEnabled && !verifyTotp(u.twoFactorSecret, b.otp)) fail(401, 'Authenticator OTP is required or invalid.');
     // Once credentials are verified, give panel admins a useful redirect hint instead of
     // disguising a correct password as a password error when they use /admin by mistake.
     if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
@@ -601,7 +607,7 @@ const routes = {
     const key = String(req.panelId || 'main') + ':' + email;
     const existing = passwordChallenges.get(key);
     if (existing && existing.resendAfter > now()) fail(429, `Please wait ${Math.ceil((existing.resendAfter-now())/1000)} seconds before requesting another code.`);
-    const account = D.users.find(x => normEmail(x.email) === email && String(x.panelId || 'main') === String(req.panelId || 'main') && !['headAdmin','admin','panelAdmin'].includes(x.role));
+    const account = D.users.find(x => normEmail(x.email) === email && String(x.panelId || 'main') === String(req.panelId || 'main') && !ADMIN_ROLES.includes(x.role));
     if (!account) return { ok: true, message: 'If this email belongs to an account, a reset code will be sent.' };
     const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
     const challenge = { email, panelId: req.panelId || 'main', uid: account.id, otpHash: otpDigest(email, otp), expiresAt: now()+10*60e3, resendAfter: now()+60e3, attempts: 0, resetTokenHash: '', resetExpiresAt: 0 };
@@ -1000,7 +1006,7 @@ const routes = {
   },
   'GET /api/admin/overview': async (req, res, b, u) => {
     needAdmin(u); await settleAndSave();
-    const users = panelRows(req, D.users.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role))), depRows = panelRows(req, D.deposits), wdRows = panelRows(req, D.withdrawals), tradeRows = panelRows(req, D.trades), posRows = panelRows(req, D.positions), ok = depRows.filter(d => d.status === 'Approved'), paid = wdRows.filter(w => w.status === 'Paid');
+    const users = panelRows(req, D.users.filter(x => !ADMIN_ROLES.includes(x.role))), depRows = panelRows(req, D.deposits), wdRows = panelRows(req, D.withdrawals), tradeRows = panelRows(req, D.trades), posRows = panelRows(req, D.positions), ok = depRows.filter(d => d.status === 'Approved'), paid = wdRows.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
@@ -1011,7 +1017,7 @@ const routes = {
       storage: UP_URL ? 'upstash' : 'file', settings: S(req), min: { deposit: S(req).limits.minDeposit, withdraw: S(req).limits.minWithdraw, trade: S(req).limits.minTrade }
     };
   },
-  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
+  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !ADMIN_ROLES.includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
   'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, uid: String(x.uid || x.id), name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
   'POST /api/admin/demo-user': async (req, res, b, u) => {
     needAdmin(u); const action = str(b.action, 16);
@@ -1086,7 +1092,7 @@ const routes = {
     const reportUsers = panelRows(req, D.users), reportDeposits = panelRows(req, D.deposits), reportWithdrawals = panelRows(req, D.withdrawals), reportTrades = panelRows(req, D.trades);
     for (let i = 0; i < 14; i++) { const k = day(now() - i * 864e5); rows[k] = { date: k, signups: 0, deposits: 0, depositAmt: 0, withdrawals: 0, withdrawAmt: 0, trades: 0, tradeVol: 0 }; }
     const add = (ts, f) => { const r = rows[day(ts)]; if (r) f(r); };
-    reportUsers.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).forEach(x => add(x.created, r => r.signups++));
+    reportUsers.filter(x => !ADMIN_ROLES.includes(x.role)).forEach(x => add(x.created, r => r.signups++));
     reportDeposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
     reportWithdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += Number(x.netAmount == null ? x.amount : x.netAmount); }));
     reportTrades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
@@ -1166,7 +1172,8 @@ const routes = {
   },
   'POST /api/admin/user': async (req, res, b, u) => {
     needAdmin(u); const t = D.users.find(x => x.id === b.id); if (!t) fail(404, 'Not found'); assertPanelAccess(req, t);
-    if (['admin','headAdmin','panelAdmin'].includes(t.role)) fail(400, 'Admin accounts cannot be changed here.');
+    if (ADMIN_ROLES.includes(t.role)) fail(400, 'Admin accounts cannot be changed here.');
+    if (isSubAdmin(u) && !['block','unblock'].includes(b.action)) fail(403, 'Sub Admin can only block or unblock user accounts.');
     if (b.action === 'block') t.blocked = true; else if (b.action === 'unblock') t.blocked = false;
     else if (b.action === 'password') { const pw = String(b.password || ''); if (pw.length < 8) fail(400, 'Min 8 characters'); t.pass = hashPw(pw); }
     else if (b.action === 'delete') {
@@ -1455,6 +1462,47 @@ const routes = {
     const copy = JSON.parse(JSON.stringify(D)); delete copy.secret; copy.users.forEach(x => delete x.pass); if (Array.isArray(copy.demoUsers)) copy.demoUsers.forEach(x => delete x.pass);
     return { __download: 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: copy };
   }
+  ,
+  'GET /api/admin/admins': async (req, res, b, u) => {
+    needAdmin(u);
+    if (!canManageAdmins(u) && !isSubAdmin(u) && !isSupportAdmin(u)) fail(403, 'Admin directory access denied.');
+    const rows = D.users.filter(x => ADMIN_ROLES.includes(x.role) && (isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')))
+      .map(x => ({ id:x.id, uid:x.uid, name:x.name, email:x.email, role:x.role, roleLabel:adminRoleLabel(x.role), panelId:x.panelId || 'main', blocked:!!x.blocked, created:x.created }));
+    return { admins: rows };
+  },
+  'POST /api/admin/admins/manage': async (req, res, b, u) => {
+    needAdmin(u);
+    if (!canManageAdmins(u)) fail(403, 'Only a Super Admin or Head Admin can manage admin accounts.');
+    const action = str(b.action, 12);
+    if (action === 'create') {
+      const name = str(b.name, 80), email = normEmail(b.email), password = String(b.password || ''), role = str(b.role, 24);
+      const allowed = isHead(u) ? ['superAdmin','subAdmin','supportAdmin'] : ['subAdmin','supportAdmin'];
+      if (name.length < 2 || !emailOk(email) || password.length < 12 || !allowed.includes(role)) fail(400, 'Enter a valid name, email, 12+ character password and permitted role.');
+      if (D.users.some(x => normEmail(x.email) === email)) fail(409, 'An account with this email already exists.');
+      const panelId = isHead(u) ? String(b.panelId || req.panelId || 'main') : String(u.panelId || req.panelId || 'main');
+      if (!getPanel(panelId)) fail(400, 'Selected panel does not exist.');
+      const admin = { id:nid(), uid:nextAccountUid('PAD'), name, email, phone:'', role, panelId, pass:hashPw(password), balance:0, thirdWallet:0, depositEligible:0, wagerRequired:0, wagerCompleted:0, refCode:makeRef(), refBy:null, blocked:false, created:now() };
+      D.users.push(admin); audit(u.email, 'admin-created', role + ': ' + email); await save();
+      return { ok:true, admin:{id:admin.id,uid:admin.uid,name:admin.name,email:admin.email,role:admin.role,panelId:admin.panelId} };
+    }
+    const id = Number(b.id), target = D.users.find(x => Number(x.id) === id && ADMIN_ROLES.includes(x.role));
+    if (!target) fail(404, 'Admin account not found.');
+    if (target.id === u.id || isHead(target)) fail(400, 'You cannot change this account.');
+    if (!isHead(u) && (String(target.panelId || 'main') !== String(u.panelId || 'main') || !['subAdmin','supportAdmin'].includes(target.role))) fail(403, 'You can manage only Sub Admin and Support Admin accounts in your panel.');
+    if (action === 'status') {
+      target.blocked = !!b.blocked;
+      audit(u.email, 'admin-status-changed', target.email + ': ' + (target.blocked ? 'suspended' : 'active'));
+    } else if (action === 'role') {
+      const nextRole = str(b.role,24), allowed = isHead(u) ? ['superAdmin','subAdmin','supportAdmin'] : ['subAdmin','supportAdmin'];
+      if (!allowed.includes(nextRole)) fail(400, 'Role change not allowed.');
+      target.role = nextRole; audit(u.email, 'admin-role-changed', target.email + ': ' + nextRole);
+    } else if (action === 'password') {
+      const password = String(b.password || '');
+      if (password.length < 12) fail(400, 'New password must be at least 12 characters.');
+      target.pass = hashPw(password); audit(u.email, 'admin-password-reset', target.email);
+    } else fail(400, 'Unknown admin management action.');
+    await save(); return { ok:true };
+  }
 };
 
 function readBody(req) {
@@ -1482,6 +1530,23 @@ async function handleApi(req, res, pathname) {
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
     const user = authUser(req); req.user = user;
+    // Server-side least-privilege matrix for the added admin roles. Existing Head Admin
+    // and legacy Panel Admin behavior remains intact; the legacy owner is normalized below.
+    if (user && ['superAdmin','subAdmin','supportAdmin'].includes(user.role)) {
+      const key = req.method + ' ' + pathname;
+      const readOnly = req.method === 'GET';
+      const adminRead = ['GET /api/admin/overview','GET /api/admin/users','GET /api/admin/audit','GET /api/admin/admins'];
+      const userOps = ['POST /api/admin/user'];
+      const staffOps = ['POST /api/admin/admins','PATCH /api/admin/admins/'];
+      if (user.role === 'supportAdmin' && !(readOnly && adminRead.includes(key))) fail(403, 'Support Admin is read-only. Contact a Super Admin for changes.');
+      if (user.role === 'subAdmin' && !(adminRead.includes(key) || key === 'POST /api/admin/user' || key === 'POST /api/admin/admins/manage')) fail(403, 'Sub Admin permission denied for this operation.');
+      if (user.role === 'superAdmin') {
+        const headOnly = key.startsWith('POST /api/admin/panels') || key.startsWith('DELETE /api/admin/panels') ||
+          key === 'GET /api/admin/panels' || key.startsWith('POST /api/admin/backup') ||
+          key.startsWith('POST /api/admin/restore');
+        if (headOnly) fail(403, 'Only the Head Admin can perform this operation.');
+      }
+    }
     // Login must be allowed to replace a stale cookie from another panel. Without
     // this exception, a browser previously used for Main/another panel can block
     // the new panel-admin login before the submitted credentials are checked.
