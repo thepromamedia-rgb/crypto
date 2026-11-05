@@ -2,7 +2,63 @@
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const state = { page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
+const savedLanguage = (() => { try { return localStorage.getItem('cryptoBridgeLanguage') || 'en'; } catch { return 'en'; } })();
+const state = { customGames: [], language: savedLanguage, page: 'Home', query: '', me: null, cfg: { minDeposit: 1000, minWithdraw: 300 }, prices: [], updated: 0, stale: false, priceErr: '', deposits: [], withdrawals: [], referrals: 0, authMode: 'login', coin: '', side: 'buy', fx: 0, trades: [], positions: [], chartType: 'candle', interval: '1h', kl: {}, klErr: '', chartView: {}, chartDrawings: {}, drawMode: false, drawDraft: null, chartGestureActive: false };
+const UI_HI = {
+  'Home':'होम','Quotes':'कॉइन्स','Team':'टीम','Games':'गेम्स','Assets':'एसेट्स','Login':'लॉगिन','Register':'रजिस्टर','Login / Register':'लॉगिन / रजिस्टर','Create account':'खाता बनाएं','Full name':'पूरा नाम','Email':'ईमेल','Mobile (optional)':'मोबाइल (वैकल्पिक)','Password':'पासवर्ड','Invite code (optional)':'इनवाइट कोड (वैकल्पिक)','Already have an account? Login':'पहले से खाता है? लॉगिन करें','New here? Create an account':'नए हैं? खाता बनाएं','Forgot password?':'पासवर्ड भूल गए?','Minimum deposit':'न्यूनतम जमा','Minimum withdrawal':'न्यूनतम निकासी','Deposit':'जमा करें','Withdrawal':'निकासी','Recharge':'रिचार्ज','Wallet':'वॉलेट','Holdings':'होल्डिंग्स','History':'इतिहास','Available balance':'उपलब्ध बैलेंस','Market value':'मार्केट वैल्यू','Buy':'खरीदें','Sell':'बेचें','Search':'खोजें','Save settings':'सेटिंग सेव करें','Settings':'सेटिंग्स','Contact support':'सपोर्ट से संपर्क करें','Recent Winners':'हाल के विजेता','DEMO':'डेमो','Latest':'नवीनतम','Candles':'कैंडल','Line':'लाइन','My Bets':'मेरे दांव','My History':'मेरा इतिहास','My assets':'मेरे एसेट्स','Your holdings':'आपकी होल्डिंग्स','No coins yet. Tap any coin in Quotes to buy.':'अभी कोई कॉइन नहीं है। खरीदने के लिए Quotes में कॉइन चुनें।','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Account':'खाता','ACCOUNT':'खाता','WALLET':'वॉलेट','Available':'उपलब्ध','Amount':'राशि','Amount (₹)':'राशि (₹)','Request withdrawal':'निकासी का अनुरोध करें','Request deposit':'जमा अनुरोध भेजें','Submit':'जमा करें','Confirm':'पुष्टि करें','Cancel':'रद्द करें','Back to assets':'एसेट्स पर वापस जाएं','Customer support':'ग्राहक सहायता','Help Center':'सहायता केंद्र','Service':'सहायता','Price':'कीमत','Change':'बदलाव','24h Volume':'24 घंटे का वॉल्यूम','Portfolio':'पोर्टफोलियो','Total balance':'कुल बैलेंस','Transaction history':'लेन-देन का इतिहास','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास','Explore digital markets':'डिजिटल मार्केट देखें','Live digital asset prices, updated every 20 seconds.':'डिजिटल एसेट की कीमतें हर 20 सेकंड में अपडेट होती हैं।','Open wallet':'वॉलेट खोलें','Login to your Crypto Bridge wallet.':'अपने Crypto Bridge वॉलेट में लॉगिन करें।','Register to deposit, withdraw and track your wallet.':'जमा, निकासी और वॉलेट ट्रैक करने के लिए रजिस्टर करें।','Your Market at a glance':'एक नज़र में आपका मार्केट','Trending assets':'ट्रेंडिंग एसेट्स','Live market data':'लाइव मार्केट डेटा','No transactions yet.':'अभी कोई लेन-देन नहीं है।','Send email OTP':'ईमेल OTP भेजें','Forgot password':'पासवर्ड भूल गए','Enter OTP':'OTP दर्ज करें','Reset password':'पासवर्ड रीसेट करें','New password':'नया पासवर्ड','Confirm new password':'नया पासवर्ड कन्फर्म करें','Update password':'पासवर्ड अपडेट करें','Customer support':'ग्राहक सहायता','Answers and support.':'सवालों के जवाब और सहायता।','Available balance':'उपलब्ध बैलेंस','Main Wallet':'मुख्य वॉलेट','Third Wallet':'तीसरा वॉलेट','Transfer':'ट्रांसफर','Transfer history':'ट्रांसफर इतिहास','My portfolio':'मेरा पोर्टफोलियो','Investment':'निवेश','Active':'सक्रिय','Completed':'पूरा हुआ','Pending':'लंबित','Approved':'स्वीकृत','Rejected':'अस्वीकृत','Search coins':'कॉइन खोजें','Market':'मार्केट','Buy crypto':'क्रिप्टो खरीदें','Sell crypto':'क्रिप्टो बेचें','Confirm purchase':'खरीद की पुष्टि करें','Confirm sale':'बिक्री की पुष्टि करें','Transaction details':'लेन-देन का विवरण','Account settings':'अकाउंट सेटिंग्स','Profile':'प्रोफ़ाइल','Logout':'लॉगआउट','Help Center':'सहायता केंद्र','Contact support':'सपोर्ट से संपर्क करें','Deposit history':'जमा इतिहास','Withdrawal history':'निकासी इतिहास','Language / भाषा':'भाषा','English':'अंग्रेज़ी','YOUR MARKET AT A GLANCE':'आपका मार्केट एक नज़र में','YOUR RECORDS':'आपका रिकॉर्ड','YOUR COINS':'आपके कॉइन','Wallets & portfolio':'वॉलेट और पोर्टफोलियो','Total balance':'कुल बैलेंस','Main wallet':'मुख्य वॉलेट','3rd wallet':'तीसरा वॉलेट','Crypto holdings':'क्रिप्टो होल्डिंग्स','Unrealized P/L':'अनरियलाइज़्ड लाभ/हानि','Withdraw':'निकासी','Invest':'निवेश','Game History':'गेम इतिहास','My game history':'मेरा गेम इतिहास','Transaction':'लेन-देन','My transaction history':'मेरा लेन-देन इतिहास','Deposits':'जमा','Withdrawals':'निकासी','Rewards & transfers':'रिवॉर्ड और ट्रांसफर','Team & invite':'टीम और आमंत्रण','Customer service':'ग्राहक सेवा',"Beginner's guide":'शुरुआती गाइड','Change password':'पासवर्ड बदलें','Dark / light mode':'डार्क / लाइट मोड','Logout':'लॉगआउट','YOUR MARKET AT A GLANCE':'आपका मार्केट एक नज़र में','WALLET':'वॉलेट','ACCOUNT':'खाता'
+};
+const languageOriginalText = new WeakMap();
+function applyLanguage(root=document){
+  if(!root) return;
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT); const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(node=>{
+    if(!languageOriginalText.has(node)) languageOriginalText.set(node,node.nodeValue);
+    const original=languageOriginalText.get(node); const trimmed=original.trim();
+    if(!trimmed) return;
+    const translated=state.language==='hi' ? (UI_HI[trimmed] || trimmed) : trimmed;
+    const nextValue=original.replace(trimmed,translated);
+    // Avoid writing an unchanged CharacterData value: the language MutationObserver
+    // watches characterData, so unconditional writes can create an endless observer loop.
+    if(node.nodeValue !== nextValue) node.nodeValue=nextValue;
+  });
+  const attrs=['placeholder','title','aria-label'];
+  root.querySelectorAll?.('*').forEach(el=>attrs.forEach(attr=>{
+    const val=el.getAttribute(attr); if(!val) return;
+    const key='data-lang-original-'+attr;
+    if(!el.hasAttribute(key)) el.setAttribute(key,val);
+    const original=el.getAttribute(key); el.setAttribute(attr,state.language==='hi'?(UI_HI[original]||original):original);
+  }));
+}
+function setLanguage(lang){state.language=lang==='hi'?'hi':'en';try{localStorage.setItem('cryptoBridgeLanguage',state.language)}catch{};const main=document.querySelector('#appMain');if(main)applyLanguage(document.body || main);const head=document.querySelector('#languageSelect');if(head)head.value=state.language;const auth=document.querySelector('#authLanguage');if(auth)auth.value=state.language;}
+function initLanguage(){
+  const sel=document.querySelector('#languageSelect'); if(sel){sel.value=state.language;sel.onchange=()=>setLanguage(sel.value);}
+  const target=document.body;
+  if(target && !target.dataset.languageObserver){
+    applyLanguage(target);
+    let pending=[];
+    let scheduled=false;
+    const observer=new MutationObserver(records=>{
+      for(const record of records){
+        for(const node of record.addedNodes){
+          if(node.nodeType===1) pending.push(node);
+          else if(node.nodeType===3 && node.parentElement) pending.push(node.parentElement);
+        }
+      }
+      if(!pending.length || scheduled) return;
+      scheduled=true;
+      requestAnimationFrame(()=>{
+        scheduled=false;
+        const roots=[...new Set(pending)]; pending=[];
+        for(const root of roots){
+          if(root.isConnected) applyLanguage(root);
+        }
+      });
+    });
+    observer.observe(target,{childList:true,subtree:true});
+    target.dataset.languageObserver='1';
+  }
+}
 const colors = ['#fff0d8', '#edf0ff', '#e4f8ee', '#e9f7ff', '#fff0f4'];
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const inr = n => '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -76,6 +132,8 @@ const BS_NUM_CLASS = n => ({0:'v-r',5:'v-g'}[n] || (n % 2 ? 'g' : 'r'));
 const bsDots = c => String(c || '').split('+').map(x => `<i class="bs-dot ${x === 'Green' ? 'g' : x === 'Violet' ? 'v' : 'r'}"></i>`).join('');
 const PROTECTED = new Set(['Home', 'Assets', 'Recharge', 'Withdrawal', 'Team', 'Invite', 'Games']);
 let winningActivityTimer = null;
+let dailyEarningsTimer = null;
+let winningDemoRows = [];
 function syncBottomNav() { const nav = $('.bottom-nav'); if (nav) nav.style.display = state.me ? '' : 'none'; }
 
 function activePanelSlug() { const m = location.pathname.match(/^\/p\/([a-z0-9-]+)/i); return m ? m[1] : 'main'; }
@@ -154,7 +212,7 @@ const marketCards = () => state.prices.slice(0, 3).map((a, i) => `<article class
 
 // ---------- session ----------
 async function loadMe() {
-  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
+  try { const j = await api('me'); state.me = j.user; state.cfg = j.config; if (j.config && j.config.coins) COINS = j.config.coins; state.deposits = j.deposits; state.withdrawals = j.withdrawals; state.walletTransfers = j.walletTransfers || []; state.referrals = j.referrals; state.trades = j.trades || []; state.positions = j.positions || []; state.investments = j.investments || []; updateFooter(); }
   catch { state.me = null; try { state.cfg = await api('config'); if (state.cfg.coins) COINS = state.cfg.coins; updateFooter(); } catch {} }
   $('#account').textContent = state.me ? '₹ ' + Number(state.me.balance).toLocaleString('en-IN') : 'Login'; syncBottomNav();
 }
@@ -164,38 +222,132 @@ const needLogin = page => { state.after = page; renderPage('Auth'); };
 
 // ---------- pages ----------
 function makeWinningDemoBatch() {
+  const games = ['WinGo', 'Coin Flip', 'Head/Tail', 'BTC', 'ETH', 'SOL'];
   const aliases = ['Aarav','Riya','Kabir','Anaya','Vivaan','Ishita','Arjun','Meera','Dev','Sana','Reyansh','Kiara'];
-  const rows = Array.from({length:10}, (_,i) => {
-    const uid = String(10000 + Math.floor(Math.random()*89999));
-    return { name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2), amount: Math.round((150 + Math.random()*9850)*100)/100, key: `${Date.now()}-${i}-${Math.random()}` };
-  }).sort((a,b)=>b.amount-a.amount);
+  const countries = [
+    {flag:'🇮🇳',code:'IN',name:'India',currency:'INR',locale:'en-IN'},
+    {flag:'🇸🇬',code:'SG',name:'Singapore',currency:'SGD',locale:'en-SG'},
+    {flag:'🇲🇾',code:'MY',name:'Malaysia',currency:'MYR',locale:'en-MY'},
+    {flag:'🇵🇭',code:'PH',name:'Philippines',currency:'PHP',locale:'en-PH'},
+    {flag:'🇹🇭',code:'TH',name:'Thailand',currency:'THB',locale:'en-TH'},
+    {flag:'🇺🇸',code:'US',name:'United States',currency:'USD',locale:'en-US'},
+    {flag:'🇬🇧',code:'GB',name:'United Kingdom',currency:'GBP',locale:'en-GB'}
+  ];
+  const country = countries[Math.floor(Math.random()*countries.length)];
+  const uid = String(10000 + Math.floor(Math.random()*89999));
+  const ts = Date.now();
+  const amount = Math.round((2000 + Math.random()*98000)*100)/100;
+  const formatted = new Intl.NumberFormat(country.locale,{style:'currency',currency:country.currency,maximumFractionDigits:2}).format(amount);
+  winningDemoRows.unshift({ game: games[Math.floor(Math.random()*games.length)], name: aliases[Math.floor(Math.random()*aliases.length)], uid: '***' + uid.slice(-2),  amount, formatted, currency:country.currency, country:country.flag, countryCode:country.code, countryName:country.name, winType:['Big Win','Lucky Win','Bonus Win'][Math.floor(Math.random()*3)], mode:['Classic','Quick','Turbo'][Math.floor(Math.random()*3)], ts, key: `${ts}-${Math.random()}` });
+  winningDemoRows = winningDemoRows.slice(0, 10);
   const host = $('#winningDemoRows');
-  if (host) host.innerHTML = rows.map((r,i)=>`<div class="winning-demo-row"><span class="winning-rank">${i+1}</span><span class="winning-person"><b>${esc(r.name)}</b><small>${esc(r.uid)}</small></span><span class="winning-win">WIN</span><strong>+${inr(r.amount)}</strong></div>`).join('');
+  if (host) host.innerHTML = winningDemoRows.map((r,i)=>`<div class="kiss-row ${i===0?'is-new':''}"><span class="kiss-country" title="${esc(r.countryName)} · ${esc(r.currency)}"><span class="kiss-flag">${r.country}</span><b>${esc(r.countryCode)}</b></span><span class="kiss-user">${esc(r.name.slice(0,2).toLowerCase())}***${esc(r.uid.slice(-2))}</span><span class="kiss-game"><i>${esc(r.game)}</i></span><strong class="kiss-bonus">${esc(r.formatted)}</strong><span class="kiss-type"><i>${esc(r.winType)}</i></span><span class="kiss-mode">${esc(r.mode)}</span><time>${gmtStamp(r.ts)}</time></div>`).join('');
+  const updated=$('#winningUpdated'), next=$('#winningNext');
+  if(updated) updated.textContent=gmtStamp(ts);
+  if(next) next.textContent=gmtStamp(ts+2000);
+}
+function gmtStamp(ts){
+  const d=new Date(ts), p=n=>String(n).padStart(2,'0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+function bindWinnersActions(){
+  const card=$('#kissBoard'); if(!card) return;
+  const share=$('#kissShare'), full=$('#kissFull');
+  if(share) share.onclick=async()=>{
+    const data={title:'Recent Winners',text:'Recent Winners',url:location.href};
+    try{ if(navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(location.href); showToast('Link copied.'); } }catch{}
+  };
+  if(full) full.onclick=()=>{
+    try{ if(document.fullscreenElement) document.exitFullscreen(); else if(card.requestFullscreen) card.requestFullscreen(); }catch{}
+  };
 }
 function startWinningDemo() {
-  clearInterval(winningActivityTimer); makeWinningDemoBatch();
-  winningActivityTimer = setInterval(makeWinningDemoBatch, 10000);
+  // Keep a single timer and do not animate a detached/hidden Home page.
+  if (winningActivityTimer) { clearInterval(winningActivityTimer); winningActivityTimer = null; }
+  if (document.hidden || state.page !== 'Home') return;
+  winningDemoRows = [];
+  makeWinningDemoBatch();
+  winningActivityTimer = setInterval(() => {
+    if (document.hidden || state.page !== 'Home' || !document.getElementById('winningDemoRows')) {
+      clearInterval(winningActivityTimer); winningActivityTimer = null;
+      return;
+    }
+    makeWinningDemoBatch();
+  }, 2000);
+}
+function istDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+}
+function dailyLeaderboardRows() {
+  const names = ['Arjun','Aarav','Riya','Vivaan','Kabir','Dev','Anaya','Ishita','Meera','Sana'];
+  // Top three are illustrative DEMO amounts: #1 always stays between ₹40 lakh and ₹1 crore;
+  // #2 and #3 remain close behind. These values are display-only, never balances or payouts.
+  const key = istDateKey();
+  // Date-seeded values stay stable for the day and refresh at IST midnight.
+  let seed = 2166136261;
+  for (const ch of key) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const rand = () => { seed = (Math.imul(seed,1664525)+1013904223) >>> 0; return seed / 4294967296; };
+  const firstPrize = Math.round((5000000 + rand() * 4500000) / 10000) * 10000; // ₹50L–₹95L
+  const secondPrize = firstPrize - Math.round((200000 + rand() * 200000) / 10000) * 10000; // ₹2L–₹4L less
+  const thirdPrize = secondPrize - Math.round((200000 + rand() * 200000) / 10000) * 10000; // ₹2L–₹4L less
+  const topPrizes = [firstPrize, secondPrize, thirdPrize];
+  const base = [0,0,0,35983,31986,26300,24990,18770,16641,14220];
+  return names.map((name,i)=>({name,amount:i < 3 ? topPrizes[i] : Math.round(base[i]*(0.88+rand()*0.24))}))
+    .sort((a,b)=>b.amount-a.amount)
+    .map((row,i)=>({...row,rank:i+1}));
+}
+function demoEarningsChart() {
+  const rows = dailyLeaderboardRows();
+  return `<section class="section-head"><div><span class="eyebrow">ILLUSTRATIVE LEADERBOARD</span><h2>Today's Earnings Chart</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="earnings-demo-card" id="earningsLeaderboard"><p class="fine-print">Simulated leaderboard only — these are not actual user earnings or payouts. Automatically refreshed daily · ${istDateKey()} IST</p><div class="earnings-podium">${rows.slice(0,3).map(r=>`<div class="podium-place rank-${r.rank}"><span class="podium-rank-label">${r.rank===1?'🏆 CHAMPION':r.rank===2?'🥈 RUNNER UP':'🥉 THIRD PLACE'}</span><span class="podium-medal">${r.rank===1?'👑':r.rank===2?'🥈':'🥉'}</span><b>#${r.rank} ${r.name}</b><small class="podium-prize-label">DEMO PRIZE</small><strong>${inr(r.amount)}</strong></div>`).join('')}</div><div class="earnings-list">${rows.slice(3).map(r=>`<div><b>#${r.rank}</b><span>${r.name}</span><strong>${inr(r.amount)}</strong></div>`).join('')}</div></article>`;
+}
+function scheduleDailyLeaderboardRefresh() {
+  clearTimeout(dailyEarningsTimer);
+  const now = new Date();
+  // IST midnight is 18:30 UTC on the previous date.
+  const next = new Date(now);
+  next.setUTCHours(18,30,0,0);
+  if (next <= now) next.setUTCDate(next.getUTCDate()+1);
+  dailyEarningsTimer = setTimeout(() => {
+    const host = $('#earningsLeaderboard');
+    if (host) {
+      const fresh = demoEarningsChart();
+      const wrapper = document.createElement('div'); wrapper.innerHTML = fresh;
+      const newCard = wrapper.querySelector('#earningsLeaderboard');
+      if (newCard) host.replaceWith(newCard);
+    }
+    scheduleDailyLeaderboardRefresh();
+  }, Math.max(1000,next-now));
 }
 
+function supportButtonsHtml(extraClass='support-actions') {
+  const rows = Array.isArray(state.cfg?.supportButtons) ? state.cfg.supportButtons.filter(x=>x && x.enabled && x.url) : [];
+  if (!rows.length) return '';
+  return `<div class="${extraClass}" aria-label="Customer support">${rows.map(x=>`<a class="support-action support-${esc(x.platform)}" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.name || (x.platform==='whatsapp'?'WhatsApp Support':'Telegram Support'))}</a>`).join('')}</div>`;
+}
 function renderHome() {
   const hello = state.me ? `Welcome, ${esc(state.me.name.split(' ')[0])}` : 'Explore digital markets';
   $('#appMain').innerHTML = `${noticeBar()}
     <section class="welcome"><div><span class="eyebrow">YOUR MARKET AT A GLANCE</span><h1>${hello}</h1><p>Live digital asset prices, updated every 20 seconds.</p><button class="welcome-cta" data-page="${state.me ? 'Assets' : 'Auth'}">${state.me ? 'Open wallet' : 'Login / Register'} <span>↗</span></button></div><div class="coin-art" aria-hidden="true">₿</div><div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div></section>
-    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>
+    <section class="actions" aria-label="Quick actions"><button data-page="Recharge"><span class="action-icon blue">↗</span><span>Recharge</span></button><button data-page="Withdrawal"><span class="action-icon violet">↙</span><span>Withdrawal</span></button><button data-page="Signal"><span class="action-icon mint">⌁</span><span>Movers</span></button><button data-page="Service"><span class="action-icon amber">☏</span><span>Service</span></button><button data-page="Invite"><span class="action-icon pink">♧</span><span>Invite</span></button></section>${supportButtonsHtml()}
     <section class="promo-grid"><article class="promo"><div><span class="eyebrow">GET STARTED</span><h2>Guide</h2><p>How deposits and withdrawals work.</p><button class="light-btn" data-page="Guide">View guide ↗</button></div><div class="promo-icon">✦</div></article><article class="promo orange"><div><span class="eyebrow">OFFERS</span><h2>Bonus</h2><p>Current announcements and offers.</p><button class="light-btn" data-page="Bonus">View ↗</button></div><div class="promo-icon">🎁</div></article></section>
-    <section class="section-head home-games-head"><div><span class="eyebrow">PLAY ZONE</span><h2>Games</h2></div><button class="text-btn" data-page="Games">All games ↗</button></section><section class="home-games-grid"><article class="home-game-card"><span class="home-game-icon">🪙</span><div><b>Coin Flip / Head Tail</b><small>Pick Heads or Tails</small></div><button data-page="Games">Play ↗</button></article><article class="home-game-card"><span class="home-game-icon">🎯</span><div><b>WinGo</b><small>Number and colour game</small></div><button data-page="Games">Play ↗</button></article></section>
+    <section class="section-head home-games-head"><div><span class="eyebrow">PLAY ZONE</span><h2>Games</h2></div><button class="text-btn" data-page="Games">All games ↗</button></section><section class="home-games-grid">
+${(state.customGames||[]).map(g=>`<article class="home-game-card ${g.status==='play'?'':'home-game-soon'}"><span class="home-game-icon"><img src="${esc(g.image)}" alt="${esc(g.name)}"></span><div><b>${esc(g.name)}</b><small>${esc(g.description||'Coming soon')}</small></div>${g.status==='play'?(g.slug==='coin'?'<button data-page="Games">Play ↗</button>':g.slug==='wingo'?'<button data-page="Games">Play ↗</button>':'<button data-page="Games">Play ↗</button>'):'<button type="button" disabled>Soon</button>'}</article>`).join('')}
+</section>
     <section class="section-head"><div><span class="eyebrow">MARKET OVERVIEW</span><h2>Trending markets</h2></div><button class="text-btn" data-page="Quotes">See all ↗</button></section>
     <section class="market-cards" id="marketCards">${marketCards()}</section>
     <section class="section-head list-head"><div><span class="eyebrow">LIVE MARKET DATA</span><h2>Trending assets</h2></div></section><div id="staleNote">${staleNote()}</div>
     <section class="asset-list" id="assetList">${renderAssetRows()}</section>
-    <section class="section-head"><div><span class="eyebrow">ACTIVITY FEED</span><h2>Live Winning Activity</h2></div><span class="activity-demo-tag">DEMO</span></section><article class="winning-demo-card"><div class="winning-demo-note"><span class="live-dot"></span> Illustrative activity · refreshes every 10 seconds · not real payouts</div><div id="winningDemoRows" aria-live="polite"></div></article>
+    <article class="kiss-board" id="kissBoard"><div class="kiss-tools"><button type="button" id="kissShare" aria-label="Share" title="Share"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button><button type="button" id="kissFull" aria-label="Fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button></div><div class="kiss-logo"><span class="kiss-logo-mark">B</span><span class="kiss-logo-text">Crypto Bridge</span></div><h2 class="kiss-title">Recent Winners</h2><div class="kiss-info"><div><small>Last Updated</small><b id="winningUpdated">—</b></div><div><small>Next Update</small><b id="winningNext">—</b></div><div><small>Time Zone</small><b>GMT</b></div></div><div class="kiss-scroll"><div class="kiss-head"><span>Country</span><span>Username</span><span>Game</span><span>Bonus</span><span>Type</span><span>Last Mode</span><span>Date Time</span></div><div id="winningDemoRows" aria-live="polite"></div></div><div class="kiss-foot"><span>Currency: INR · SGD · MYR · PHP · THB · USD · GBP</span><span>Time Zone: GMT (UTC+0)</span></div><p class="kiss-demo-note">DEMO / SIMULATED — display-only sample activity, not verified payouts or real transactions.</p></article>
+    ${demoEarningsChart()}
     <section class="section-head"><div><span class="eyebrow">PLAY SAFELY</span><h2>18+ Rules &amp; Responsible Play</h2></div></section><article class="responsible-card"><p><b>18+ only.</b> Participation is restricted to adults aged 18 or above.</p><ul><li>Provide accurate account information.</li><li>Read game rules and winning conditions before participating.</li><li>There are no guaranteed winnings.</li><li>Never risk money you cannot afford to lose.</li><li>Follow all applicable local laws and regulations.</li><li>Contact Support for account-related issues.</li></ul><p class="responsible-foot">Set limits, take breaks, and stop playing if it no longer feels recreational.</p></article>`;
   startWinningDemo();
+  bindWinnersActions();
+  scheduleDailyLeaderboardRefresh();
 }
 
 function authPage() {
   const reg = state.authMode === 'register', ref = new URLSearchParams(location.search).get('ref') || '';
-  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><div class="auth-language"><label for="authLanguage">Language / भाषा</label><select id="authLanguage"><option value="en">English</option><option value="hi">हिन्दी</option></select></div><h1>${reg ? 'Create account' : 'Login'}</h1><p>${reg ? 'Register to deposit, withdraw and track your wallet.' : 'Login to your Crypto Bridge wallet.'}</p></section>
   <form id="authForm" class="demo-form" autocomplete="on">
     ${reg ? '<label for="aName">Full name</label><input id="aName" autocomplete="name" required maxlength="60">' : ''}
     <label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email" required>
@@ -205,8 +357,12 @@ function authPage() {
     <p class="msg-err" id="authErr" role="alert"></p>
     <button class="primary-btn" type="submit">${reg ? 'Register' : 'Login'}</button>
     <button class="link-btn" type="button" id="swapAuth">${reg ? 'Already have an account? Login' : 'New here? Create an account'}</button>
+    ${!reg ? '<button class="link-btn" type="button" id="forgotPassword">Forgot password?</button>' : ''}
+    ${supportButtonsHtml()}
   </form>`;
+  if ($('#authLanguage')) { $('#authLanguage').value=state.language; $('#authLanguage').onchange=()=>setLanguage($('#authLanguage').value); }
   $('#swapAuth').onclick = () => { state.authMode = reg ? 'login' : 'register'; authPage(); };
+  if (!reg && $('#forgotPassword')) $('#forgotPassword').onclick = forgotPasswordPage;
   $('#authForm').onsubmit = async e => {
     e.preventDefault(); const btn = e.submitter; btn.disabled = true; $('#authErr').textContent = '';
     try {
@@ -216,13 +372,31 @@ function authPage() {
   };
 }
 
-function txList() {
-  const bc = bonusCfg(), rows = [...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].sort((a, b) => b.ts - a.ts).slice(0, 40);
+
+async function forgotPasswordPage() {
+  $('#appMain').innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT RECOVERY</span><h1>Forgot password</h1><p>We'll send a one-time code to your registered email address.</p></section><form id="forgotRequest" class="demo-form"><label for="resetEmail">Registered email</label><input id="resetEmail" type="email" required autocomplete="email"><p class="msg-err" id="resetErr" role="alert"></p><button class="primary-btn" type="submit">Send email OTP</button><button class="link-btn" type="button" id="backLogin">Back to login</button>${supportButtonsHtml()}</form>`;
+  $('#backLogin').onclick=()=>{state.authMode='login';authPage();};
+  $('#forgotRequest').onsubmit=async e=>{
+    e.preventDefault();const btn=e.submitter;btn.disabled=true;$('#resetErr').textContent='';
+    try{
+      await api('password/forgot/request',{email:$('#resetEmail').value});const email=$('#resetEmail').value.trim();
+      $('#appMain').innerHTML=`<section class="page-intro"><span class="eyebrow">VERIFY EMAIL</span><h1>Enter OTP</h1><p>Enter the 6-digit code sent to ${esc(email)}. It expires in 10 minutes.</p></section><form id="verifyOtp" class="demo-form"><label>6-digit OTP</label><input id="resetOtp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required><p class="msg-err" id="otpErr" role="alert"></p><button class="primary-btn" type="submit">Verify OTP</button><button class="link-btn" id="resendOtp" type="button">Resend code</button></form>`;
+      $('#verifyOtp').onsubmit=async ev=>{ev.preventDefault();const b=ev.submitter;b.disabled=true;try{
+        const v=await api('password/forgot/verify',{email,otp:$('#resetOtp').value});const resetToken=v.resetToken;
+        $('#appMain').innerHTML=`<section class="page-intro"><span class="eyebrow">NEW PASSWORD</span><h1>Reset password</h1></section><form id="resetPassword" class="demo-form"><label>New password</label><input id="newResetPass" type="password" minlength="8" maxlength="100" required autocomplete="new-password"><label>Confirm new password</label><input id="confirmResetPass" type="password" minlength="8" maxlength="100" required autocomplete="new-password"><p class="msg-err" id="newPassErr" role="alert"></p><button class="primary-btn" type="submit">Update password</button></form>`;
+        $('#resetPassword').onsubmit=async ev2=>{ev2.preventDefault();const sb=ev2.submitter;sb.disabled=true;try{await api('password/forgot/reset',{email,resetToken,password:$('#newResetPass').value,confirmPassword:$('#confirmResetPass').value});showToast('Password reset. Please log in.');state.authMode='login';authPage();}catch(x){$('#newPassErr').textContent=x.message;sb.disabled=false;}};
+      }catch(x){$('#otpErr').textContent=x.message;b.disabled=false;}};
+      $('#resendOtp').onclick=async()=>{try{await api('password/forgot/request',{email});showToast('If the account exists, a new code has been sent.');}catch(x){$('#otpErr').textContent=x.message;}};
+    }catch(x){$('#resetErr').textContent=x.message;btn.disabled=false;}
+  };
+}
+function txList(filter) {
+  const bc = bonusCfg(), rows = [...(state.walletTransfers || []).map(x => ({ ...x, kind: 'Wallet Transfer' })), ...state.deposits.map(d => ({ ...d, kind: 'Deposit' })), ...state.withdrawals.map(w => ({ ...w, kind: 'Withdrawal' })), ...state.trades.map(t => ({ ...t, kind: t.side === 'buy' ? 'Buy' : 'Sell' })), ...state.positions.map(p => ({ ...p, kind: 'Reward' }))].filter(r => !filter || filter === 'all' || ({ deposit: ['Deposit'], withdraw: ['Withdrawal'], trade: ['Buy', 'Sell'], other: ['Reward', 'Wallet Transfer'] }[filter] || []).includes(r.kind)).sort((a, b) => b.ts - a.ts).slice(0, 40);
   if (!rows.length) return '<div class="empty-state">No transactions yet.</div>';
-  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★' }, plus = { Deposit: 1, Sell: 1 };
+  const icon = { Deposit: '↗', Withdrawal: '↙', Buy: '＋', Sell: '−', Reward: '★', 'Wallet Transfer': '⇄' }, plus = { Deposit: 1, Sell: 1 };
   return `<div class="activity-list">${rows.map(r => {
-    const rw = r.kind === 'Reward', val = rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
-    const sub = rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
+    const rw = r.kind === 'Reward', transfer = r.kind === 'Wallet Transfer', val = transfer ? '↔ ' + inr(r.amount) : rw && r.status === 'Settled' ? '+' + inr(r.profit) : (plus[r.kind] ? '+' : '−') + inr(r.amount), cls = (plus[r.kind] || (rw && r.status === 'Settled')) ? 'positive' : '';
+    const sub = transfer ? `${r.direction === 'main-to-rd' ? 'Main Wallet → 3rd Wallet (legacy)' : '3rd Wallet → Main Wallet'} · ${dt(r.ts)} · Ref #${r.id}` : rw ? `${inr(r.amount)} @ +${r.returnPct}%${r.status === 'Active' ? ' · pays ' + dt(r.matureAt) : ''}` : `${r.utr ? ' · UTR ' + esc(r.utr) : ''}${r.provider === 'razorpay' ? ' · Razorpay · Fee ' + inr(r.fee || 0) + ' · Payout ' + inr(r.netAmount == null ? r.amount : r.netAmount) : ''}${r.upi ? ' · ' + esc(r.upi) : ''}${r.qty ? ' · ' + qtyFmt(r.qty) + ' @ ' + inr(r.price) : ''}`;
     return `<div><span class="activity-icon">${icon[r.kind]}</span><span><b>${rw ? esc(r.symbol) : r.kind}${!rw && r.symbol ? ' ' + esc(r.symbol) : ''} ${r.status ? `<span class="pill ${esc(r.status)}">${esc(r.status)}</span>` : ''}</b><small>${dt(r.ts)}${rw ? ' · ' : ''}${sub}</small></span><strong class="${cls}">${val}</strong></div>`;
   }).join('')}</div>`;
 }
@@ -296,20 +470,26 @@ function drawChart() {
   const drawings = state.chartDrawings[key] || [];
   drawings.forEach(line => { if (line.horizontal) { body += `<line x1="${L}" y1="${Y(line.p1)}" x2="${W-R}" y2="${Y(line.p1)}" stroke="#4263eb" stroke-width="2" stroke-dasharray="5 3"/>`; return; } const ia = d.findIndex(x => x[0] === line.t1), ib = d.findIndex(x => x[0] === line.t2); if (ia >= 0 && ib >= 0) body += `<line x1="${X(ia)}" y1="${Y(line.p1)}" x2="${X(ib)}" y2="${Y(line.p2)}" stroke="#4263eb" stroke-width="2" stroke-linecap="round"/><circle cx="${X(ia)}" cy="${Y(line.p1)}" r="3" fill="#4263eb"/><circle cx="${X(ib)}" cy="${Y(line.p2)}" r="3" fill="#4263eb"/>`; });
   const ly = Y(last[4]);
-  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart"><rect x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="#fff"/>${g}${body}<line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${vTop + VH}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="transparent" style="touch-action:none;cursor:${state.drawMode ? 'crosshair' : 'grab'}"/></svg>`;
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${state.coin} ${candle ? 'candlestick' : 'line'} chart"><rect x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="#fff"/>${g}<g id="plotPan">${body}</g><line x1="${L}" x2="${W - R}" y1="${ly}" y2="${ly}" stroke="${col}" stroke-dasharray="3 3" opacity=".7"/><rect x="${W - R + 1}" y="${ly - 8}" width="${R - 2}" height="16" rx="4" fill="${col}"/><text x="${W - R + 5}" y="${ly + 3.5}" font-size="10" font-weight="700" fill="#fff">${pFmt(last[4])}</text><line id="xh" y1="${T}" y2="${vTop + VH}" stroke="#9aa3b5" stroke-dasharray="2 3" visibility="hidden"/><rect id="ov" x="${L}" y="${T}" width="${pw}" height="${PH + VG + VH}" fill="transparent" style="touch-action:none;cursor:${state.drawMode ? 'crosshair' : 'grab'}"/></svg>`;
   const vf = v => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toFixed(1);
+  const panLayer = box.querySelector('#plotPan');
   const info = i => { const x = d[i], ch = (x[4] - x[1]) / (x[1] || 1) * 100, cc = ch >= 0 ? '#159d72' : '#df5b67'; $('#chartInfo').innerHTML = `<span>${tf(x[0])}</span>` + (candle ? `<span>O <b>${pFmt(x[1])}</b></span><span>H <b>${pFmt(x[2])}</b></span><span>L <b>${pFmt(x[3])}</b></span>` : '') + `<span>C <b>${pFmt(x[4])}</b></span><span style="color:${cc}"><b>${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</b></span><span>Vol <b>${vf(x[5] || 0)}</b></span>` + (candle ? '<span class="ma-row">' + MAS.map(m => m.v[i] == null ? '' : `<span style="color:${m.col}">MA${m.p} <b style="color:${m.col}">${pFmt(m.v[i])}</b></span>`).join('') + '</span>' : ''); };
   info(n - 1); const xh = $('#xh'), ov = $('#ov'), svg = box.querySelector('svg'); if (svg) { svg.style.transformOrigin = 'center center'; svg.style.willChange = 'transform'; } let drag = null;
   const point = e => { const r = ov.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H; return { i: Math.max(0, Math.min(n - 1, Math.floor((px - L) / pw * n))), price: hi - (py - T) / PH * (hi - lo) }; };
   const activePointers = new Map(); let pinchStart = null; let gestureChanged = false;
+  let dragVelocity = 0, lastDragSample = null, inertiaFrame = 0, previewPx = 0, commitPreview = null;
+  const clampOffset = value => Math.max(0, Math.min(total - view.count, value));
+  const setPreview = px => { previewPx = px; if (panLayer) panLayer.setAttribute('transform', `translate(${px.toFixed(2)} 0)`); };
   const finishGesture = () => {
     state.chartGestureActive = false;
-    if (svg) svg.style.transform = '';
+    if (panLayer) panLayer.removeAttribute('transform');
     drawChart();
     state.chartPendingRedraw = false;
   };
+  const stopInertia = () => { if (inertiaFrame) cancelAnimationFrame(inertiaFrame); inertiaFrame = 0; if (commitPreview) { commitPreview(); commitPreview = null; } };
   ov.addEventListener('pointerdown', e => {
     e.preventDefault();
+    stopInertia();
     try { ov.setPointerCapture(e.pointerId); } catch (_) {}
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (activePointers.size === 1) gestureChanged = false;
@@ -318,6 +498,7 @@ function drawChart() {
       drag = null;
       const pts = [...activePointers.values()];
       pinchStart = { distance: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1, count: view.count, changed: false };
+      if (panLayer) panLayer.removeAttribute('transform');
       return;
     }
     if (state.drawMode) {
@@ -341,7 +522,8 @@ function drawChart() {
       }
       return;
     }
-    drag = { x: e.clientX, offset: view.offset, moved: false };
+    drag = { x: e.clientX, offset: view.offset, moved: false, dx: 0 };
+    dragVelocity = 0; lastDragSample = { x: e.clientX, t: performance.now() };
     ov.style.cursor = 'grabbing';
   });
   ov.addEventListener('pointermove', e => {
@@ -350,19 +532,22 @@ function drawChart() {
       e.preventDefault();
       const pts = [...activePointers.values()], dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
       view.count = Math.max(12, Math.min(total, Math.round(pinchStart.count * pinchStart.distance / dist)));
-      view.offset = Math.max(0, Math.min(total - view.count, view.offset));
+      view.offset = clampOffset(view.offset);
       pinchStart.changed = true; gestureChanged = true;
       return;
     }
     if (drag && !state.drawMode) {
       e.preventDefault();
-      const dx = e.clientX - drag.x;
-      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
-      if (drag.moved) {
-        // Commit the logical candle offset while dragging; SVG transform is only a smooth visual preview.
-        view.offset = Math.max(0, Math.min(total - view.count, drag.offset + Math.round(dx / Math.max(1, pw) * view.count * -1)));
-        if (svg) svg.style.transform = `translate3d(${dx}px,0,0)`;
+      const dx = e.clientX - drag.x, sampleNow = performance.now();
+      if (lastDragSample) {
+        const elapsed = Math.max(1, sampleNow - lastDragSample.t);
+        const instant = (e.clientX - lastDragSample.x) / elapsed;
+        // Smooth the velocity sample to avoid a sudden fling from a single noisy pointer event.
+        dragVelocity = dragVelocity * .65 + instant * .35;
       }
+      lastDragSample = { x: e.clientX, t: sampleNow };
+      if (Math.abs(dx) > 2) { drag.moved = true; gestureChanged = true; }
+      if (drag.moved) { drag.dx = dx; setPreview(dx); }
       return;
     }
     const q = point(e);
@@ -374,12 +559,39 @@ function drawChart() {
     const wasPinching = !!pinchStart;
     const pinchChanged = !!(pinchStart && pinchStart.changed);
     if (activePointers.size < 2) pinchStart = null;
-    const moved = !!(drag && drag.moved);
+    const completedDrag = drag;
     drag = null;
     if (activePointers.size === 0) {
-      if (moved || gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) finishGesture();
-      else { state.chartGestureActive = false; if (svg) svg.style.transform = ''; if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab'; }
-      gestureChanged = false;
+      if (completedDrag && completedDrag.moved && !state.drawMode) {
+        // Convert the pointer movement into candle offset once. Do not rebuild the SVG
+        // on every animation frame: that was the main source of the chart stutter.
+        const base = completedDrag.offset;
+        const pxPerOffset = pw / Math.max(1, view.count);
+        const targetPx = completedDrag.dx + (Math.abs(dragVelocity) > .035 ? dragVelocity * 145 : 0);
+        const clampedTargetOffset = clampOffset(base - targetPx / pxPerOffset);
+        const finalPx = (base - clampedTargetOffset) * pxPerOffset;
+        const startPx = completedDrag.dx;
+        const distance = finalPx - startPx;
+        if (Math.abs(distance) > 1.5) {
+          const started = performance.now(), duration = Math.min(520, Math.max(130, Math.abs(distance) / Math.max(0.35, Math.abs(dragVelocity))));
+          commitPreview = () => { view.offset = clampOffset(base - previewPx / pxPerOffset); if (panLayer) panLayer.removeAttribute('transform'); };
+          const easeOut = t => 1 - Math.pow(1 - t, 3);
+          const animate = now => {
+            const t = Math.min(1, (now - started) / duration);
+            setPreview(startPx + distance * easeOut(t));
+            if (t < 1) inertiaFrame = requestAnimationFrame(animate);
+            else { inertiaFrame = 0; view.offset = clampedTargetOffset; commitPreview = null; finishGesture(); }
+          };
+          inertiaFrame = requestAnimationFrame(animate);
+        } else { view.offset = clampedTargetOffset; finishGesture(); }
+      } else if (gestureChanged || (wasPinching && pinchChanged) || state.chartPendingRedraw) {
+        finishGesture();
+      } else {
+        state.chartGestureActive = false;
+        if (panLayer) panLayer.removeAttribute('transform');
+        if (ov.isConnected) ov.style.cursor = state.drawMode ? 'crosshair' : 'grab';
+      }
+      gestureChanged = false; lastDragSample = null;
     }
   };
   ov.addEventListener('pointerup', endPointer);
@@ -443,13 +655,15 @@ function bindCoin() {
 }
 
 async function renderPage(page, quiet) {
+  if (page !== 'Home' && winningActivityTimer) { clearInterval(winningActivityTimer); winningActivityTimer = null; }
+  if (page !== 'Home' && dailyEarningsTimer) { clearTimeout(dailyEarningsTimer); dailyEarningsTimer = null; }
   if (PROTECTED.has(page) && !state.me) return needLogin(page);
   state.page = page; syncBottomNav();
   const route = page === 'Coin' && state.coin ? `#Coin:${encodeURIComponent(state.coin)}` : `#${encodeURIComponent(page)}`;
   if (location.hash !== route) history.replaceState(null, '', route);
   $$('.bottom-nav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   const main = $('#appMain'), c = state.cfg;
-  if (page === 'Home') renderHome();
+  if (page === 'Home') { try { const catalog=await api('games/catalog'); state.customGames=catalog.games||[]; } catch { state.customGames=[]; } renderHome(); }
   else if (page === 'Coin') {
     main.innerHTML = `<section class="page-intro"><button class="link-btn" data-page="Quotes">← Back to quotes</button></section><div id="coinWrap">${bonusCoins().some(b => b.enabled && state.coin === b.symbol) ? bonusBody() : coinBody() || '<div class="empty-state">Price not loaded yet.</div>'}</div>`;
     if (bonusCoins().some(b => b.enabled && state.coin === b.symbol)) { bindBonus(); if ($('#chartBox')) bindChart(); } else { bindCoin(); if ($('#chartBox')) bindChart(); }
@@ -457,7 +671,7 @@ async function renderPage(page, quiet) {
   else if (page === 'Auth') { if (state.me) return renderPage('Profile'); authPage(); }
   else if (page === 'Profile') {
     const u = state.me; if (!u) return needLogin('Profile');
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p><p class="fine-print">Account UID: <code>${esc(u.uid || u.id)}</code></p></section>
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">ACCOUNT</span><div class="auth-language"><label for="authLanguage">Language / भाषा</label><select id="authLanguage"><option value="en">English</option><option value="hi">हिन्दी</option></select></div><h1>${esc(u.name)}</h1><p>${esc(u.email)}</p><p class="fine-print">Account UID: <code>${esc(u.uid || u.id)}</code></p></section>
     ${u.role === 'admin' ? '<article class="content-card"><h2>Admin</h2><p class="fine-print">You are signed in as an administrator.</p><a class="primary-btn" style="display:block;text-align:center;text-decoration:none" href="/admin">Open Admin Panel</a></article>' : ''}
     <form id="pwForm" class="demo-form"><h2 style="margin-top:0;font-size:16px">Change password</h2><label for="pwC">Current password</label>${pwField('pwC', 'current-password', 'required')}<label for="pwN">New password (min 8)</label>${pwField('pwN', 'new-password', 'minlength="8" required')}<p class="msg-err" id="pwErr"></p><button class="primary-btn" type="submit">Update password</button></form>
     <div class="demo-form" style="margin-top:14px"><button class="secondary-btn" id="logout" type="button">Logout</button></div>`;
@@ -468,23 +682,48 @@ async function renderPage(page, quiet) {
     $('#assetSearch').addEventListener('input', e => { state.query = e.target.value; $('#quoteList').innerHTML = renderAssetRows(state.query); });
     $('#clearSearch').addEventListener('click', () => { state.query = ''; $('#assetSearch').value = ''; $('#quoteList').innerHTML = renderAssetRows(''); $('#assetSearch').focus(); });
   } else if (page === 'Assets') {
-    main.innerHTML = `${noticeBar()}<section class="page-intro"><span class="eyebrow">WALLET</span><h1>Assets</h1><p>Your wallet balance in Indian rupees.</p><p class="fine-print">Account UID: <code>${esc(state.me.uid || state.me.id)}</code></p></section><article class="balance-card"><span>Main Wallet</span><strong>${inr(state.me.balance)}</strong><small>Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)}</small><div class="stat-grid"><div><small>Third Wallet · Coin profit</small><b>${inr(state.me.thirdWallet || 0)}</b></div><div><small>Deposit amount eligible for investment</small><b>${inr(state.me.depositEligible || 0)}</b></div></div><form id="investForm" class="demo-form"><h3>Coin Investment</h3><p class="fine-print">Admin limit: ${Number(c.investment?.depositPercent ?? 50)}% of deposit-eligible funds · Profit rate: ${Number(c.investment?.profitPct ?? 5)}% · Holding: ${Number(c.investment?.holdingDays ?? 7)} days. Principal returns to Main Wallet; profit goes to Third Wallet.</p><label>Investment amount (₹)</label><input id="investAmount" type="number" min="1" step="1" required><button class="primary-btn" type="submit" ${c.investment?.enabled === false ? 'disabled' : ''}>Invest deposit funds</button><p class="msg-err" id="investErr"></p></form><form id="transferForm" class="demo-form"><h3>Third Wallet → Main Wallet</h3><label>Transfer amount (₹)</label><input id="transferAmount" type="number" min="1" step="1" required><button class="secondary-btn" type="submit">Transfer to Main Wallet</button><p class="msg-err" id="transferErr"></p></form><small>Withdrawal is available only from Main Wallet. Third Wallet cannot be withdrawn directly; transfer Third Wallet funds to Main Wallet first.</small><div class="balance-actions"><button data-page="Recharge">Recharge</button><button data-page="Withdrawal">Withdrawal</button><button data-page="Quotes">Buy / Sell</button></div><div class="balance-actions"><button data-page="Profile">Change password</button><button id="logoutBtn" type="button">Logout</button></div>${['admin','headAdmin','panelAdmin'].includes(state.me.role) ? `<div class="balance-actions"><a class="primary-btn" style="display:block;text-align:center;text-decoration:none;flex:1" href="${state.me.role === 'panelAdmin' ? '/p/' + esc(String(state.me.panelId || activePanelSlug())) + '/admin' : '/admin'}">Open Admin Panel ↗</a></div>` : ''}</article><section class="section-head"><div><span class="eyebrow">YOUR COINS</span><h2>Holdings</h2></div></section>${holdingsList()}<section class="section-head"><div><span class="eyebrow">YOUR RECORDS</span><h2>Recent activity</h2></div></section>${txList()}`;
+    main.innerHTML = `${noticeBar()}${(() => {
+      const fx = Number(state.fx || 0), hs = Object.entries(state.me.holdings || {}).map(([sym, q]) => { const p = state.prices.find(x => x.symbol === sym); const v = p && fx ? q * p.price * fx : 0; return { sym, v, cost: Number((state.me.cost || {})[sym] || 0), mark: p ? p.mark : sym[0] }; });
+      const cv = hs.reduce((t, x) => t + x.v, 0), cc = hs.reduce((t, x) => t + x.cost, 0), pnl = cv - cc, wal = Number(state.me.balance || 0) + Number(state.me.thirdWallet || 0), tot = wal + cv;
+      const hues = ['#315df5', '#66d9d0', '#ffd479', '#ff8f6b', '#a78bfa', '#5ad19a'];
+      const alloc = cv > 0 ? `<div class="wl-alloc"><div class="wl-bar">${hs.filter(x => x.v > 0).map((x, i) => `<i style="width:${(x.v / cv * 100).toFixed(1)}%;background:${hues[i % hues.length]}"></i>`).join('')}</div><div class="wl-legend">${hs.filter(x => x.v > 0).map((x, i) => `<span><i style="background:${hues[i % hues.length]}"></i>${esc(x.sym)} ${(x.v / cv * 100).toFixed(0)}%</span>`).join('')}</div></div>` : '';
+      return `<section class="wl-profile"><span class="wl-avatar">${esc(String(state.me.name || 'U').trim().charAt(0).toUpperCase())}</span><div><h2>${esc(state.me.name)}</h2><p>UID <b>${esc(state.me.uid || state.me.id)}</b> <button type="button" id="wlCopy" class="wl-copy" aria-label="Copy UID">⧉</button></p></div></section>
+    <section class="wl-hero"><div class="wl-hero-row"><div class="wl-total"><small>Total balance</small><strong>${inr(tot)}</strong></div><button type="button" id="wlRefresh" class="wl-refresh" aria-label="Refresh balance">↻</button></div><div class="wl-quick"><button type="button" data-wl-go="wlWallets"><span>▣</span>Wallet</button><button type="button" data-page="Recharge"><span>⤓</span>Deposit</button><button type="button" data-page="Withdrawal"><span>⤒</span>Withdraw</button><button type="button" data-wl-go="wlInvest"><span>◈</span>Invest</button></div><p class="wl-limits">Min deposit ${inr(c.minDeposit)} · Min withdrawal ${inr(c.minWithdraw)} · Withdraw from Main wallet only</p></section>
+    <section class="wl-card" id="wlWallets"><div class="wl-card-h"><h3>Wallets &amp; portfolio</h3></div><div class="wl-grid"><div class="wl-kpi"><small>Main wallet</small><b>${inr(state.me.balance)}</b></div><div class="wl-kpi"><small>3rd wallet</small><b>${inr(state.me.thirdWallet || 0)}</b></div><div class="wl-kpi"><small>Crypto holdings</small><b>${inr(cv)}</b></div><div class="wl-kpi"><small>Unrealized P/L</small><b class="${hs.length ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${hs.length ? (pnl >= 0 ? '+' : '−') + inr(Math.abs(pnl)) : '—'}</b></div></div>${alloc}<div class="wl-two"><button type="button" class="primary-btn" data-page="Quotes">Buy / Sell</button><button type="button" class="secondary-btn" data-page="Quotes">Live quotes</button></div></section>`;
+    })()}
+    <section class="wl-tiles"><button type="button" data-page="Games"><i>♟</i><span><b>Game History</b><small>My game history</small></span></button><button type="button" data-wl-f="all"><i>⇅</i><span><b>Transaction</b><small>My transaction history</small></span></button><button type="button" data-wl-f="deposit"><i>⤓</i><span><b>Deposit</b><small>My deposit history</small></span></button><button type="button" data-wl-f="withdraw"><i>⤒</i><span><b>Withdraw</b><small>My withdraw history</small></span></button></section>
+    <section class="section-head" id="wlActivity"><div><span class="eyebrow">YOUR RECORDS</span><h2>History</h2></div></section><div class="wl-chips" id="wlChips">${[['all','All'],['deposit','Deposits'],['withdraw','Withdrawals'],['trade','Trades'],['other','Rewards & transfers']].map(([k, l], i) => `<button type="button" data-wl-f="${k}" class="${i ? '' : 'on'}">${l}</button>`).join('')}</div><div id="wlTx">${txList('all')}</div>
+    <section class="section-head"><div><span class="eyebrow">YOUR COINS</span><h2>Holdings</h2></div></section>${holdingsList()}
+    <section class="wl-card" id="wlInvest"><div class="wl-card-h"><h3>Coin Investment</h3><small>Eligible: <b>${inr(state.me.depositEligible || 0)}</b></small></div><form id="investForm" class="demo-form"><h3>Coin Investment</h3><p class="fine-print">Admin limit: ${Number(c.investment?.depositPercent ?? 50)}% of deposit-eligible funds · Profit rate: ${Number(c.investment?.profitPct ?? 5)}% · Holding: ${Number(c.investment?.holdingDays ?? 7)} days. Principal returns to Main Wallet; profit goes to 3rd Wallet.</p><label>Investment amount (₹)</label><input id="investAmount" type="number" min="1" step="1" required><button class="primary-btn" type="submit" ${c.investment?.enabled === false ? 'disabled' : ''}>Invest deposit funds</button><p class="msg-err" id="investErr"></p></form></section>
+    <section class="wl-card"><div class="wl-card-h"><h3>Wallet Transfer</h3></div><form id="transferForm" class="demo-form"><h3>Wallet Transfer</h3><p class="fine-print">3rd Wallet → Main Wallet only</p><label>Transfer amount (₹)</label><input id="transferAmount" type="number" min="1" step="1" required><button class="secondary-btn" type="submit">Transfer to Main Wallet</button><p class="msg-err" id="transferErr"></p></form></section>
+    <section class="wl-menu"><div class="wl-menu-language"><span>🌐</span><label for="wlLanguageSelect">Language / भाषा</label><select id="wlLanguageSelect"><option value="en">English</option><option value="hi">हिन्दी</option></select></div><button type="button" data-page="Team"><span>♙</span>Team &amp; invite<em>›</em></button><button type="button" data-page="Bonus"><span>★</span>Bonus<em>›</em></button><button type="button" data-page="Service"><span>☏</span>Customer service<em>›</em></button><button type="button" data-page="Guide"><span>☰</span>Beginner's guide<em>›</em></button><button type="button" data-page="Profile"><span>⚿</span>Change password<em>›</em></button><button type="button" id="wlTheme"><span>☾</span>Dark / light mode<em>›</em></button><button type="button" id="logoutBtn"><span>⏻</span>Logout<em>›</em></button></section>
+    ${['admin','headAdmin','panelAdmin'].includes(state.me.role) ? `<div class="wl-admin"><a class="primary-btn" style="display:block;text-align:center;text-decoration:none;flex:1" href="${state.me.role === 'panelAdmin' ? '/p/' + esc(String(state.me.panelId || activePanelSlug())) + '/admin' : '/admin'}">Open Admin Panel ↗</a></div>` : ''}`;
     $('#logoutBtn').onclick = doLogout;
+    $$('[data-wl-go]').forEach(b => b.onclick = () => { const t = document.getElementById(b.dataset.wlGo); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    const setWlFilter = f => { $$('#wlChips button').forEach(x => x.classList.toggle('on', x.dataset.wlF === f)); $('#wlTx').innerHTML = txList(f); };
+    $$('[data-wl-f]').forEach(b => b.onclick = () => { setWlFilter(b.dataset.wlF); if (b.closest('.wl-tiles')) document.getElementById('wlActivity').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    const wlLang=$('#wlLanguageSelect'); if(wlLang){wlLang.value=state.language;wlLang.onchange=()=>setLanguage(wlLang.value);}
+    $('#wlTheme').onclick = () => { ccTheme.dark = !ccTheme.dark; ccTheme.apply(); };
+    $('#wlRefresh').onclick = async e => { const b = e.currentTarget; b.classList.add('spin'); try { await loadMe(); renderPage('Assets', true); showToast('Balance refreshed.'); } catch (x) { b.classList.remove('spin'); showToast(x.message || 'Refresh failed.'); } };
+    $('#wlCopy').onclick = async () => { const v = String(state.me.uid || state.me.id); try { await navigator.clipboard.writeText(v); showToast('UID copied.'); } catch { showToast('UID: ' + v); } };
     $('#investForm').onsubmit = async e => { e.preventDefault(); try { await api('investment', { amount: Number($('#investAmount').value) }); await loadMe(); showToast('Investment placed; now visible in Holding.'); renderPage('Assets', true); } catch (x) { $('#investErr').textContent = x.message; } };
-    $('#transferForm').onsubmit = async e => { e.preventDefault(); try { await api('wallet/third-to-main', { amount: Number($('#transferAmount').value) }); await loadMe(); showToast('Transferred to Main Wallet.'); renderPage('Assets', true); } catch (x) { $('#transferErr').textContent = x.message; } };
+    $('#transferForm').onsubmit = async e => { e.preventDefault(); const btn=e.submitter; btn.disabled=true; const form=$('#transferForm'); form.dataset.requestId=form.dataset.requestId||('wtx-'+Date.now()+'-'+Math.random().toString(36).slice(2)); try { await api('wallet/third-to-main', { amount: Number($('#transferAmount').value), requestId: form.dataset.requestId }); delete form.dataset.requestId; await loadMe(); showToast('Wallet transfer completed.'); renderPage('Assets', true); } catch (x) { $('#transferErr').textContent = x.message; btn.disabled=false; } };
     const inv = state.investments || []; if (inv.length) { const h=document.createElement('section'); h.innerHTML = `<section class="section-head"><div><span class="eyebrow">INVESTMENT HISTORY</span><h2>Holding</h2></div></section><div class="content-card"><div class="tbl"><table><tr><th>Amount</th><th>Profit %</th><th>Holding days</th><th>Status</th></tr>${inv.map(x=>`<tr><td>${inr(x.amount)}</td><td>${Number(x.profitPct)}%</td><td>${x.holdingDays}</td><td>${esc(x.status)}</td></tr>`).join('')}</table></div></div>`; main.appendChild(h); }
   } else if (page === 'Team' || page === 'Invite') {
     const code = state.me.refCode, invitePanel = String(state.me.role === 'panelAdmin' ? (state.me.panelId || activePanelSlug()) : activePanelSlug()).toLowerCase(), inviteBase = invitePanel && invitePanel !== 'main' ? '/p/' + encodeURIComponent(invitePanel) + '/' : '/', link = location.origin + inviteBase + '?ref=' + encodeURIComponent(code);
-    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong>${state.cfg.tradeRef && state.cfg.tradeRef.enabled && state.cfg.tradeRef.pct ? `<div class="stat-grid"><div><small>Your commission</small><b>${state.cfg.tradeRef.pct}% of the profit your friends make on their market trades</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : ''}${bonusCfg().enabled && bonusCfg().refPct ? `<div class="stat-grid"><div><small>Your commission</small><b>${bonusCfg().refPct}% of ${bonusCfg().refBase === 'amount' ? 'their ' + esc(bonusCfg().symbol) + ' trade amount' : 'their ' + esc(bonusCfg().symbol) + ' trade return'}</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : `<div class="stat-grid"><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>`}</article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
+    main.innerHTML = `<section class="page-intro"><span class="eyebrow">INVITE</span><h1>${page}</h1><p>Share your invite code with friends.</p></section><article class="balance-card team-card"><span>People who joined with your code</span><strong>${state.referrals}</strong>${state.cfg.tradeRef && state.cfg.tradeRef.enabled && state.cfg.tradeRef.pct ? `<div class="stat-grid"><div><small>Your commission</small><b>${state.cfg.tradeRef.pct}% of the profit your friends make on their market trades</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : ''}${bonusCfg().enabled && bonusCfg().refPct ? `<div class="stat-grid"><div><small>Your commission</small><b>${bonusCfg().refPct}% of ${bonusCfg().refBase === 'amount' ? 'their ' + esc(bonusCfg().symbol) + ' trade amount' : 'their ' + esc(bonusCfg().symbol) + ' trade return'}</b></div><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>` : `<div class="stat-grid"><div><small>Total earned</small><b>${inr(state.me.refEarned)}</b></div></div>`}</article><article class="content-card"><h2>Bonus &amp; team details</h2><div class="stat-grid team-bonus-grid"><div><small>Referral earnings</small><b>${inr(state.me.refEarned || 0)}</b></div><div><small>Recorded bonus positions</small><b>${(state.positions || []).length}</b></div><div><small>Referral members</small><b>${Number(state.referrals || 0)}</b></div><div><small>Bonus positions</small><b>${(state.positions || []).length}</b></div></div><p class="fine-print">Bonus coin positions and referral rewards remain governed by the existing account records and rules.</p>${(state.positions || []).length ? `<div class="activity-list">${state.positions.slice(0,10).map(x=>`<div><span class="activity-icon">✦</span><span><b>${esc(x.symbol || 'Bonus')}</b><small>${esc(x.status || 'Recorded')} · ${dt(x.ts)}</small></span><strong>${inr(x.amount || 0)}</strong></div>`).join('')}</div>` : '<p class="fine-print">No bonus position history is available.</p>'}</article><article class="content-card"><h2>Your invite code</h2><div class="copy-row"><code>${esc(code)}</code><button class="primary-btn compact" id="copyCode" type="button">Copy link</button></div></article>`;
     $('#copyCode').onclick = async () => { try { await navigator.clipboard.writeText(link); showToast('Invite link copied.'); } catch { showToast('Your invite code: ' + code); } };
   } else if (page === 'Games') {
     if (!state.me) return needLogin('Games');
     let gameData = null;
     try { gameData = await api('games/flip-coin'); } catch (e) { showToast(e.message); }
+    try { const catalog=await api('games/catalog'); state.customGames=catalog.games||[]; } catch { state.customGames=[]; }
     const fc = (gameData && gameData.config) || { enabled:true, minBet:10, maxBet:10000, multiplier:2, feePct:0 };
     const history = (gameData && gameData.history) || [];
     let coinRet = Number(fc.returnPct != null ? fc.returnPct : 100);
-    main.innerHTML = `<section class="flip-page" aria-label="Games"><div id="gameChooser" class="game-chooser cc-chooser"><div class="cc-hero">${ccLogo('big')}<p>Choose a game and start playing</p></div><div class="cc-cards"><article class="cc-card cc-card-coin"><div class="cc-card-art"><span class="cc-coin-art">₿</span></div><div class="cc-card-body"><h3>Coin Game</h3><p>Head or Tail · choose your side</p><button type="button" class="cc-play" data-game-switch="head">Play</button></div></article><article class="cc-card cc-card-wingo"><div class="cc-card-art"><span class="cc-ball-art"><i class="g">1</i><i class="r">2</i><i class="v">5</i></span></div><div class="cc-card-body"><h3>WinGo</h3><p>Number · Color · Big/Small · 30s to 5 min</p><button type="button" class="cc-play" data-game-switch="big">Play</button></div></article></div></div><div id="headTailGame" class="ht-game" hidden>${ccBar()}
+    main.innerHTML = `<section class="flip-page" aria-label="Games"><div id="gameChooser" class="game-chooser cc-chooser"><div class="cc-hero">${ccLogo('big')}<p>Choose a game and start playing</p></div><div class="cc-cards">
+${(state.customGames||[]).map(g=>`<article class="cc-card ${g.status==='play'?'':'cc-card-soon'}"><div class="cc-card-art cc-art-image"><img src="${esc(g.image)}" alt="${esc(g.name)}"></div><div class="cc-card-body"><h3>${esc(g.name)}</h3><p>${esc(g.description||'Coming soon')}</p>${g.status==='play'?(g.slug==='coin'?'<button type="button" class="cc-play" data-game-switch="head">Play</button>':g.slug==='wingo'?'<button type="button" class="cc-play" data-game-switch="big">Play</button>':'<button type="button" class="cc-play" data-game-switch="head">Play</button>'):'<button type="button" class="cc-play cc-soon-btn" disabled>Soon</button>'}</div></article>`).join('')}
+</div></div><div id="headTailGame" class="ht-game" hidden>${ccBar()}
       <header class="flip-wallet-head bs-head"><div class="bs-wallet-card"><button type="button" class="bs-back" data-game-back aria-label="Back to games">‹</button><div class="bs-bal-row"><strong id="gameBalance">${inr(state.me.balance)}</strong><button type="button" class="flip-refresh" id="flipRefresh" aria-label="Refresh balance">${BSI.refresh}</button></div><div class="bs-bal-label"><span class="bs-wicon">${BSI.wallet}</span>Wallet balance</div><div class="flip-wallet-actions"><button type="button" data-page="Withdrawal" class="flip-withdraw">Withdraw</button><button type="button" data-page="Recharge" class="flip-deposit">Deposit</button></div></div></header>
       <div class="flip-notice"><span class="bs-speaker">${BSI.speaker}</span><span id="flipNotice">Head or Tail · 30-second rounds</span><button type="button" class="bs-notice-detail" id="flipNoticeDetail">${BSI.fire}Detail</button></div>
       <section class="flip-timer-panel" id="flipGameCard">
@@ -608,11 +847,15 @@ async function renderPage(page, quiet) {
       form.onsubmit = async e => { e.preventDefault(); const btn=$('#flipPlay'); if (btn.disabled || !flipRoundOpen) return; btn.disabled=true; $('#flipErr').textContent=''; const outcome=$('#flipOutcome'); outcome.className='flip-outcome'; outcome.textContent='Bet placed · waiting for round result…'; try { const r=await api('games/flip-coin',{amount:Number($('#flipBet').value),side:$('#flipSide').value}); pendingFlipId=r.bet.id; $('#gameBalance').textContent=inr(r.balance); ccBetPopup({game:'Coin Game',amount:r.bet.amount,side:String(r.bet.side).toUpperCase(),ret:r.bet.returnPct}); localStorage.setItem('cryptoBridgeFlipBetAmount',$('#flipBet').value); btn.disabled=false; await syncFlipRound(); } catch(x) { outcome.textContent='Round rules loading…'; $('#flipErr').textContent=x.message; btn.disabled=false; await syncFlipRound(); } };
       const switchers=$$('[data-game-switch]'); switchers.forEach(b=>b.onclick=()=>{const big=b.dataset.gameSwitch==='big';$('#gameChooser').hidden=true;$('#headTailGame').hidden=big;$('#bigSmallGame').hidden=!big;if(big)syncBigSmall();}); $$('[data-game-back]').forEach(b=>b.onclick=()=>{$('#gameChooser').hidden=false;$('#headTailGame').hidden=true;$('#bigSmallGame').hidden=true;});
       let bsRet={number:780,color:80,size:80}, bsHistPage=0, bsAllResults=[], bsPopT=null, bsRoundEnd=0, bsLastRound=null, bsPopPrev=null, bsPending=new Set(), bsSyncing=false, bsDuration=30000, bsDurationLabel="WinGo 30sec";
+       const bsPendingKey='cryptoClubWingoPending:'+String(state.me?.id||state.me?.uid||'account');
+       try { const saved=JSON.parse(localStorage.getItem(bsPendingKey)||'[]'); if(Array.isArray(saved)) saved.forEach(x=>bsPending.add(String(x))); } catch {}
+       const bsSavePending=()=>{try{localStorage.setItem(bsPendingKey,JSON.stringify([...bsPending]));}catch{}};
+
       const bsColor=(c)=>String(c||'').includes('Violet')?'#9b43e8':c==='Green'?'#16a765':c==='Red'?'#ff5963':'#9b43e8';
       const ccRenderBsRet=()=>{const el=$('#bsRetStrip');if(el){el.innerHTML='';el.hidden=true;}};ccRenderBsRet();
       const bsRenderResults=()=>{const results=bsAllResults,pages=Math.max(1,Math.ceil(results.length/10));bsHistPage=Math.max(0,Math.min(bsHistPage,pages-1));const rows=results.slice(bsHistPage*10,bsHistPage*10+10);$('#bsResults').innerHTML=rows.length?`<div class="tbl"><table><tr><th>Period</th><th>Number</th><th>Big Small</th><th>Color</th></tr>${rows.map(x=>`<tr><td>${bsPeriodId(x.roundNo,bsDuration)}</td><td><b class="bs-n ${BS_NUM_CLASS(Number(x.number))}">${x.number}</b></td><td>${esc(x.size)}</td><td class="bs-dots">${bsDots(x.color)}</td></tr>`).join('')}</table></div>`:'No results yet.';$('#bsPageLabel').textContent=`${bsHistPage+1}/${pages}`;$('#bsPagePrev').disabled=bsHistPage<=0;$('#bsPageNext').disabled=bsHistPage>=pages-1;};
-      const syncBigSmall=async()=>{if(bsSyncing||!$('#bigSmallGame')||$('#bigSmallGame').hidden)return;bsSyncing=true;try{const d=await api('games/big-small?duration='+bsDuration);const r=d.round;if(d.config&&d.config.returns){bsRet=d.config.returns;ccRenderBsRet();}if(r){bsRoundEnd=r.endTs;const left=Math.max(0,r.endTs-Date.now());const totalSeconds=Math.ceil(left/1000);const tmm=String(Math.floor(totalSeconds/60)).padStart(2,'0'),tss=String(totalSeconds%60).padStart(2,'0');$('#bsTimer').innerHTML=`<b>${tmm[0]}</b><b>${tmm[1]}</b><em>:</em><b>${tss[0]}</b><b>${tss[1]}</b>`;$('#bsPeriod').textContent=bsPeriodId(r.number,bsDuration);$('#bigSmallGame').classList.toggle('bs-closed',!r.bettingOpen);$('#bsRoundLabel').textContent=bsDurationLabel;$$('#bigSmallGame [data-bs-type]').forEach(x=>x.disabled=!r.bettingOpen);const sec=Math.ceil(left/1000),ov=$('#bsCountdown');if(!r.bettingOpen&&left>0){ov.hidden=false;ov.innerHTML=`<b>0</b><b>${Math.min(9,sec)}</b>`;if(!$('#bsBetModal').hidden){$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');}}else ov.hidden=true;if(bsLastRound!==null&&Number(r.number)>bsLastRound){bsPopPrev=bsLastRound;await loadMe();}bsLastRound=Number(r.number);}$('#bsBalance').textContent=inr(state.me.balance);const results=d.resultsHistory||[];$('#bsMini').innerHTML=results.slice(0,5).map(x=>`<i class="${BS_NUM_CLASS(Number(x.number))}">${x.number}</i>`).join('');bsAllResults=results;bsRenderResults();$('#bsChartBars').innerHTML=results.length?results.slice(0,12).map(x=>`<span class="bs-chart-item"><i style="height:${18+Number(x.number)*6}px;background:${bsColor(x.color)}"></i><b>${x.number}</b><small>${esc(x.size)}</small></span>`).join(''):'Results will appear here after rounds finish.';const hist=d.history||[];$('#bsMyHistory').innerHTML=hist.length?`<div class="tbl"><table><tr><th>Period</th><th>Pick</th><th>Bet</th><th>Result</th></tr>${hist.map(x=>{const pk=x.type==='number'?'No. '+x.pick:x.pick,st=x.status==='Pending'?'<span class="bs-pend">Pending</span>':x.won?`<span class="bs-won">Won<br><small>+${inr(x.net)}</small></span>`:`<span class="bs-lost">Lost<br><small>${inr(x.net)}</small></span>`;return `<tr><td>${bsPeriodId(x.roundNo,x.durationMs||bsDuration)}</td><td><b>${esc(pk)}</b>${x.result==null?'':`<br><small>${x.result} · ${esc(x.resultSize)}</small>`}</td><td>${inr(x.amount)}</td><td>${st}</td></tr>`;}).join('')}</table></div>`:'No bets yet.';
-if(bsPopPrev!==null){const prev=bsPopPrev;bsPopPrev=null;const mine=hist.filter(x=>Number(x.roundNo)===prev&&x.status==='Settled');if(mine.length){const net=mine.reduce((t,x)=>t+Number(x.net||0),0),won=net>=0&&mine.some(x=>x.won),f=mine[0];const colChips=String(f.resultColor||'').split('+').filter(Boolean).map(c=>({t:c,c:c==='Green'?'g':c==='Violet'?'v':'r'}));ccResultPop({won,chips:[...colChips,{t:String(f.result),c:'n '+BS_NUM_CLASS(Number(f.result))},{t:f.resultSize,c:f.resultSize==='Big'?'big':'small'}],amount:mine.reduce((t,x)=>t+Number(x.payout||0),0),game:'WinGo '+bsDurLabel(f.durationMs||bsDuration),period:bsPeriodId(prev,f.durationMs||bsDuration)});}} }catch(e){$('#bsMessage').textContent=e.message||'Connection interrupted; retrying.';}finally{bsSyncing=false;}};
+      const syncBigSmall=async()=>{if(bsSyncing||!$('#bigSmallGame')||$('#bigSmallGame').hidden)return;bsSyncing=true;try{const d=await api('games/big-small?duration='+bsDuration);const r=d.round;if(d.config&&d.config.returns){bsRet=d.config.returns;ccRenderBsRet();}if(r){bsRoundEnd=r.endTs;const left=Math.max(0,r.endTs-Date.now());const totalSeconds=Math.ceil(left/1000);const tmm=String(Math.floor(totalSeconds/60)).padStart(2,'0'),tss=String(totalSeconds%60).padStart(2,'0');$('#bsTimer').innerHTML=`<b>${tmm[0]}</b><b>${tmm[1]}</b><em>:</em><b>${tss[0]}</b><b>${tss[1]}</b>`;$('#bsPeriod').textContent=bsPeriodId(r.number,bsDuration);$('#bigSmallGame').classList.toggle('bs-closed',!r.bettingOpen);$('#bsRoundLabel').textContent=bsDurationLabel;$$('#bigSmallGame [data-bs-type]').forEach(x=>x.disabled=!r.bettingOpen);const sec=Math.ceil(left/1000),ov=$('#bsCountdown');if(!r.bettingOpen&&left>0){ov.hidden=false;ov.innerHTML=`<b>0</b><b>${Math.min(9,sec)}</b>`;if(!$('#bsBetModal').hidden){$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');}}else ov.hidden=true;if(bsLastRound!==null&&Number(r.number)>bsLastRound){await loadMe();}bsLastRound=Number(r.number);}$('#bsBalance').textContent=inr(state.me.balance);const results=d.resultsHistory||[];$('#bsMini').innerHTML=results.slice(0,5).map(x=>`<i class="${BS_NUM_CLASS(Number(x.number))}">${x.number}</i>`).join('');bsAllResults=results;bsRenderResults();$('#bsChartBars').innerHTML=results.length?results.slice(0,12).map(x=>`<span class="bs-chart-item"><i style="height:${18+Number(x.number)*6}px;background:${bsColor(x.color)}"></i><b>${x.number}</b><small>${esc(x.size)}</small></span>`).join(''):'Results will appear here after rounds finish.';const hist=d.history||[];$('#bsMyHistory').innerHTML=hist.length?`<div class="tbl"><table><tr><th>Period</th><th>Pick</th><th>Bet</th><th>Result</th></tr>${hist.map(x=>{const pk=x.type==='number'?'No. '+x.pick:x.pick,st=x.status==='Pending'?'<span class="bs-pend">Pending</span>':x.won?`<span class="bs-won">Won<br><small>+${inr(x.net)}</small></span>`:`<span class="bs-lost">Lost<br><small>${inr(x.net)}</small></span>`;return `<tr><td>${bsPeriodId(x.roundNo,x.durationMs||bsDuration)}</td><td><b>${esc(pk)}</b>${x.result==null?'':`<br><small>${x.result} · ${esc(x.resultSize)}</small>`}</td><td>${inr(x.amount)}</td><td>${st}</td></tr>`;}).join('')}</table></div>`:'No bets yet.';
+if(!$('#ccResPop')){for(const key of [...bsPending]){const [durText,roundText]=key.split('|'),dur=Number(durText),prev=Number(roundText);if(dur!==bsDuration)continue;const resultRow=results.find(x=>Number(x.roundNo)===prev);if(!resultRow)continue;const summary=window.CryptoClubWingoResult?.summarizeRoundBets(hist,prev);if(!summary)continue;const colChips=String(resultRow.color||'').split('+').filter(Boolean).map(c=>({t:c,c:c==='Green'?'g':c==='Violet'?'v':'r'}));ccResultPop({won:summary.won,chips:[...colChips,{t:String(resultRow.number),c:'n '+BS_NUM_CLASS(Number(resultRow.number))},{t:resultRow.size,c:resultRow.size==='Big'?'big':'small'}],amount:summary.amount,game:'WinGo '+bsDurLabel(dur),period:bsPeriodId(prev,dur)});bsPending.delete(key);bsSavePending();break;}} }catch(e){$('#bsMessage').textContent=e.message||'Connection interrupted; retrying.';}finally{bsSyncing=false;}};
       $$('#bigSmallGame [data-bs-duration]').forEach(b=>b.onclick=()=>{const next=Number(b.dataset.bsDuration);if(![30000,60000,180000,300000].includes(next))return;bsDuration=next;bsDurationLabel=b.dataset.bsLabel||'WinGo';bsLastRound=null;bsHistPage=0;bsAllResults=[];$$('#bigSmallGame [data-bs-duration]').forEach(x=>x.classList.toggle('active',x===b));$('#bsNotice').textContent=bsDurationLabel+' rounds · Betting closes in the final 5 seconds';$('#bsMini').innerHTML='';$('#bsPeriod').innerHTML='&nbsp;';$('#bsRoundLabel').textContent=bsDurationLabel;$('#bsMessage').textContent='';syncBigSmall();});
       $$('#bigSmallGame [data-bs-amount]').forEach(b=>b.onclick=()=>$('#bsAmount').value=b.dataset.bsAmount);
       $$('#bigSmallGame [data-bs-multiplier]').forEach(b=>b.onclick=()=>{const multiplier=Number(b.dataset.bsMultiplier)||1;$('#bsAmount').value=Math.min(10000,10*multiplier);$$('#bigSmallGame [data-bs-multiplier]').forEach(x=>x.classList.toggle('active',x===b));});
@@ -635,7 +878,7 @@ if(bsPopPrev!==null){const prev=bsPopPrev;bsPopPrev=null;const mine=hist.filter(
       $('#bsQtyMinus').onclick=()=>{$('#bsQty').value=String(Math.max(1,(Number($('#bsQty').value)||1)-1));bsUpdateModalTotal();};
       $('#bsQtyPlus').onclick=()=>{$('#bsQty').value=String(Math.min(999,(Number($('#bsQty').value)||1)+1));bsUpdateModalTotal();};
       $('#bsQty').oninput=()=>{const q=Number($('#bsQty').value);if(Number.isInteger(q)&&q>=1&&q<=999)bsUpdateModalTotal();};
-      $('#bsConfirmBet').onclick=async()=>{if(bsSubmitting||!bsSelected)return;const amount=bsModalTotal(),msg=$('#bsMessage');if(!$('#bsAgree').checked){$('#bsModalError').textContent='Please agree to the rules before confirming.';return;}if(!Number.isFinite(amount)||amount<1||amount>10000){$('#bsModalError').textContent='Total bet must be between ₹1 and ₹10,000.';return;}bsSubmitting=true;$('#bsConfirmBet').disabled=true;$('#bsModalError').textContent='Placing bet…';try{const r=await api('games/big-small',{amount,type:bsSelected.type,pick:bsSelected.pick,durationMs:bsDuration,multiplier:bsModalMultiplier});$('#bsBalance').textContent=inr(r.balance);$('#bsModalBalance').textContent=inr(r.balance);msg.textContent='';ccBetPopup({game:'WinGo',amount:r.bet.amount,side:(r.bet.type==='number'?'Number ':'')+r.bet.pick,ret:r.bet.returnPct});$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');await syncBigSmall();}catch(e){$('#bsModalError').textContent=e.message||'Unable to place bet.';}finally{bsSubmitting=false;$('#bsConfirmBet').disabled=false;}};
+      $('#bsConfirmBet').onclick=async()=>{if(bsSubmitting||!bsSelected)return;const amount=bsModalTotal(),msg=$('#bsMessage');if(!$('#bsAgree').checked){$('#bsModalError').textContent='Please agree to the rules before confirming.';return;}if(!Number.isFinite(amount)||amount<1||amount>10000){$('#bsModalError').textContent='Total bet must be between ₹1 and ₹10,000.';return;}bsSubmitting=true;$('#bsConfirmBet').disabled=true;$('#bsModalError').textContent='Placing bet…';try{const r=await api('games/big-small',{amount,type:bsSelected.type,pick:bsSelected.pick,durationMs:bsDuration,multiplier:bsModalMultiplier});bsPending.add(String(r.bet.durationMs||bsDuration)+'|'+String(r.bet.roundNo));bsSavePending();$('#bsBalance').textContent=inr(r.balance);$('#bsModalBalance').textContent=inr(r.balance);msg.textContent='';ccBetPopup({game:'WinGo',amount:r.bet.amount,side:(r.bet.type==='number'?'Number ':'')+r.bet.pick,ret:r.bet.returnPct});$('#bsBetModal').hidden=true;document.body.classList.remove('bs-modal-open');await syncBigSmall();}catch(e){$('#bsModalError').textContent=e.message||'Unable to place bet.';}finally{bsSubmitting=false;$('#bsConfirmBet').disabled=false;}};
       clearInterval(window.__ccBsPoll);window.__ccBsPoll=setInterval(()=>{if($('#bigSmallGame')&&!$('#bigSmallGame').hidden)syncBigSmall();},1000);
     }
   } else if (page === 'Bonus') {
@@ -713,6 +956,18 @@ function hideModal() { $('#modal').hidden = true; }
 function showToast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(showToast.t); showToast.t = setTimeout(() => { t.hidden = true; }, 2600); }
 
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-coin]')) { e.preventDefault(); e.target.click(); } });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (winningActivityTimer) clearInterval(winningActivityTimer);
+    winningActivityTimer = null;
+    if (dailyEarningsTimer) clearTimeout(dailyEarningsTimer);
+    dailyEarningsTimer = null;
+  } else if (state.page === 'Home') {
+    startWinningDemo();
+    scheduleDailyLeaderboardRefresh();
+  }
+});
 document.addEventListener('click', e => {
   const theme = e.target.closest('[data-theme-toggle]'); if (theme) { ccTheme.dark = !ccTheme.dark; ccTheme.apply(); return; }
   const eye = e.target.closest('[data-eye]'); if (eye) { const i = document.getElementById(eye.dataset.eye), show = i.type === 'password'; i.type = show ? 'text' : 'password'; eye.innerHTML = show ? EYE_OFF : EYE; eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); return; }
@@ -750,6 +1005,9 @@ $('#account').addEventListener('click', () => renderPage(state.me ? 'Profile' : 
     if (state.me && Number(state.me.balance || 0) !== previous && state.page === 'Assets') renderPage('Assets', true);
   };
   window.addEventListener('focus', syncWallet);
-  window.addEventListener('pagehide', () => clearInterval(winningActivityTimer), { once: true });
+  window.addEventListener('pagehide', () => { clearInterval(winningActivityTimer); clearTimeout(dailyEarningsTimer); }, { once: true });
   setInterval(syncWallet, 15000);
 })();
+
+// Persisted language preference is shared by the public pages on this device.
+document.addEventListener('DOMContentLoaded', initLanguage);
