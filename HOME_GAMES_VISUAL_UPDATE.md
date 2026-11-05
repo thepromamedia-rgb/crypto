@@ -1,13 +1,14 @@
 # Home & Games Visual Update
 
-- Added the supplied WinGo artwork as `/wingo-home.jpg` and removed the 55CLUB mark from the supplied image.
-- Used the artwork in the Games chooser and Home game card.
-- Added Bingo, Today Lottery, Aviator and More Games as clearly disabled Coming Soon cards; no fake game engine or betting flow was added.
-- Increased game-card sizing by approximately 5% and refreshed game/action/live-winner demo colours.
-- Existing Coin Game and WinGo game logic, wallet, settlement and database code were not intentionally changed.
+- Kept the existing WinGo artwork and gameplay entry point.
+- Added the supplied original Aviator artwork to both Home and Games chooser cards.
+- Added realistic premium gold coin, Bingo cage/numbered balls, lottery tickets/balls, and gaming controller artwork to both Home and Games chooser cards.
+- Added the new image files to the server's explicit static-asset whitelist.
+- Kept Bingo, Today Lottery, Aviator and More Games as disabled Coming Soon cards; no fake gameplay or betting flow was added.
+- Existing Coin Game and WinGo gameplay, betting, wallet, Admin Panel, database and settlement logic were not intentionally changed.
 
 ## Verification
-- `node --check app.js`, `server.js`, `admin.js`, `coin-flip.js`: passed.
-- `node test-server.js`: passed.
-- `node test-admin-roles.js`: passed.
+- `node --check app.js`, `server.js`, `admin.js`: passed.
+- `npm test`: passed (server, admin roles and WinGo result scenarios).
+- Static whitelist includes all five newly added artwork files.
 - Browser visual / production deployment verification remains a staging step.
