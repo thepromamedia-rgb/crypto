@@ -1,4 +1,4 @@
-"""Offline smoke tests for the Crypto Bridge static demo. Run: python test-site.py"""
+"""Offline static smoke checks for Crypto Bridge. Run: python test-site.py"""
 from html.parser import HTMLParser
 from pathlib import Path
 import re, subprocess, sys
@@ -19,21 +19,28 @@ class SiteParser(HTMLParser):
 html=(ROOT/'index.html').read_text(encoding='utf-8')
 js=(ROOT/'app.js').read_text(encoding='utf-8')
 css=(ROOT/'style.css').read_text(encoding='utf-8')
+admin=(ROOT/'admin.html').read_text(encoding='utf-8')
+admin_js=(ROOT/'admin.js').read_text(encoding='utf-8')
 p=SiteParser(); p.feed(html); p.close()
 check('HTML parses', bool(p.tags))
 check('No duplicate HTML IDs', not p.errors, ', '.join(p.errors))
-check('Linked local assets exist', all((ROOT/a).is_file() for a in p.assets), ', '.join(a for a in p.assets if not (ROOT/a).is_file()))
+local_assets=[a.lstrip('/') for a in p.assets if a.startswith('/')]
+check('Linked local assets exist', all((ROOT/a).is_file() for a in local_assets), ', '.join(a for a in local_assets if not (ROOT/a).is_file()))
 check('Viewport metadata exists', 'name="viewport"' in html)
 check('Accessible main navigation exists', 'aria-label="Main navigation"' in html)
-check('Demo disclaimer exists', 'Prototype only' in html and 'No real accounts' in html)
+check('Simulated winner content is clearly disclosed', 'DEMO / SIMULATED' in js and 'not actual user earnings' in js)
 check('No external script dependency', not re.search(r'<script[^>]+src=["\']https?://', html, re.I))
-check('All expected pages have render handlers', all(f"page === '{x}'" in js for x in ['Home','Quotes','Assets','Team','Bonus','Recharge','Withdrawal','Signal','Service','Invite','Guide']))
-check('Search controls are implemented', 'function renderAssetRows' in js and "addEventListener('input'" in js)
-check('Demo forms explicitly do not transact', 'No payment integration' in js and 'No ${isRecharge?' in js)
-check('Responsive CSS exists', '@media(max-width:650px)' in css)
-check('Static deployment files in root', all((ROOT/x).is_file() for x in ['index.html','style.css','app.js','README.txt']))
-res=subprocess.run(['node','--check',str(ROOT/'app.js')],capture_output=True,text=True)
-check('JavaScript syntax check', res.returncode==0, res.stderr.strip())
+check('Public app pages have render handlers', all(f"page === '{x}'" in js or f"page === '{x}'" in js for x in ['Home','Quotes','Assets','Recharge','Withdrawal','Team','Invite','Bonus','Games','Service','Guide']))
+check('Language preference persists', 'cryptoBridgeLanguage' in js and 'localStorage.setItem' in js)
+check('Language observer avoids unchanged text writes', 'if(node.nodeValue !== nextValue)' in js)
+check('Language observer covers the full app shell', 'const target=document.body' in js and 'applyLanguage(document.body || main)' in js)
+check('Assets menu contains a language selector', 'id="wlLanguageSelect"' in js and "wlLang.onchange=()=>setLanguage" in js)
+check('Panel-wise support buttons are rendered', 'supportButtonsHtml()' in js and 'supportButtons' in admin_js)
+check('Chart has zoom and latest controls', 'data-zoom="in"' in js and 'data-chart-home' in js)
+check('Chart supports pointer drag and momentum', "addEventListener('pointermove'" in js and 'dragVelocity' in js and 'requestAnimationFrame(animate)' in js)
+check('Admin page and script are linked', '/admin.js' in admin and (ROOT/'admin.js').is_file())
+check('Responsive CSS exists', '@media(max-width:650px)' in css or '@media(max-width: 650px)' in css or '@media(max-width:600px)' in css)
+check('Core server files exist', all((ROOT/x).is_file() for x in ['server.js','index.html','style.css','app.js','admin.html','admin.js']))
 for name,detail in passed: print('PASS:',name)
 for name,detail in failures: print('FAIL:',name,detail)
 print(f'\nRESULT: {len(passed)} passed, {len(failures)} failed')

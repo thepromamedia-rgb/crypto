@@ -5,6 +5,8 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+let nodemailer;
+try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT) || 3000;
@@ -51,10 +53,10 @@ const DEFAULT_COINS = [
 const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward Coin', returnPct: 5, refPct: 10, refBase: 'profit', lockSeconds: 60, lockHours: 0, minAmount: 100, maxAmount: 100000 });
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
-  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
-  settings: { upi: '', payee: '', qr: '', support: '', notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
+  users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], walletTransfers: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
+  settings: { games: [], upi: '', payee: '', qr: '', support: '', supportButtons: [], notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
-let D = defaults();
+let D = { ...defaults(), maintenance: false };
 const clone = v => JSON.parse(JSON.stringify(v));
 const defaultPanel = () => ({ id: 'main', slug: 'main', name: 'Head Admin Main', active: true, deleted: false, created: Date.now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(D.settings) });
 function getPanel(slug) {
@@ -66,6 +68,20 @@ function getPanel(slug) {
   return p;
 }
 const S = req => (req && req.panel && req.panel.settings) || D.settings;
+const BUILTIN_GAMES = [
+  {id:'builtin-coin',slug:'coin',name:'Coin Game',description:'Pick Heads or Tails',image:'/coin-art.jpg',status:'play',createdAt:0},
+  {id:'builtin-wingo',slug:'wingo',name:'WinGo',description:'Number and colour game',image:'/wingo-home.jpg',status:'play',createdAt:0},
+  {id:'builtin-bingo',slug:'bingo',name:'Bingo',description:'Number draw game',image:'/bingo-art.jpg',status:'soon',createdAt:0},
+  {id:'builtin-lottery',slug:'lottery',name:'Today Lottery',description:'Daily lottery',image:'/lottery-art.jpg',status:'soon',createdAt:0},
+  {id:'builtin-aviator',slug:'aviator',name:'Aviator',description:'Flight game',image:'/aviator-original.png',status:'soon',createdAt:0},
+  {id:'builtin-more',slug:'more',name:'More Games',description:'Explore more games',image:'/more-games-art.jpg',status:'soon',createdAt:0}
+];
+function gameCatalog(req) {
+  const st=S(req), overrides=Array.isArray(st.gameOverrides)?st.gameOverrides:[];
+  const builtins=BUILTIN_GAMES.map(g=>({...g,...(overrides.find(x=>x.id===g.id)||{})})).filter(g=>!g.deleted);
+  const customs=(Array.isArray(st.games)?st.games:[]).map(g=>({...g,slug:'custom',status:'soon',kind:'custom'}));
+  return [...builtins,...customs];
+}
 const isHead = u => !!u && u.role === 'headAdmin';
 const isPanelAdmin = u => !!u && u.role === 'panelAdmin';
 const FLIP_MODES = ['heads','tails','lower','random'];
@@ -104,7 +120,7 @@ async function loadDB() {
   if (raw) {
     const saved = JSON.parse(raw);                       // existing data is merged, never discarded
     const ss = saved.settings || {};
-    D = { ...defaults(), ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0, ...(ss.flipCoin || {}) }, withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24, paymentMode: ss.paymentMode === 'razorpay' ? 'razorpay' : 'qr', withdrawalFeeType: ss.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent', withdrawalFeeValue: Math.max(0, Number(ss.withdrawalFeeValue || 0)), withdrawalFeeLabel: String(ss.withdrawalFeeLabel || 'Platform Fee').slice(0, 40), investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7, ...(ss.investment || {}) }, withdrawalWagerMultiplier: Number.isFinite(Number(ss.withdrawalWagerMultiplier)) ? Math.max(0,Math.min(100,Number(ss.withdrawalWagerMultiplier))) : 1 } };
+    D = { ...defaults(), maintenance: !!saved.maintenance, ...saved, settings: { ...defaults().settings, ...ss, limits: { ...defaults().settings.limits, ...(ss.limits || {}) }, depositRef: { ...defaults().settings.depositRef, ...(ss.depositRef || {}) }, tradeRef: { ...defaults().settings.tradeRef, ...(ss.tradeRef || {}), levels: Array.isArray((ss.tradeRef || {}).levels) ? (ss.tradeRef || {}).levels : [Number((ss.tradeRef || {}).pct || 0), 0, 0] }, bonusCoin: { ...BONUS_DEFAULT(), ...(ss.bonusCoin || {}) }, bonusCoins: Array.isArray(ss.bonusCoins) ? ss.bonusCoins : [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0, ...(ss.flipCoin || {}) }, withdrawalMode: ['all','profit'].includes(ss.withdrawalMode) ? ss.withdrawalMode : 'all', withdrawalCooldownHours: Number.isInteger(Number(ss.withdrawalCooldownHours)) && Number(ss.withdrawalCooldownHours) >= 0 && Number(ss.withdrawalCooldownHours) <= 720 ? Number(ss.withdrawalCooldownHours) : 24, paymentMode: ss.paymentMode === 'razorpay' ? 'razorpay' : 'qr', withdrawalFeeType: ss.withdrawalFeeType === 'fixed' ? 'fixed' : 'percent', withdrawalFeeValue: Math.max(0, Number(ss.withdrawalFeeValue || 0)), withdrawalFeeLabel: String(ss.withdrawalFeeLabel || 'Platform Fee').slice(0, 40), investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7, ...(ss.investment || {}) }, withdrawalWagerMultiplier: Number.isFinite(Number(ss.withdrawalWagerMultiplier)) ? Math.max(0,Math.min(100,Number(ss.withdrawalWagerMultiplier))) : 1 } };
     if (!Array.isArray(ss.bonusCoins) && D.settings.bonusCoin) D.settings.bonusCoins = [{ ...D.settings.bonusCoin, id: 'legacy-' + String(D.settings.bonusCoin.symbol || 'CBX'), startPrice: 1, priceHistory: [] }];
     D.settings.bonusCoin = D.settings.bonusCoins[0] || BONUS_DEFAULT();
     if (!Array.isArray(D.settings.coins) || !D.settings.coins.length) D.settings.coins = DEFAULT_COINS.map(c => c.slice());
@@ -115,7 +131,7 @@ async function loadDB() {
   if (!D.panels.some(x => x.slug === 'main')) D.panels.unshift(defaultPanel());
   const mainPanel = D.panels.find(x => x.slug === 'main');
   if (!mainPanel.settings) mainPanel.settings = clone(D.settings);
-  D.settings = mainPanel.settings; syncCoins();
+  D.settings = mainPanel.settings; D.walletTransfers = Array.isArray(D.walletTransfers) ? D.walletTransfers : []; syncCoins();
   mainPanel.name = 'Head Admin Main'; mainPanel.active = true; mainPanel.deleted = false;
   for (const p of D.panels) {
     if (!Number.isFinite(Number(p.creditBalance))) p.creditBalance = 0;
@@ -423,9 +439,15 @@ function payReferralLevels(user, baseAmount, rates, kind, maxPerTrade = 0) {
   }
   return payments;
 }
-const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, investment: { enabled: st.investment?.enabled !== false, depositPercent: Number(st.investment?.depositPercent ?? 50), profitPct: Number(st.investment?.profitPct ?? 5), holdingDays: Number(st.investment?.holdingDays ?? 7) }, withdrawalWagerMultiplier: Number(st.withdrawalWagerMultiplier ?? 1), withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
+const PUBLIC_SETTINGS = (req) => { const st = S(req); return ({ withdrawalMode: st.withdrawalMode || 'all', withdrawalCooldownHours: st.withdrawalCooldownHours ?? 24, investment: { enabled: st.investment?.enabled !== false, depositPercent: Number(st.investment?.depositPercent ?? 50), profitPct: Number(st.investment?.profitPct ?? 5), holdingDays: Number(st.investment?.holdingDays ?? 7) }, withdrawalWagerMultiplier: Number(st.withdrawalWagerMultiplier ?? 1), withdrawalFeeType: st.withdrawalFeeType || 'percent', withdrawalFeeValue: Number(st.withdrawalFeeValue || 0), withdrawalFeeLabel: st.withdrawalFeeLabel || 'Platform Fee', paymentMode: st.paymentMode || 'qr', razorpayEnabled: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), razorpayKeyId: E.RAZORPAY_KEY_ID || '', upi: st.upi, payee: st.payee, qr: st.qr, support: st.support, supportButtons: Array.isArray(st.supportButtons) ? st.supportButtons : [], notice: st.notice, bonus: st.bonus, footerText: st.footerText || 'India-focused platform', flipCoin: { winningMode: FLIP_MODES.includes(st.flipCoin?.winningMode)?st.flipCoin.winningMode:'lower', enabled: true, minBet: Number(st.flipCoin?.minBet || 10), maxBet: Number(st.flipCoin?.maxBet || 10000), multiplier: 2, lossPct: Number(st.flipCoin?.lossPct ?? 100), walletLossPct: Number(st.flipCoin?.walletLossPct ?? st.flipCoin?.lossPct ?? 100), walletProfitPct: Number(st.flipCoin?.walletProfitPct ?? 100), lossSharePct: Number(st.flipCoin?.lossSharePct || 0), feePct: Number(st.flipCoin?.feePct || 0), timeProfitMinutes: Number(st.flipCoin?.timeProfitMinutes || 0), timeProfitPct: Number(st.flipCoin?.timeProfitPct || 0), timeLossMinutes: Number(st.flipCoin?.timeLossMinutes || 0), timeLossPct: Number(st.flipCoin?.timeLossPct || 0), betProfitCount: Number(st.flipCoin?.betProfitCount || 0), betProfitPct: Number(st.flipCoin?.betProfitPct || 0), betLossCount: Number(st.flipCoin?.betLossCount || 0), betLossPct: Number(st.flipCoin?.betLossPct || 0) }, minDeposit: st.limits.minDeposit, minWithdraw: st.limits.minWithdraw, minTrade: st.limits.minTrade, bonusCoin: st.bonusCoins[0] || st.bonusCoin, bonusCoins: st.bonusCoins.filter(c => c.enabled), depositRef: st.depositRef, tradeRef: { enabled: st.tradeRef.enabled, pct: st.tradeRef.pct, levels: st.tradeRef.levels || [st.tradeRef.pct || 0, 0, 0] }, coins: st.coins }); };
 const needUser = u => u || fail(401, 'Please login.');
-const needAdmin = u => { needUser(u); if (!['admin', 'headAdmin', 'panelAdmin'].includes(u.role)) fail(403, 'Forbidden'); };
+const ADMIN_ROLES = ['admin', 'headAdmin', 'panelAdmin', 'superAdmin', 'subAdmin', 'supportAdmin'];
+const needAdmin = u => { needUser(u); if (!ADMIN_ROLES.includes(u.role)) fail(403, 'Forbidden'); };
+const isSuperAdmin = u => !!u && u.role === 'superAdmin';
+const isSubAdmin = u => !!u && u.role === 'subAdmin';
+const isSupportAdmin = u => !!u && u.role === 'supportAdmin';
+const canManageAdmins = u => isHead(u) || isSuperAdmin(u);
+const adminRoleLabel = role => ({headAdmin:'Super Admin (Owner)',admin:'Super Admin (Legacy)',panelAdmin:'Panel Admin (Legacy)',superAdmin:'Super Admin',subAdmin:'Sub Admin',supportAdmin:'Support Admin'}[role] || role);
 const needHead = u => { needUser(u); if (!isHead(u)) fail(403, 'Head Admin only.'); };
 
 async function razorpayRequest(method, endpoint, payload) {
@@ -532,6 +554,18 @@ async function autoSettleCompletedWeeks() {
   if (changed) await save();
 }
 
+
+// Password recovery challenges are short-lived, single-use and process-local.
+const passwordChallenges = new Map();
+const otpDigest = (email, otp) => crypto.createHmac('sha256', D.secret).update(email + ':' + otp).digest('hex');
+async function deliverPasswordOtp(email, otp) {
+  if (!nodemailer) throw new Error('Email service dependency is unavailable. Install dependencies before enabling SMTP.');
+  const host = str(E.SMTP_HOST, 200), port = Number(E.SMTP_PORT || 587), user = str(E.SMTP_USER, 200), pass = String(E.SMTP_PASS || ''), from = str(E.SMTP_FROM || user, 200);
+  if (!host || !port || !user || !pass || !from) throw new Error('SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and SMTP_FROM.');
+  const transport = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass }, connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000 });
+  await transport.sendMail({ from, to: email, subject: 'Crypto Bridge password reset code', text: `Your password reset code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.`, html: `<p>Your Crypto Bridge password reset code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>` });
+}
+
 const routes = {
   'GET /api/prices': async (req) => { const c = await getPrices(S(req).coins); const fx = await getFx().catch(() => fxCache.v || 0); return { fx, prices: c.data, updated: c.ts, stale: !!c.error, source: c.source || '' }; },
   'GET /api/config': async (req) => PUBLIC_SETTINGS(req),
@@ -564,7 +598,7 @@ const routes = {
     const candidates = [...D.users, ...D.demoUsers].filter(x => normEmail(x.email) === email);
     const u = candidates.find(x => checkPw(String(b.password || ''), x.pass));
     if (!u) fail(401, 'Wrong email or password.');
-    if (['headAdmin','admin','panelAdmin'].includes(u.role) && u.twoFactorEnabled && !verifyTotp(u.twoFactorSecret, b.otp)) fail(401, 'Authenticator OTP is required or invalid.');
+    if (ADMIN_ROLES.includes(u.role) && u.twoFactorEnabled && !verifyTotp(u.twoFactorSecret, b.otp)) fail(401, 'Authenticator OTP is required or invalid.');
     // Once credentials are verified, give panel admins a useful redirect hint instead of
     // disguising a correct password as a password error when they use /admin by mistake.
     if (u.role === 'panelAdmin' && String(u.panelId || '') !== String(req.panelId || 'main')) {
@@ -580,11 +614,48 @@ const routes = {
     setCookie(res, makeToken(u.id), 7 * 86400);
     return { user: pubUser(u), ...(u.role === 'headAdmin' && req.panelId !== 'main' ? {adminRedirect:'/admin'} : {}) };
   },
+  'POST /api/password/forgot/request': async (req, res, b) => {
+    const email = normEmail(b.email);
+    if (!emailOk(email)) fail(400, 'Enter the registered email address.');
+    limit('pwreset-ip:' + req.ip, 5, 3600e3); limit('pwreset-email:' + email, 3, 3600e3);
+    const key = String(req.panelId || 'main') + ':' + email;
+    const existing = passwordChallenges.get(key);
+    if (existing && existing.resendAfter > now()) fail(429, `Please wait ${Math.ceil((existing.resendAfter-now())/1000)} seconds before requesting another code.`);
+    const account = D.users.find(x => normEmail(x.email) === email && String(x.panelId || 'main') === String(req.panelId || 'main') && !ADMIN_ROLES.includes(x.role));
+    if (!account) return { ok: true, message: 'If this email belongs to an account, a reset code will be sent.' };
+    const otp = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const challenge = { email, panelId: req.panelId || 'main', uid: account.id, otpHash: otpDigest(email, otp), expiresAt: now()+10*60e3, resendAfter: now()+60e3, attempts: 0, resetTokenHash: '', resetExpiresAt: 0 };
+    passwordChallenges.set(key, challenge);
+    try { await deliverPasswordOtp(email, otp); }
+    catch (err) { passwordChallenges.delete(key); console.error('PASSWORD OTP DELIVERY FAILED:', err.message); fail(503, 'Email delivery is unavailable. Please contact support; no password was changed.'); }
+    return { ok: true, message: 'If this email belongs to an account, a reset code will be sent.' };
+  },
+  'POST /api/password/forgot/verify': async (req, res, b) => {
+    const email = normEmail(b.email), otp = String(b.otp || '').trim(), key = String(req.panelId || 'main') + ':' + email;
+    const ch = passwordChallenges.get(key);
+    if (!ch || ch.expiresAt < now() || ch.attempts >= 5) { passwordChallenges.delete(key); fail(400, 'Code expired or unavailable. Request a new code.'); }
+    ch.attempts++;
+    const suppliedDigest = Buffer.from(otpDigest(email, otp), 'hex'), expectedDigest = Buffer.from(ch.otpHash, 'hex');
+    if (!/^\d{6}$/.test(otp) || suppliedDigest.length !== expectedDigest.length || !crypto.timingSafeEqual(suppliedDigest, expectedDigest)) fail(400, 'Invalid verification code.');
+    ch.resetToken = crypto.randomBytes(32).toString('hex'); ch.resetTokenHash = crypto.createHash('sha256').update(ch.resetToken).digest('hex'); ch.resetExpiresAt = now()+10*60e3; ch.otpHash = ''; ch.attempts = 0;
+    return { resetToken: ch.resetToken };
+  },
+  'POST /api/password/forgot/reset': async (req, res, b) => {
+    const email = normEmail(b.email), key = String(req.panelId || 'main') + ':' + email, ch = passwordChallenges.get(key);
+    const token = String(b.resetToken || ''), pw = String(b.password || ''), confirm = String(b.confirmPassword || '');
+    if (!ch || ch.uid == null || ch.resetExpiresAt < now() || !token || crypto.createHash('sha256').update(token).digest('hex') !== ch.resetTokenHash) fail(400, 'Verification expired. Start password recovery again.');
+    if (pw.length < 8 || pw.length > 100) fail(400, 'Password must be 8–100 characters.');
+    if (pw !== confirm) fail(400, 'Passwords do not match.');
+    const account = D.users.find(x => x.id === ch.uid && String(x.panelId || 'main') === String(req.panelId || 'main'));
+    if (!account || account.blocked) fail(400, 'Account unavailable. Contact support.');
+    account.pass = hashPw(pw); passwordChallenges.delete(key); audit(email, 'password-reset', 'Email OTP verified'); await save();
+    return { ok: true, message: 'Password reset successfully. Please log in.' };
+  },
   'POST /api/logout': async (req, res) => { setCookie(res, '', 0); return { ok: true }; },
   'GET /api/me': async (req, res, b, u) => {
     needUser(u); await settleAndSave(); await settleInvestmentsAndSave();
     return {
-      user: pubUser(u), investments: (D.investments || []).filter(p => p.uid === u.id).sort((a,b)=>b.ts-a.ts), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
+      user: pubUser(u), walletTransfers: (D.walletTransfers || []).filter(x => x.uid === u.id).sort((a,b)=>b.ts-a.ts).slice(0,50), investments: (D.investments || []).filter(p => p.uid === u.id).sort((a,b)=>b.ts-a.ts), config: PUBLIC_SETTINGS(req), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name },
       positions: D.positions.filter(p => p.uid === u.id).sort((a, c) => c.ts - a.ts).slice(0, 50),
       deposits: D.deposits.filter(d => d.uid === u.id).sort((a, c) => c.ts - a.ts),
       withdrawals: D.withdrawals.filter(w => w.uid === u.id).sort((a, c) => c.ts - a.ts),
@@ -608,11 +679,18 @@ const routes = {
     audit(u.email, 'investment-created', `#${p.id} principal ₹${amount}; ${p.profitPct}% planned profit; ${p.holdingDays} days`); await save();
     return { investment: p, balance: u.balance, thirdWallet: Number(u.thirdWallet || 0) };
   },
+  'POST /api/wallet/main-to-third': async (req, res, b, u) => {
+    needUser(u); fail(403, 'Transfers from Main Wallet to 3rd Wallet are disabled.');
+  },
   'POST /api/wallet/third-to-main': async (req, res, b, u) => {
     needUser(u); const amount = money(b.amount); if (!amount || amount < 1) fail(400, 'Enter a valid transfer amount.');
-    if (amount > Number(u.thirdWallet || 0)) fail(400, 'Amount exceeds your Third Wallet balance.');
+    const requestId = str(b.requestId, 80);
+    if (requestId) { const prior = (D.walletTransfers || []).find(x => x.uid === u.id && x.requestId === requestId); if (prior) return { balance: prior.mainBalance, thirdWallet: prior.rdBalance, transactionId: prior.id, duplicate: true }; }
+    if (amount > Number(u.thirdWallet || 0)) fail(400, 'Amount exceeds your 3rd Wallet balance.');
     u.thirdWallet = r2(Number(u.thirdWallet || 0) - amount); u.balance = r2(Number(u.balance || 0) + amount);
-    audit(u.email, 'third-to-main-transfer', `₹${amount}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet };
+    const row = { id: nid(), ts: now(), uid: u.id, panelId: u.panelId || req.panelId || 'main', direction: 'third-to-main', amount, requestId, mainBalance: u.balance, rdBalance: u.thirdWallet };
+    D.walletTransfers.push(row); if (D.walletTransfers.length > 10000) D.walletTransfers.splice(0, D.walletTransfers.length-10000);
+    audit(u.email, 'third-to-main-transfer', `₹${amount} · transfer #${row.id}`); await save(); return { balance: u.balance, thirdWallet: u.thirdWallet, transactionId: row.id };
   },
   'POST /api/password': async (req, res, b, u) => {
     needUser(u); limit('pw:' + u.id, 5, 600e3);
@@ -887,6 +965,39 @@ const routes = {
     const rets=gameReturns(req),returnPct=type==='number'?rets.number:type==='size'?rets.size:rets.color,multiplier=returnMult(returnPct),debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);u.depositEligible=r2(Math.max(0,Number(u.depositEligible||0)-debit));
     const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,returnPct,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);u.wagerCompleted=r2(Number(u.wagerCompleted||0)+amount);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
   },
+  // ----- unified game catalogue (built-in + custom upcoming games) -----
+  'GET /api/games/catalog': async (req) => ({ games: gameCatalog(req) }),
+  'GET /api/admin/games': async (req,res,b,u) => { needAdmin(u); return { games: gameCatalog(req) }; },
+  'POST /api/admin/games': async (req,res,b,u) => {
+    needAdmin(u); const st=S(req); if(!Array.isArray(st.games)) st.games=[]; if(!Array.isArray(st.gameOverrides)) st.gameOverrides=[];
+    const id=String(b.id||'');
+    if(b.action==='delete') {
+      if(id.startsWith('builtin-')) { const base=BUILTIN_GAMES.find(g=>g.id===id); if(!base) fail(404,'Game not found.'); const old=st.gameOverrides.find(g=>g.id===id)||{...base}; Object.assign(old,{deleted:true}); st.gameOverrides=st.gameOverrides.filter(g=>g.id!==id); st.gameOverrides.push(old); }
+      else { const before=st.games.length; st.games=st.games.filter(g=>g.id!==id); if(st.games.length===before) fail(404,'Game not found.'); }
+      audit(u.email,'game-deleted',id); await save(); return {ok:true,games:gameCatalog(req).length};
+    }
+    if(b.action==='add') {
+      const name=String(b.name||'').trim(), description=String(b.description||'').trim(), image=String(b.image||'');
+      if(name.length<2||name.length>60) fail(400,'Game name must be 2–60 characters.'); if(description.length>300) fail(400,'Description must be 300 characters or less.');
+      const m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m) fail(400,'Upload a valid JPG, PNG or WEBP image.');
+      const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024) fail(400,'Image must be 5 MB or smaller.');
+      const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
+      if(!sigOk) fail(400,'Image file signature does not match its format.');
+      const game={id:crypto.randomUUID(),name,description,image,createdAt:now()}; st.games.push(game); audit(u.email,'soon-game-added',name); await save(); return {ok:true,game};
+    }
+    if(b.action==='edit') {
+      const name=String(b.name||'').trim(),description=String(b.description||'').trim(); if(name.length<2||name.length>60)fail(400,'Game name must be 2–60 characters.'); if(description.length>300)fail(400,'Description must be 300 characters or less.');
+      let target;
+      if(id.startsWith('builtin-')) { const base=BUILTIN_GAMES.find(g=>g.id===id); if(!base)fail(404,'Game not found.'); target=st.gameOverrides.find(g=>g.id===id)||{...base}; target={...target,name,description}; }
+      else { target=st.games.find(g=>g.id===id); if(!target)fail(404,'Game not found.'); target.name=name; target.description=description; }
+      if(b.image!==undefined && b.image!=='') { const image=String(b.image),m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m)fail(400,'Upload a valid JPG, PNG or WEBP image.'); const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024)fail(400,'Image must be 5 MB or smaller.'); const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP'); if(!sigOk)fail(400,'Image file signature does not match its format.'); target.image=image; }
+      if(id.startsWith('builtin-')) { st.gameOverrides=st.gameOverrides.filter(g=>g.id!==id); st.gameOverrides.push(target); }
+      audit(u.email,'game-edited',id); await save(); return {ok:true,game:target};
+    }
+    fail(400,'Unknown game action.');
+  },
+  'GET /api/admin/maintenance': async (req,res,b,u) => { needHead(u); return { enabled:!!D.maintenance }; },
+  'POST /api/admin/maintenance': async (req,res,b,u) => { needHead(u); if(typeof b.enabled!=='boolean')fail(400,'Maintenance state must be true or false.'); D.maintenance=b.enabled; audit(u.email,'maintenance-mode',b.enabled?'enabled':'disabled'); await save(); return {ok:true,enabled:D.maintenance}; },
   // ----- admin -----
   'GET /api/admin/game-returns': async (req, res, b, u) => { needAdmin(u); return { returns: gameReturns(req), defaults: GAME_RETURN_DEFAULT }; },
   'POST /api/admin/game-returns': async (req, res, b, u) => {
@@ -942,18 +1053,18 @@ const routes = {
   },
   'GET /api/admin/overview': async (req, res, b, u) => {
     needAdmin(u); await settleAndSave();
-    const users = panelRows(req, D.users.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role))), depRows = panelRows(req, D.deposits), wdRows = panelRows(req, D.withdrawals), tradeRows = panelRows(req, D.trades), posRows = panelRows(req, D.positions), ok = depRows.filter(d => d.status === 'Approved'), paid = wdRows.filter(w => w.status === 'Paid');
+    const users = panelRows(req, D.users.filter(x => !ADMIN_ROLES.includes(x.role))), depRows = panelRows(req, D.deposits), wdRows = panelRows(req, D.withdrawals), tradeRows = panelRows(req, D.trades), posRows = panelRows(req, D.positions), ok = depRows.filter(d => d.status === 'Approved'), paid = wdRows.filter(w => w.status === 'Paid');
     const sum = a => a.reduce((s, x) => s + x.amount, 0);
     const sumPayout = a => a.reduce((s, x) => s + Number(x.netAmount == null ? x.amount : x.netAmount), 0);
     return {
-      role: u.role, accountUid: String(u.uid || u.id), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
+      role: u.role, maintenance: isHead(u) ? !!D.maintenance : undefined, accountUid: String(u.uid || u.id), panel: { id: req.panel.id, slug: req.panel.slug, name: req.panel.name }, creditBalance: r2(req.panel.creditBalance || 0), creditsAllocated: r2(req.panel.creditsAllocated || 0), creditsUsed: r2(req.panel.creditsUsed || 0), users: users.length, razorpayConfigured: !!(E.RAZORPAY_KEY_ID && E.RAZORPAY_KEY_SECRET && E.RAZORPAY_WEBHOOK_SECRET), wallets: r2(users.reduce((s, x) => s + x.balance, 0)), trades: tradeRows.length, demoUsers: panelRows(req, D.demoUsers).length, demoWallets: r2(panelRows(req, D.demoUsers).reduce((s, x) => s + Number(x.balance || 0), 0)),
       depositsApproved: sum(ok), withdrawalsPaid: sumPayout(paid),
       pendingDeposits: depRows.filter(d => d.status === 'Pending').length, pendingWithdrawals: wdRows.filter(w => w.status === 'Pending').length,
       bonus: { active: posRows.filter(p => p.status === 'Active').length, activeAmount: sum(posRows.filter(p => p.status === 'Active')), profitPaid: r2(posRows.reduce((s, p) => s + (p.profit || 0), 0)), refPaid: r2(posRows.reduce((s, p) => s + (p.refPaid || 0), 0)), tradeRefPaid: r2(tradeRows.reduce((s, t) => s + (t.refPaid || 0), 0)) },
       storage: UP_URL ? 'upstash' : 'file', settings: S(req), min: { deposit: S(req).limits.minDeposit, withdraw: S(req).limits.minWithdraw, trade: S(req).limits.minTrade }
     };
   },
-  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
+  'GET /api/admin/users': async (req, res, b, u) => { needAdmin(u); const rows = panelRows(req, D.users).map(x => ({ ...pubUser(x), panelId: x.panelId || 'main', blocked: !!x.blocked, refBy: x.refBy || null })); rows.sort((a, b) => Number(b.created || 0) - Number(a.created || 0)); return { users: rows, totalUsers: rows.filter(x => !ADMIN_ROLES.includes(x.role)).length, scope: isHead(u) ? 'all-panels' : req.panelId }; },
   'GET /api/admin/demo-users': async (req, res, b, u) => { needAdmin(u); return { users: panelRows(req, D.demoUsers).map(x => ({ id: x.id, uid: String(x.uid || x.id), name: x.name, email: x.email, phone: x.phone, balance: x.balance, blocked: x.blocked, created: x.created, holdings: x.holdings || {}, trades: (x.trades || []).length })) }; },
   'POST /api/admin/demo-user': async (req, res, b, u) => {
     needAdmin(u); const action = str(b.action, 16);
@@ -1028,7 +1139,7 @@ const routes = {
     const reportUsers = panelRows(req, D.users), reportDeposits = panelRows(req, D.deposits), reportWithdrawals = panelRows(req, D.withdrawals), reportTrades = panelRows(req, D.trades);
     for (let i = 0; i < 14; i++) { const k = day(now() - i * 864e5); rows[k] = { date: k, signups: 0, deposits: 0, depositAmt: 0, withdrawals: 0, withdrawAmt: 0, trades: 0, tradeVol: 0 }; }
     const add = (ts, f) => { const r = rows[day(ts)]; if (r) f(r); };
-    reportUsers.filter(x => !['admin','headAdmin','panelAdmin'].includes(x.role)).forEach(x => add(x.created, r => r.signups++));
+    reportUsers.filter(x => !ADMIN_ROLES.includes(x.role)).forEach(x => add(x.created, r => r.signups++));
     reportDeposits.filter(x => x.status === 'Approved').forEach(x => add(x.done || x.ts, r => { r.deposits++; r.depositAmt += x.amount; }));
     reportWithdrawals.filter(x => x.status === 'Paid').forEach(x => add(x.done || x.ts, r => { r.withdrawals++; r.withdrawAmt += Number(x.netAmount == null ? x.amount : x.netAmount); }));
     reportTrades.forEach(x => add(x.ts, r => { r.trades++; r.tradeVol = r2(r.tradeVol + x.amount); }));
@@ -1108,7 +1219,8 @@ const routes = {
   },
   'POST /api/admin/user': async (req, res, b, u) => {
     needAdmin(u); const t = D.users.find(x => x.id === b.id); if (!t) fail(404, 'Not found'); assertPanelAccess(req, t);
-    if (['admin','headAdmin','panelAdmin'].includes(t.role)) fail(400, 'Admin accounts cannot be changed here.');
+    if (ADMIN_ROLES.includes(t.role)) fail(400, 'Admin accounts cannot be changed here.');
+    if (isSubAdmin(u) && !['block','unblock'].includes(b.action)) fail(403, 'Sub Admin can only block or unblock user accounts.');
     if (b.action === 'block') t.blocked = true; else if (b.action === 'unblock') t.blocked = false;
     else if (b.action === 'password') { const pw = String(b.password || ''); if (pw.length < 8) fail(400, 'Min 8 characters'); t.pass = hashPw(pw); }
     else if (b.action === 'delete') {
@@ -1150,7 +1262,17 @@ const routes = {
     if (b.withdrawalFeeLabel !== undefined) s.withdrawalFeeLabel = str(b.withdrawalFeeLabel, 40) || 'Platform Fee';
     const requestedUpi = b.upi !== undefined ? str(b.upi, 60) : s.upi; const requestedPayee = b.payee !== undefined ? str(b.payee, 60) : s.payee;
     if (!(isPanelAdmin(u) && req.panel && req.panel.slug !== 'main')) { s.upi = requestedUpi; s.payee = requestedPayee; }
-    s.support = str(b.support, 200); s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
+    s.support = str(b.support, 200);
+    if (b.supportButtons !== undefined) {
+      if (!Array.isArray(b.supportButtons) || b.supportButtons.length > 2) fail(400, 'Support settings must contain at most two buttons.');
+      s.supportButtons = b.supportButtons.map(x => {
+        const platform = String(x.platform || '').toLowerCase(), name = str(x.name, 30), url = str(x.url, 300);
+        if (!['whatsapp','telegram'].includes(platform)) fail(400, 'Support platform must be WhatsApp or Telegram.');
+        if (!name || !/^https:\/\//i.test(url) || !/^https:\/\/(?:wa\.me|api\.whatsapp\.com|t\.me|telegram\.me)(?:\/|$)/i.test(url)) fail(400, 'Enter a valid HTTPS WhatsApp or Telegram support URL.');
+        return { platform, name, url, enabled: x.enabled !== false };
+      });
+    }
+    s.notice = str(b.notice, 300); s.bonus = str(b.bonus, 600); if (b.footerText !== undefined) s.footerText = str(b.footerText, 160);
     if (s.support && !/^https?:\/\//.test(s.support)) fail(400, 'Support link must start with http:// or https://');
     if (b.minDeposit !== undefined) {
       const md = Number(b.minDeposit), mw = Number(b.minWithdraw), mt = Number(b.minTrade);
@@ -1256,7 +1378,7 @@ const routes = {
       if (password.length < 8 || password.length > 100) fail(400, 'Panel admin password must be 8–100 characters.');
       if (D.users.some(x => x.email === email) || D.demoUsers.some(x => x.email === email)) fail(409, 'This email is already in use.');
       const panel = { id: 'panel-' + crypto.randomBytes(6).toString('hex'), slug, aliases: [], name, active: true, deleted: false, created: now(), creditBalance: 0, creditsAllocated: 0, creditsUsed: 0, settings: clone(S(req)) };
-      panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
+      panel.settings.qr = ''; panel.settings.upi = ''; panel.settings.payee = ''; panel.settings.support = ''; panel.settings.supportButtons = []; panel.settings.notice = ''; panel.settings.bonus = ''; panel.settings.paymentMode = 'qr'; panel.settings.bonusCoins = []; panel.settings.bonusCoin = BONUS_DEFAULT();
       const admin = { id: nid(), uid: nextAccountUid('PAD'), name: name + ' Admin', email, phone: '', role: 'panelAdmin', panelId: slug, pass: hashPw(password), balance: 0, thirdWallet: 0, depositEligible: 0, wagerRequired: 0, wagerCompleted: 0, refCode: makeRef(), refBy: null, blocked: false, created: now() };
       if (!checkPw(password, admin.pass)) fail(500, 'Panel admin credential validation failed.');
       panel.adminUserId = admin.id; D.panels.push(panel); D.users.push(admin);
@@ -1387,6 +1509,47 @@ const routes = {
     const copy = JSON.parse(JSON.stringify(D)); delete copy.secret; copy.users.forEach(x => delete x.pass); if (Array.isArray(copy.demoUsers)) copy.demoUsers.forEach(x => delete x.pass);
     return { __download: 'cryptobridge-backup-' + new Date().toISOString().slice(0, 10) + '.json', data: copy };
   }
+  ,
+  'GET /api/admin/admins': async (req, res, b, u) => {
+    needAdmin(u);
+    if (!canManageAdmins(u) && !isSubAdmin(u) && !isSupportAdmin(u)) fail(403, 'Admin directory access denied.');
+    const rows = D.users.filter(x => ADMIN_ROLES.includes(x.role) && (isHead(u) || String(x.panelId || 'main') === String(req.panelId || 'main')))
+      .map(x => ({ id:x.id, uid:x.uid, name:x.name, email:x.email, role:x.role, roleLabel:adminRoleLabel(x.role), panelId:x.panelId || 'main', blocked:!!x.blocked, created:x.created }));
+    return { admins: rows };
+  },
+  'POST /api/admin/admins/manage': async (req, res, b, u) => {
+    needAdmin(u);
+    if (!canManageAdmins(u)) fail(403, 'Only a Super Admin or Head Admin can manage admin accounts.');
+    const action = str(b.action, 12);
+    if (action === 'create') {
+      const name = str(b.name, 80), email = normEmail(b.email), password = String(b.password || ''), role = str(b.role, 24);
+      const allowed = isHead(u) ? ['superAdmin','subAdmin','supportAdmin'] : ['subAdmin','supportAdmin'];
+      if (name.length < 2 || !emailOk(email) || password.length < 12 || !allowed.includes(role)) fail(400, 'Enter a valid name, email, 12+ character password and permitted role.');
+      if (D.users.some(x => normEmail(x.email) === email)) fail(409, 'An account with this email already exists.');
+      const panelId = isHead(u) ? String(b.panelId || req.panelId || 'main') : String(u.panelId || req.panelId || 'main');
+      if (!getPanel(panelId)) fail(400, 'Selected panel does not exist.');
+      const admin = { id:nid(), uid:nextAccountUid('PAD'), name, email, phone:'', role, panelId, pass:hashPw(password), balance:0, thirdWallet:0, depositEligible:0, wagerRequired:0, wagerCompleted:0, refCode:makeRef(), refBy:null, blocked:false, created:now() };
+      D.users.push(admin); audit(u.email, 'admin-created', role + ': ' + email); await save();
+      return { ok:true, admin:{id:admin.id,uid:admin.uid,name:admin.name,email:admin.email,role:admin.role,panelId:admin.panelId} };
+    }
+    const id = Number(b.id), target = D.users.find(x => Number(x.id) === id && ADMIN_ROLES.includes(x.role));
+    if (!target) fail(404, 'Admin account not found.');
+    if (target.id === u.id || isHead(target)) fail(400, 'You cannot change this account.');
+    if (!isHead(u) && (String(target.panelId || 'main') !== String(u.panelId || 'main') || !['subAdmin','supportAdmin'].includes(target.role))) fail(403, 'You can manage only Sub Admin and Support Admin accounts in your panel.');
+    if (action === 'status') {
+      target.blocked = !!b.blocked;
+      audit(u.email, 'admin-status-changed', target.email + ': ' + (target.blocked ? 'suspended' : 'active'));
+    } else if (action === 'role') {
+      const nextRole = str(b.role,24), allowed = isHead(u) ? ['superAdmin','subAdmin','supportAdmin'] : ['subAdmin','supportAdmin'];
+      if (!allowed.includes(nextRole)) fail(400, 'Role change not allowed.');
+      target.role = nextRole; audit(u.email, 'admin-role-changed', target.email + ': ' + nextRole);
+    } else if (action === 'password') {
+      const password = String(b.password || '');
+      if (password.length < 12) fail(400, 'New password must be at least 12 characters.');
+      target.pass = hashPw(password); audit(u.email, 'admin-password-reset', target.email);
+    } else fail(400, 'Unknown admin management action.');
+    await save(); return { ok:true };
+  }
 };
 
 function readBody(req) {
@@ -1414,6 +1577,24 @@ async function handleApi(req, res, pathname) {
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
     const user = authUser(req); req.user = user;
+    if (D.maintenance && !isHead(user) && !(req.method === 'POST' && pathname === '/api/login')) fail(503, 'Website is under maintenance. Please try again later.');
+    // Server-side least-privilege matrix for the added admin roles. Existing Head Admin
+    // and legacy Panel Admin behavior remains intact; the legacy owner is normalized below.
+    if (user && ['superAdmin','subAdmin','supportAdmin'].includes(user.role)) {
+      const key = req.method + ' ' + pathname;
+      const readOnly = req.method === 'GET';
+      const adminRead = ['GET /api/admin/overview','GET /api/admin/users','GET /api/admin/audit','GET /api/admin/admins'];
+      const userOps = ['POST /api/admin/user'];
+      const staffOps = ['POST /api/admin/admins','PATCH /api/admin/admins/'];
+      if (user.role === 'supportAdmin' && !(readOnly && adminRead.includes(key))) fail(403, 'Support Admin is read-only. Contact a Super Admin for changes.');
+      if (user.role === 'subAdmin' && !(adminRead.includes(key) || key === 'POST /api/admin/user' || key === 'POST /api/admin/admins/manage')) fail(403, 'Sub Admin permission denied for this operation.');
+      if (user.role === 'superAdmin') {
+        const headOnly = key.startsWith('POST /api/admin/panels') || key.startsWith('DELETE /api/admin/panels') ||
+          key === 'GET /api/admin/panels' || key.startsWith('POST /api/admin/backup') ||
+          key.startsWith('POST /api/admin/restore');
+        if (headOnly) fail(403, 'Only the Head Admin can perform this operation.');
+      }
+    }
     // Login must be allowed to replace a stale cookie from another panel. Without
     // this exception, a browser previously used for Main/another panel can block
     // the new panel-admin login before the submitted credentials are checked.
@@ -1433,7 +1614,19 @@ async function handleApi(req, res, pathname) {
 const STATIC = {
   '/index.html': ['text/html; charset=utf-8', 'no-cache'], '/admin.html': ['text/html; charset=utf-8', 'no-cache'],
   '/style.css': ['text/css; charset=utf-8', 'no-cache'], '/app.js': ['text/javascript; charset=utf-8', 'no-cache'], '/admin.js': ['text/javascript; charset=utf-8', 'no-cache'],
-  '/number-balls.png': ['image/png', 'public, max-age=31536000, immutable']
+  '/number-balls.png': ['image/png', 'public, max-age=31536000, immutable'],
+  '/wingo-home.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/coin-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/bingo-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/lottery-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/more-games-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/aviator-original.png': ['image/png', 'public, max-age=31536000, immutable'],
+  '/coin-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/wingo-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/bingo-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/lottery-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/aviator-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
+  '/more-games-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable']
 };
 const server = http.createServer((req, res) => {
   req.ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
@@ -1454,6 +1647,14 @@ const server = http.createServer((req, res) => {
   if (pathname === '/admin') pathname = '/admin.html';
   const panelRoute = pathname.match(/^\/p\/([a-z0-9-]+)(\/admin)?\/?$/i);
   if (panelRoute) pathname = panelRoute[2] ? '/admin.html' : '/index.html';
+  if (D.maintenance) {
+    const viewer=authUser(req);
+    const adminAssets=['/admin.html','/admin.js','/style.css'];
+    if (!isHead(viewer) && !adminAssets.includes(pathname)) {
+      const page='<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Under Maintenance</title><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#08111f;color:#fff;font:16px system-ui;padding:24px}.card{max-width:520px;text-align:center;padding:42px 28px;border:1px solid #26364d;border-radius:22px;background:#101d30;box-shadow:0 20px 70px #0006}h1{font-size:clamp(28px,6vw,42px);margin:12px 0}p{color:#b9c6d8;line-height:1.7}.mark{font-size:42px}</style><main class="card"><div class="mark">🛠️</div><h1>We’ll be back soon</h1><p>Our website is currently under maintenance. We are working to improve your experience. Please check back shortly.</p></main></html>';
+      res.writeHead(503,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store',...SEC}); return res.end(page);
+    }
+  }
   const meta = STATIC[pathname];
   if (!meta) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('Not Found'); }
   fs.readFile(path.join(ROOT, pathname), (err, buf) => {

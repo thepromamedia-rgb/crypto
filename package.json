@@ -5,9 +5,14 @@
   "description": "Crypto Bridge \u2014 isolated demo account management, multi bonus coins, configurable rewards and admin controls",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-server.js"
+    "test": "node test-server.js && node test-admin-roles.js && node test-wingo-result.js && node test-games.js",
+    "test:admin-roles": "node test-admin-roles.js",
+    "test:wingo-result": "node test-wingo-result.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1"
   }
 }
