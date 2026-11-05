@@ -37,7 +37,7 @@ check('Language observer covers the full app shell', 'const target=document.body
 check('Assets menu contains a language selector', 'id="wlLanguageSelect"' in js and "wlLang.onchange=()=>setLanguage" in js)
 check('Panel-wise support buttons are rendered', 'supportButtonsHtml()' in js and 'supportButtons' in admin_js)
 check('Chart has zoom and latest controls', 'data-zoom="in"' in js and 'data-chart-home' in js)
-check('Chart supports pointer drag and momentum', "addEventListener('pointermove'" in js and 'requestAnimationFrame(coast)' in js)
+check('Chart supports pointer drag and momentum', "addEventListener('pointermove'" in js and 'dragVelocity' in js and 'requestAnimationFrame(animate)' in js)
 check('Admin page and script are linked', '/admin.js' in admin and (ROOT/'admin.js').is_file())
 check('Responsive CSS exists', '@media(max-width:650px)' in css or '@media(max-width: 650px)' in css or '@media(max-width:600px)' in css)
 check('Core server files exist', all((ROOT/x).is_file() for x in ['server.js','index.html','style.css','app.js','admin.html','admin.js']))

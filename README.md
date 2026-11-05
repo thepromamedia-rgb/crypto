@@ -8,7 +8,7 @@ This is the existing Crypto Bridge website project. It includes the Node.js back
 - `npm install`
 - Configure environment variables using `.env.example`
 - `npm start`
-- `npm test` to run the existing automated integration suite; `npm run test:admin-roles` to test the added staff roles
+- `npm test` to run backend, admin-role and WinGo result-presentation tests; `python test-site.py` for static UI smoke checks
 
 ## Email password recovery
 
@@ -37,3 +37,17 @@ See:
 - `ADMIN_PANEL_SETUP.md` for installation and startup
 - `ADMIN_PANEL_MIGRATION.md` for compatibility, backup, migration and rollback
 - `ADMIN_PANEL_TEST_REPORT.md` for executed tests and remaining staging checks
+
+
+## WinGo result notification update
+
+The Big/Small result-popup presentation is covered by `test-wingo-result.js`.
+When both Big and Small were selected in one round, only the winning size-side bet
+is included in the notification summary. Backend result selection and wallet
+settlement are unchanged. Pending result notifications are held by duration and
+round until the API confirms settlement, and the pending marker is cleared before
+the popup is displayed.
+
+See `BUGFIX_REPORT.md` for the change summary, test results, untested areas and
+deployment cautions. Browser visual QA and live duration rollover tests remain
+required in staging.

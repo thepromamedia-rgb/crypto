@@ -1861,3 +1861,29 @@ body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,
 .winning-demo-card{border-color:#b9e8d0;background:linear-gradient(135deg,#f0fff7,#fff)}
 .winning-demo-card .activity-demo-tag{background:#dcfce7;color:#087443}
 @media(max-width:600px){.home-games-grid{gap:11px}.home-game-card{padding:14px 13px;transform:scale(1.01);transform-origin:center}.cc-card-art{height:120px}}
+
+
+/* CryptoClub game-zone polish: premium red / charcoal / gold, with a 5% larger card footprint. */
+.home-games-grid .home-game-card{
+  padding:15px; gap:12px; min-height:78px; border:1px solid rgba(226,174,65,.48);
+  border-radius:16px; color:#fff; background:linear-gradient(145deg,#271015,#480e18 58%,#241015);
+  box-shadow:0 7px 20px rgba(35,7,12,.16); transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+}
+.home-games-grid .home-game-card:hover{transform:translateY(-2px);border-color:#f5c95b;box-shadow:0 11px 25px rgba(70,12,20,.24)}
+.home-games-grid .home-game-card:focus-within{outline:2px solid #f5c95b;outline-offset:2px}
+.home-games-grid .home-game-card b{font-size:13px;color:#fff}
+.home-games-grid .home-game-card small{font-size:10px;color:#e4c9c1}
+.home-games-grid .home-game-icon{width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#8b1d28,#3a1018);border:1px solid rgba(255,211,99,.42);color:#ffd45d;font-size:24px}
+.home-games-grid .home-wingo-thumb{overflow:hidden;padding:0}
+.home-games-grid .home-wingo-thumb img{width:100%;height:100%;object-fit:cover}
+.home-games-grid .home-game-card button{background:linear-gradient(110deg,#f7d35d,#d89421);color:#35110d;padding:9px 12px;font-size:10px;box-shadow:inset 0 1px rgba(255,255,255,.55)}
+.home-games-grid .home-game-card button:disabled{background:#61545a;color:#eee;box-shadow:none;cursor:not-allowed}
+.home-games-grid .home-game-soon{border-color:rgba(255,255,255,.14);background:linear-gradient(145deg,#28232a,#17151b)}
+.cc-chooser .cc-card{background:linear-gradient(155deg,#271015,#3a1018);border:1px solid rgba(226,174,65,.5);color:#fff;transition:transform .18s ease,box-shadow .18s ease}
+.cc-chooser .cc-card:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(35,7,12,.2)}
+.cc-chooser .cc-card-body h3{color:#fff}
+.cc-chooser .cc-card-body p{color:#e4c9c1}
+.cc-chooser .cc-card .cc-play{background:linear-gradient(110deg,#f7d35d,#d89421);color:#35110d}
+.cc-chooser .cc-card .cc-soon-btn{background:#62565c;color:#fff}
+@media(max-width:380px){.home-games-grid{gap:9px}.home-games-grid .home-game-card{padding:11px;gap:8px}.home-games-grid .home-game-icon{width:40px;height:40px}.home-games-grid .home-game-card b{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.home-games-grid .home-game-card,.cc-chooser .cc-card{transition:none}.home-games-grid .home-game-card:hover,.cc-chooser .cc-card:hover{transform:none}}
