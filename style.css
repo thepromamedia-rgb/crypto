@@ -1833,30 +1833,31 @@ body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,
 /* Language selector in the Assets account menu */
 .wl-menu-language{display:flex;align-items:center;gap:12px;padding:13px 15px;border:1px solid var(--line,#e7ebf2);border-radius:12px;background:var(--card,#fff);color:var(--text,#243247);font-size:14px}.wl-menu-language label{flex:1;font-weight:650}.wl-menu-language select{max-width:125px;min-height:36px;padding:6px 10px;border:1px solid var(--line,#dce3ed);border-radius:9px;background:var(--card,#fff);color:inherit}
 
-/* Home game artwork and refined controls (Nov 2026) */
+
+/* Crypto Club home/game catalog visual refresh */
+.cc-cards{gap:15px}
+.cc-card{transform:scale(1.01);transform-origin:top center}
+.cc-card-art{height:126px}
+.cc-card-wingo .cc-card-art.cc-wingo-image{padding:0;background:#a90016;overflow:hidden}
+.cc-wingo-image img{width:100%;height:100%;object-fit:cover;object-position:center 47%;display:block}
+.cc-card-body{padding:15px}
+.cc-play{background:linear-gradient(135deg,#f5b93d,#e87919)!important;color:#291600!important;box-shadow:0 5px 14px #e8791938}
+.cc-card-soon .cc-card-art{font-size:48px}
+.cc-bingo-art{background:radial-gradient(circle at 50% 35%,#f7f0ff,#9b76db 70%,#583a9a)}
+.cc-lottery-art{background:linear-gradient(135deg,#087c70,#24c6a6)}
+.cc-aviator-art{background:linear-gradient(135deg,#123d79,#40a8e8)}
+.cc-more-art{background:linear-gradient(135deg,#5542a8,#c06de2)}
+.cc-soon-btn,.home-game-soon button{background:#e8edf5!important;color:#667085!important;box-shadow:none!important;cursor:not-allowed!important}
 .home-games-grid{gap:13px}
-.home-game-card{padding:14.7px;gap:12px;min-height:78px}
-.home-game-icon{width:44px;height:44px;border-radius:14px;object-fit:cover}
-.wingo-home-art{display:block;box-shadow:0 3px 12px #d52d4430}
-.coin-home-art{background:radial-gradient(circle at 35% 28%,#fff0a6,#d99b22 55%,#805018);color:#68400b;font-weight:1000;font-size:27px;box-shadow:inset 0 0 0 3px #ffe9a0,0 3px 12px #bd8b2c45}
-.bingo-home-art{background:radial-gradient(circle at 35% 25%,#f7c8ff,#8a36df 60%,#35106d);color:#fff;font-size:28px;font-weight:1000;text-shadow:0 2px 4px #24004d;box-shadow:inset 0 0 0 2px #d9a4ff}
-.home-game-soon{font-size:9px;font-weight:900;color:#7040a8;background:#f2e9ff;border-radius:8px;padding:7px 8px;white-space:nowrap}
-.home-game-card button{background:linear-gradient(135deg,#4268ed,#6848d9);box-shadow:0 3px 8px #4b55cf30}
-.winning-demo-card{border-color:#d9e4f7;box-shadow:0 8px 24px #17264a0b}
-.winning-demo-row{border-top-color:#e5eaf4}
-.winning-rank{background:linear-gradient(135deg,#e8efff,#f4eaff);color:#4d4a9b}
-.winning-win{color:#087a55;background:#dcf8eb;border:1px solid #b8efd5}
-.winning-demo-row>strong{color:#087a55;background:#e9fbf2;border-radius:8px;padding:5px 7px}
-.actions button[data-page="Recharge"] .action-icon{background:#e5efff;color:#2463d5}
-.actions button[data-page="Withdrawal"] .action-icon{background:#f0eaff;color:#7545c9}
-.actions button[data-page="Signal"] .action-icon{background:#dcf8ed;color:#087d59}
-.actions button[data-page="Service"] .action-icon{background:#fff2dc;color:#b36b09}
-.actions button[data-page="Invite"] .action-icon{background:#ffe9f1;color:#c23d78}
-.flip-notice{position:relative;padding-right:8px}
-.game-sound-corner{width:30px;height:30px;flex:none;border:1px solid #d9e0ee;border-radius:50%;background:#fff;color:#53617a;display:grid;place-items:center;cursor:pointer;font-size:14px}
-.game-sound-corner[aria-pressed="false"]{background:#f1f2f5;color:#9aa1ad}
-@media(max-width:650px){.home-games-grid{grid-template-columns:1fr;gap:10px}.home-game-card{padding:12.6px;min-height:75px}.home-game-icon{width:46px;height:46px}}
-#bsSoundBtn{margin-left:auto;order:3;flex:none;width:30px;height:30px;border:1px solid #d9e0ee;border-radius:50%;background:#fff;display:grid;place-items:center;padding:0}
-#bsSoundBtn.off{background:#f1f2f5;color:#9aa1ad}
-.flip-notice #flipSoundToggle{order:3}
-.flip-notice #flipNoticeDetail{order:4}
+.home-game-card{padding:14.7px;min-height:76px}
+.home-game-card b{font-size:12.6px}
+.home-game-icon{width:45px;height:45px}
+.home-wingo-thumb{overflow:hidden;padding:0!important;background:#a90016!important}
+.home-wingo-thumb img{width:100%;height:100%;object-fit:cover}
+.home-game-card button{background:linear-gradient(135deg,#2563eb,#6246d7);box-shadow:0 4px 12px #365bd52b}
+.home-game-soon button{background:#e8edf5!important;color:#667085!important;box-shadow:none!important}
+.home-game-coin .home-game-icon{background:#fff1c7}
+.home-game-wingo .home-game-icon{background:#ffe4e7}
+.winning-demo-card{border-color:#b9e8d0;background:linear-gradient(135deg,#f0fff7,#fff)}
+.winning-demo-card .activity-demo-tag{background:#dcfce7;color:#087443}
+@media(max-width:600px){.home-games-grid{gap:11px}.home-game-card{padding:14px 13px;transform:scale(1.01);transform-origin:center}.cc-card-art{height:120px}}
