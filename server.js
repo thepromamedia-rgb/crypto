@@ -54,7 +54,7 @@ const BONUS_DEFAULT = () => ({ enabled: false, symbol: 'CBX', name: 'CB Reward C
 const defaults = () => ({
   v: 1, seq: 1, secret: crypto.randomBytes(32).toString('hex'),
   users: [], demoUsers: [], deposits: [], withdrawals: [], trades: [], positions: [], investments: [], walletTransfers: [], flipCoinBets: [], flipCoinSessions: [], flipCoinRounds: [], bigSmallBets: [], bigSmallRounds: [], audit: [], panels: [], creditLedger: [], accountingEntries: [], weeklySettlements: [], alerts: [],
-  settings: { upi: '', payee: '', qr: '', support: '', supportButtons: [], notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
+  settings: { games: [], upi: '', payee: '', qr: '', support: '', supportButtons: [], notice: '', bonus: '', footerText: 'India-focused platform', paymentMode: 'qr', withdrawalFeeType: 'percent', withdrawalFeeValue: 0, withdrawalFeeLabel: 'Platform Fee', limits: { minDeposit: MIN_DEPOSIT, minWithdraw: MIN_WITHDRAW, minTrade: MIN_TRADE }, depositRef: { enabled: false, levels: [0, 0, 0] }, tradeRef: { enabled: false, pct: 5, maxPerTrade: 0, levels: [5, 0, 0] }, bonusCoin: BONUS_DEFAULT(), bonusCoins: [], flipCoin: { enabled: true, minBet: 10, maxBet: 10000, multiplier: 2, lossPct: 100, walletLossPct: 100, walletProfitPct: 100, lossSharePct: 0, feePct: 0, timeProfitMinutes: 0, timeProfitPct: 0, timeLossMinutes: 0, timeLossPct: 0, betProfitCount: 0, betProfitPct: 0, betLossCount: 0, betLossPct: 0 }, withdrawalMode: 'all', withdrawalCooldownHours: 24, investment: { enabled: true, depositPercent: 50, profitPct: 5, holdingDays: 7 }, withdrawalWagerMultiplier: 1, coins: DEFAULT_COINS.map(c => c.slice()) }
 });
 let D = defaults();
 const clone = v => JSON.parse(JSON.stringify(v));
@@ -950,6 +950,24 @@ const routes = {
     if(!rr){rr={roundNo,panelId,durationMs,startTs,endTs,result:null,outcomeLocked:false,createdTs:ts};D.bigSmallRounds.push(rr);}
     const rets=gameReturns(req),returnPct=type==='number'?rets.number:type==='size'?rets.size:rets.color,multiplier=returnMult(returnPct),debit=r2(amount),balance=Number(u.balance||0);if(debit>balance)fail(400,'Not enough wallet balance for this bet.');u.balance=r2(balance-debit);u.depositEligible=r2(Math.max(0,Number(u.depositEligible||0)-debit));
     const bet={id:crypto.randomUUID(),userId:u.id,uid:String(u.uid||u.id),email:u.email,panelId,durationMs,roundNo,type,pick,amount:r2(amount),multiplier,returnPct,status:'Pending',result:null,won:null,payout:0,net:0,ts,roundEndTs:endTs};D.bigSmallBets.push(bet);u.wagerCompleted=r2(Number(u.wagerCompleted||0)+amount);audit(u.email,'big-small-bet',`round #${roundNo} (${durationMs}ms); ${type} ${pick}; ₹${amount}; ${multiplier}x`);await save();return {bet,balance:u.balance,round:{number:roundNo,endTs,remainingMs:endTs-ts,bettingOpen:endTs-ts>5000}};
+  },
+  // ----- upcoming game catalogue -----
+  'GET /api/games/catalog': async (req) => ({ games: (Array.isArray(S(req).games) ? S(req).games : []).map(({id,name,description,image,createdAt}) => ({id,name,description,image,createdAt})) }),
+  'GET /api/admin/games': async (req,res,b,u) => { needAdmin(u); return { games: Array.isArray(S(req).games) ? S(req).games : [] }; },
+  'POST /api/admin/games': async (req,res,b,u) => {
+    needAdmin(u); const st=S(req); if(!Array.isArray(st.games)) st.games=[];
+    if(b.action==='delete') { const before=st.games.length; st.games=st.games.filter(g=>g.id!==String(b.id)); if(st.games.length===before) fail(404,'Game not found.'); audit(u.email,'soon-game-deleted',String(b.id)); await save(); return {ok:true,games:st.games.length}; }
+    if(b.action!=='add') fail(400,'Unknown game action.');
+    const name=String(b.name||'').trim(), description=String(b.description||'').trim(), image=String(b.image||'');
+    if(name.length<2||name.length>60) fail(400,'Game name must be 2–60 characters.');
+    if(description.length>300) fail(400,'Description must be 300 characters or less.');
+    const m=image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/); if(!m) fail(400,'Upload a valid JPG, PNG or WEBP image.');
+    const bytes=Buffer.from(m[2],'base64'); if(!bytes.length||bytes.length>5*1024*1024) fail(400,'Image must be 5 MB or smaller.');
+    const mime=m[1]==='jpeg'?'image/jpeg':'image/'+m[1];
+    // Verify file signature instead of trusting the browser-provided MIME type.
+    const sigOk=m[1]==='png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):m[1]==='jpeg'?(bytes[0]===255&&bytes[1]===216&&bytes[bytes.length-2]===255&&bytes[bytes.length-1]===217):(bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP');
+    if(!sigOk) fail(400,'Image file signature does not match its format.');
+    const id=crypto.randomUUID(); st.games.push({id,name,description,image,createdAt:now()}); audit(u.email,'soon-game-added',name); await save(); return {ok:true,game:{id,name,description,image}};
   },
   // ----- admin -----
   'GET /api/admin/game-returns': async (req, res, b, u) => { needAdmin(u); return { returns: gameReturns(req), defaults: GAME_RETURN_DEFAULT }; },
