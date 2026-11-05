@@ -1,0 +1,10 @@
+CryptoClub Games Section artwork/cache repair
+
+- Updated only the Games chooser artwork assets and its scoped CSS.
+- Preserved the supplied original WinGo and Aviator artwork in the centre of full-width themed compositions.
+- Replaced side gutter/blur artwork with designed red and charcoal backgrounds.
+- Rebuilt Coin, Bingo, Today Lottery and More Games artwork as full-bleed landscape assets.
+- Removed duplicate/conflicting Games chooser image CSS overrides and set one 15:8 ratio.
+- Changed cache policy for the six replaceable Games artwork URLs from one-year immutable to no-cache/no-store/must-revalidate.
+- Home Page markup, Home Page artwork and Home Page styles were not edited.
+- Gameplay, wallet, betting, Admin Panel and database logic were not edited.

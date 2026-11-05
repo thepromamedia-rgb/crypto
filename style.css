@@ -1888,98 +1888,32 @@ body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,
 @media(max-width:380px){.home-games-grid{gap:9px}.home-games-grid .home-game-card{padding:11px;gap:8px}.home-games-grid .home-game-icon{width:40px;height:40px}.home-games-grid .home-game-card b{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.home-games-grid .home-game-card,.cc-chooser .cc-card{transition:none}.home-games-grid .home-game-card:hover,.cc-chooser .cc-card:hover{transform:none}}
 
-/* Realistic game artwork shared by Home cards and Games chooser. */
-.home-games-grid .home-game-icon{overflow:hidden;padding:0!important;display:block;flex:none;background:#21151b}
-.home-games-grid .home-game-icon img{display:block;width:100%;height:100%;object-fit:cover}
-.home-games-grid .home-game-aviator .home-game-icon img{object-fit:cover;object-position:center 42%;background:#201f1f}
-.home-games-grid .home-game-coin .home-game-icon{border-color:rgba(255,216,104,.85);box-shadow:0 0 16px rgba(245,190,54,.18)}
-.home-games-grid .home-game-bingo .home-game-icon{border-color:rgba(194,148,255,.65)}
-.home-games-grid .home-game-lottery .home-game-icon{border-color:rgba(74,219,173,.65)}
-.home-games-grid .home-game-more .home-game-icon{border-color:rgba(139,128,255,.65)}
-.cc-card-art.cc-art-image{display:block;padding:0;overflow:hidden;background:#17131e}
-.cc-card-art.cc-art-image img{display:block;width:100%;height:100%;object-fit:cover}
-.cc-card-art.cc-aviator-image{background:#242322}
-.cc-card-art.cc-aviator-image img{object-fit:contain;object-position:center;background:#242322}
-.cc-card-wingo .cc-wingo-image img{object-fit:cover;object-position:center 47%}
-
-/* Games chooser: full-bleed landscape artwork with no cropped subjects or empty side gutters. */
+/* Games section artwork only. Home Page styles above remain unchanged. */
 .cc-chooser .cc-card-art.cc-art-image{
-  width:100%;height:clamp(142px,24vw,190px);min-height:142px;
-  padding:0!important;overflow:hidden;display:block;position:relative;
-  background:#17131e;border-radius:13px 13px 0 0;
-}
-.cc-chooser .cc-card-art.cc-art-image img{
-  display:block;width:100%;height:100%;max-width:none;max-height:none;
-  object-fit:cover;object-position:center center;
-}
-.cc-chooser .cc-card-art.cc-aviator-image{background:#242322}
-.cc-chooser .cc-card-art.cc-aviator-image img{object-fit:cover;object-position:center center;background:transparent}
-@media(max-width:600px){.cc-chooser .cc-card-art.cc-art-image{height:clamp(132px,39vw,170px);min-height:132px}}
-
-/* Games chooser artwork: keep every landscape asset fully framed at its native 15:8 ratio. */
-.cc-chooser .cc-card-art.cc-art-image{
-  width:100%;height:auto;min-height:0;aspect-ratio:15 / 8;
-  padding:0!important;overflow:hidden;display:block;position:relative;
-  background:#17131e;border-radius:13px 13px 0 0;
-}
-.cc-chooser .cc-card-art.cc-art-image img{
-  display:block;width:100%;height:100%;max-width:none;max-height:none;
-  object-fit:cover;object-position:center center;
-}
-.cc-chooser .cc-card-art.cc-aviator-image img{object-fit:cover;object-position:center center}
-@media(max-width:600px){.cc-chooser .cc-card-art.cc-art-image{height:auto;min-height:0;aspect-ratio:15 / 8}}
-
-/* Games chooser artwork fit: scoped only to Games section; Home Page remains untouched. */
-.cc-chooser .cc-card-art.cc-art-image{
+  display:block;
   width:100%;
   height:auto;
   min-height:0;
   aspect-ratio:15 / 8;
-  padding:0;
+  padding:0!important;
   overflow:hidden;
-  display:block;
+  position:relative;
   background:#17131e;
+  border-radius:13px 13px 0 0;
 }
 .cc-chooser .cc-card-art.cc-art-image img{
   display:block;
   width:100%;
   height:100%;
-  min-height:0;
-  object-fit:cover;
-  object-position:center;
-}
-.cc-chooser .cc-card-art.cc-aviator-image img{
-  object-fit:cover;
-  object-position:center;
-}
-@media(max-width:600px){
-  .cc-chooser .cc-card-art.cc-art-image{
-    height:auto;
-    min-height:0;
-    aspect-ratio:15 / 8;
-  }
-}
-
-/* Games chooser only: full-width artwork with no embedded blurred side gutters. */
-.cc-chooser .cc-card-art.cc-art-image{
-  width:100%;
-  height:auto;
-  min-height:0;
-  aspect-ratio:73 / 48;
-  padding:0;
-  overflow:hidden;
-  display:block;
-  background:#17131e;
-}
-.cc-chooser .cc-card-art.cc-art-image img{
-  display:block;
-  width:100%;
-  height:100%;
+  min-width:100%;
+  min-height:100%;
   max-width:none;
   max-height:none;
   object-fit:cover;
-  object-position:center;
+  object-position:center center;
 }
+.cc-chooser .cc-card-art.cc-wingo-image{background:#8f0718}
+.cc-chooser .cc-card-art.cc-aviator-image{background:#171719}
 @media(max-width:600px){
-  .cc-chooser .cc-card-art.cc-art-image{height:auto;min-height:0;aspect-ratio:73 / 48;}
+  .cc-chooser .cc-card-art.cc-art-image{height:auto;min-height:0;aspect-ratio:15 / 8}
 }

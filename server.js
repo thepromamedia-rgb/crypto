@@ -1573,12 +1573,12 @@ const STATIC = {
   '/lottery-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
   '/more-games-art.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
   '/aviator-original.png': ['image/png', 'public, max-age=31536000, immutable'],
-  '/coin-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
-  '/wingo-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
-  '/bingo-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
-  '/lottery-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
-  '/aviator-game-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable'],
-  '/more-games-wide.jpg': ['image/jpeg', 'public, max-age=31536000, immutable']
+  '/coin-game-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate'],
+  '/wingo-game-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate'],
+  '/bingo-game-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate'],
+  '/lottery-game-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate'],
+  '/aviator-game-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate'],
+  '/more-games-wide.jpg': ['image/jpeg', 'no-cache, no-store, must-revalidate']
 };
 const server = http.createServer((req, res) => {
   req.ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
