@@ -1901,3 +1901,17 @@ body.dark-mode .wl-card,body.dark-mode .wl-menu,body.dark-mode .wl-tiles button,
 .cc-card-art.cc-aviator-image{background:#242322}
 .cc-card-art.cc-aviator-image img{object-fit:contain;object-position:center;background:#242322}
 .cc-card-wingo .cc-wingo-image img{object-fit:cover;object-position:center 47%}
+
+/* Games chooser: full-bleed landscape artwork with no cropped subjects or empty side gutters. */
+.cc-chooser .cc-card-art.cc-art-image{
+  width:100%;height:clamp(142px,24vw,190px);min-height:142px;
+  padding:0!important;overflow:hidden;display:block;position:relative;
+  background:#17131e;border-radius:13px 13px 0 0;
+}
+.cc-chooser .cc-card-art.cc-art-image img{
+  display:block;width:100%;height:100%;max-width:none;max-height:none;
+  object-fit:cover;object-position:center center;
+}
+.cc-chooser .cc-card-art.cc-aviator-image{background:#242322}
+.cc-chooser .cc-card-art.cc-aviator-image img{object-fit:cover;object-position:center center;background:transparent}
+@media(max-width:600px){.cc-chooser .cc-card-art.cc-art-image{height:clamp(132px,39vw,170px);min-height:132px}}
